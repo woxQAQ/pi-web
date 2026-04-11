@@ -14,6 +14,7 @@ const {
 	sessionState,
 	sessions,
 	treeEntries,
+	commands,
 	isStreaming,
 	sendPrompt,
 	sendCommand,
@@ -121,6 +122,7 @@ watch(notifications, (current) => {
 				<ChatTranscript :messages="transcript" :is-streaming="isStreaming" />
 				<ComposerBar
 					:connection-status="connectionStatus"
+					:commands="commands"
 					@submit="handlePrompt"
 				/>
 			</main>

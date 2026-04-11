@@ -1,9 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, watch, nextTick } from "vue";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
+import type { RpcSlashCommand } from "../shared-types";
+import CommandPalette from "./CommandPalette.vue";
 
 const props = defineProps<{
 	connectionStatus: ConnectionStatus;
+	commands: RpcSlashCommand[];
 }>();
 
 const emit = defineEmits<{
@@ -12,44 +15,103 @@ const emit = defineEmits<{
 
 const inputText = ref("");
 const isDisabled = computed(() => props.connectionStatus !== "connected");
+const paletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
+
+const showPalette = ref(false);
+const filterText = computed(() => {
+	if (!showPalette.value) return "";
+	// Everything after the leading "/"
+	return inputText.value.slice(1);
+});
+
+// Show palette when input starts with "/" (only the slash, or slash + text)
+watch(inputText, (val) => {
+	if (val.startsWith("/")) {
+		showPalette.value = true;
+	} else {
+		showPalette.value = false;
+	}
+});
 
 function handleSubmit() {
 	const text = inputText.value.trim();
 	if (!text || isDisabled.value) return;
 	emit("submit", text);
 	inputText.value = "";
+	showPalette.value = false;
+}
+
+function handleCommandSelect(commandName: string) {
+	inputText.value = "";
+	showPalette.value = false;
+	emit("submit", `/${commandName}`);
+}
+
+function handlePaletteClose() {
+	showPalette.value = false;
+}
+
+function handleInputKeydown(e: KeyboardEvent) {
+	// When palette is open, forward navigation keys to the palette
+	if (showPalette.value && paletteRef.value) {
+		if (
+			e.key === "ArrowDown" ||
+			e.key === "ArrowUp" ||
+			e.key === "Escape"
+		) {
+			paletteRef.value.handleKeydown(e);
+			return;
+		}
+		if (e.key === "Enter") {
+			paletteRef.value.handleKeydown(e);
+			return;
+		}
+	}
+	if (e.key === "Enter" && !showPalette.value) {
+		handleSubmit();
+	}
 }
 </script>
 
 <template>
 	<div class="composer-bar">
-		<div class="composer-inner">
-			<input
-				v-model="inputText"
-				class="prompt-input"
-				placeholder="Send a message…"
-				:disabled="isDisabled"
-				@keydown.enter="handleSubmit"
+		<div class="composer-inner-wrap">
+			<CommandPalette
+				v-if="showPalette && commands.length > 0"
+				ref="paletteRef"
+				:commands="commands"
+				:filter="filterText"
+				@select="handleCommandSelect"
+				@close="handlePaletteClose"
 			/>
-			<button
-				class="send-btn"
-				:disabled="isDisabled || !inputText.trim()"
-				@click="handleSubmit"
-			>
-				<svg
-					class="send-icon"
-					viewBox="0 0 24 24"
-					fill="none"
-					stroke="currentColor"
-					stroke-width="2"
-					stroke-linecap="round"
-					stroke-linejoin="round"
+			<div class="composer-inner">
+				<input
+					v-model="inputText"
+					class="prompt-input"
+					placeholder="Send a message…"
+					:disabled="isDisabled"
+					@keydown="handleInputKeydown"
+				/>
+				<button
+					class="send-btn"
+					:disabled="isDisabled || !inputText.trim()"
+					@click="handleSubmit"
 				>
-					<line x1="22" y1="2" x2="11" y2="13"></line>
-					<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
-				</svg>
-				<span class="send-label">Send</span>
-			</button>
+					<svg
+						class="send-icon"
+						viewBox="0 0 24 24"
+						fill="none"
+						stroke="currentColor"
+						stroke-width="2"
+						stroke-linecap="round"
+						stroke-linejoin="round"
+					>
+						<line x1="22" y1="2" x2="11" y2="13"></line>
+						<polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+					</svg>
+					<span class="send-label">Send</span>
+				</button>
+			</div>
 		</div>
 		<div v-if="isDisabled" class="composer-status">
 			Disconnected — waiting for connection…
@@ -63,6 +125,10 @@ function handleSubmit() {
 	padding: 12px 16px;
 	border-top: 1px solid #2d2d44;
 	background: #12122a;
+}
+
+.composer-inner-wrap {
+	position: relative;
 }
 
 .composer-inner {
