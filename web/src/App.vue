@@ -5,6 +5,8 @@ import ChatTranscript from "./components/ChatTranscript.vue";
 import SessionRail from "./components/SessionRail.vue";
 import TreeRail from "./components/TreeRail.vue";
 import ComposerBar from "./components/ComposerBar.vue";
+import ExtensionDialog from "./components/ExtensionDialog.vue";
+import CompatWarning from "./components/CompatWarning.vue";
 
 const {
 	connectionStatus,
@@ -15,10 +17,20 @@ const {
 	isStreaming,
 	sendPrompt,
 	sendCommand,
+	pendingExtensionRequest,
+	notifications,
+	statusEntries,
+	respondToUIRequest,
+	dismissNotification,
 } = useBridgeClient();
 
 const activeSessionId = computed(() => sessionState.value?.sessionId ?? null);
 const sidebarOpen = ref(false);
+
+// CompatWarning flag — set to true when a custom-ui command is invoked.
+// Initially empty list; the infrastructure exists but doesn't trigger until
+// commands are added to the list.
+const compatWarningVisible = ref(false);
 
 function handleSessionSelect(sessionPath: string) {
 	sendCommand({ type: "switch_session", sessionPath }).catch(() => {});
@@ -31,6 +43,25 @@ function handleTreeNavigate(entryId: string) {
 function handlePrompt(message: string) {
 	sendPrompt(message);
 }
+
+function handleUIRespond(payload: Parameters<typeof respondToUIRequest>[0]) {
+	respondToUIRequest(payload);
+}
+
+function handleDismissNotification(id: string) {
+	dismissNotification(id);
+}
+
+// Auto-dismiss notifications after 5 seconds
+import { watch } from "vue";
+watch(notifications, (current) => {
+	for (const n of current) {
+		if (!(n as Record<string, unknown>)._timerSet) {
+			(n as Record<string, unknown>)._timerSet = true;
+			setTimeout(() => dismissNotification(n.id), 5000);
+		}
+	}
+}, { deep: true });
 </script>
 
 <template>
@@ -74,6 +105,19 @@ function handlePrompt(message: string) {
 
 			<!-- Center column -->
 			<main class="center-column">
+				<CompatWarning :visible="compatWarningVisible" />
+
+				<!-- Status bar (when status entries exist) -->
+				<div v-if="Object.keys(statusEntries).length > 0" class="status-bar">
+					<span
+						v-for="(text, key) in statusEntries"
+						:key="key"
+						class="status-entry"
+					>
+						{{ text }}
+					</span>
+				</div>
+
 				<ChatTranscript :messages="transcript" :is-streaming="isStreaming" />
 				<ComposerBar
 					:connection-status="connectionStatus"
@@ -81,6 +125,31 @@ function handlePrompt(message: string) {
 				/>
 			</main>
 		</div>
+
+		<!-- Toast notifications overlay -->
+		<div v-if="notifications.length > 0" class="toast-container">
+			<div
+				v-for="notif in notifications"
+				:key="notif.id"
+				class="toast-item"
+				:class="notif.notifyType ?? 'info'"
+			>
+				<span class="toast-message">{{ notif.message }}</span>
+				<button
+					class="toast-dismiss"
+					aria-label="Dismiss notification"
+					@click="handleDismissNotification(notif.id)"
+				>
+					&times;
+				</button>
+			</div>
+		</div>
+
+		<!-- Extension UI dialog overlay -->
+		<ExtensionDialog
+			:request="pendingExtensionRequest"
+			@respond="handleUIRespond"
+		/>
 	</div>
 </template>
 
@@ -206,6 +275,91 @@ function handlePrompt(message: string) {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+}
+
+/* ---- Status bar ---- */
+.status-bar {
+	display: flex;
+	gap: 16px;
+	padding: 4px 16px;
+	border-bottom: 1px solid #2d2d44;
+	background: #12122a;
+	font-size: 0.7rem;
+	color: #6b7280;
+	flex-shrink: 0;
+}
+
+.status-entry {
+	white-space: nowrap;
+}
+
+/* ---- Toast notifications ---- */
+.toast-container {
+	position: fixed;
+	top: 60px;
+	right: 20px;
+	z-index: 900;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-width: 360px;
+}
+
+.toast-item {
+	display: flex;
+	align-items: center;
+	gap: 10px;
+	padding: 10px 14px;
+	border-radius: 8px;
+	background: #1a1a2e;
+	border: 1px solid #2d2d44;
+	color: #e2e8f0;
+	font-size: 0.85rem;
+	box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+	animation: toast-in 0.2s ease;
+}
+
+.toast-item.info {
+	border-left: 3px solid #3b82f6;
+}
+
+.toast-item.warning {
+	border-left: 3px solid #eab308;
+}
+
+.toast-item.error {
+	border-left: 3px solid #ef4444;
+}
+
+.toast-message {
+	flex: 1;
+}
+
+.toast-dismiss {
+	flex-shrink: 0;
+	background: none;
+	border: none;
+	color: #6b7280;
+	font-size: 1.2rem;
+	cursor: pointer;
+	padding: 0 2px;
+	line-height: 1;
+	transition: color 0.15s;
+}
+
+.toast-dismiss:hover {
+	color: #e2e8f0;
+}
+
+@keyframes toast-in {
+	from {
+		opacity: 0;
+		transform: translateX(20px);
+	}
+	to {
+		opacity: 1;
+		transform: translateX(0);
+	}
 }
 
 /* ---- Responsive: narrow screens ---- */
