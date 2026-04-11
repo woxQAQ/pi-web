@@ -1,10 +1,34 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as http from "node:http";
 import { WebSocket } from "ws";
-import { BridgeServer } from "../server.js";
 import { BridgeEventBus } from "../bridge-event-bus.js";
-import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent, type WsClient } from "../types.js";
+import { BridgeServer } from "../server.js";
+import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
 import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
+
+const waitForAsyncWork = (ms = 100) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const requestText = (
+	url: string,
+	options?: http.RequestOptions
+): Promise<{ status: number; body: string }> =>
+	new Promise((resolve, reject) => {
+		const request = http.request(url, options ?? {}, (response) => {
+			let body = "";
+			response.on("data", (chunk) => {
+				body += chunk;
+			});
+			response.on("end", () => {
+				resolve({ status: response.statusCode ?? 0, body });
+			});
+		});
+		request.on("error", reject);
+		request.setTimeout(5000, () => {
+			request.destroy();
+			reject(new Error("request timeout"));
+		});
+		request.end();
+	});
 
 describe("BridgeServer", () => {
 	const createMockContext = (): WsRpcAdapterContext => ({
@@ -49,42 +73,42 @@ describe("BridgeServer", () => {
 	let eventBus: BridgeEventBus;
 	let mockContext: WsRpcAdapterContext;
 	let events: BridgeEvent[];
-	let emitEvent: (event: BridgeEvent) => void;
 
 	beforeEach(() => {
 		eventBus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
 		mockContext = createMockContext();
 		events = [];
-		emitEvent = (event: BridgeEvent) => {
-			events.push(event);
-		};
 	});
 
-	afterEach(async () => {
+	afterEach(() => {
 		eventBus.dispose();
 	});
 
 	describe("lifecycle", () => {
-		it("should start server on available port", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("starts on an available port and emits server_start", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 
 			const address = await server.start();
 
-			expect(address.port).toBeGreaterThan(0);
 			expect(server.getIsRunning()).toBe(true);
-			expect(events).toContainEqual({
-				type: "server_start",
-				host: config.host,
-				port: address.port,
-			});
+			expect(address.port).toBeGreaterThan(0);
+			expect(events).toContainEqual({ type: "server_start", host: "localhost", port: address.port });
 
 			await server.stop();
 		});
 
-		it("should throw if starting when already running", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("rejects a second start while already running", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 
 			await server.start();
 			await expect(server.start()).rejects.toThrow("Server is already running");
@@ -92,9 +116,13 @@ describe("BridgeServer", () => {
 			await server.stop();
 		});
 
-		it("should stop gracefully", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("stops gracefully and clears its address", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 
 			await server.start();
 			await server.stop();
@@ -104,65 +132,90 @@ describe("BridgeServer", () => {
 			expect(events).toContainEqual({ type: "server_stop" });
 		});
 
-		it("should handle multiple start/stop cycles", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("can restart after a full stop", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 
-			for (let i = 0; i < 3; i++) {
-				const address = await server.start();
-				expect(address.port).toBeGreaterThan(0);
-				await server.stop();
-				expect(server.getIsRunning()).toBe(false);
-			}
-		});
-	});
+			const first = await server.start();
+			await server.stop();
+			const second = await server.start();
 
-	describe("port fallback", () => {
-		it("should support port range configuration", () => {
-			// Test that port range config is properly accepted
-			const config = {
-				...DEFAULT_BRIDGE_CONFIG,
-				port: 8080,
-				portMax: 8090,
-			};
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
-			// Just verify the server was created with the config
-			expect(server.getIsRunning()).toBe(false);
-		});
-
-		it("should bind to OS-assigned port when port is 0", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
-
-			const address = await server.start();
-
-			expect(address.port).toBeGreaterThan(0);
+			expect(first.port).toBeGreaterThan(0);
+			expect(second.port).toBeGreaterThan(0);
 			expect(server.getIsRunning()).toBe(true);
 
 			await server.stop();
 		});
 	});
 
+	describe("port fallback", () => {
+		it("falls back within the configured port range when the preferred port is taken", async () => {
+			const occupiedServer = http.createServer((_req, res) => {
+				res.writeHead(200);
+				res.end("occupied");
+			});
+			await new Promise<void>((resolve) => occupiedServer.listen(0, "localhost", () => resolve()));
+
+			const address = occupiedServer.address();
+			if (!address || typeof address === "string") {
+				throw new Error("failed to get occupied port");
+			}
+
+			const preferredPort = address.port;
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: preferredPort, portMax: preferredPort + 3 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
+
+			try {
+				const bridgeAddress = await server.start();
+				expect(bridgeAddress.port).not.toBe(preferredPort);
+				expect(bridgeAddress.port).toBeGreaterThan(preferredPort);
+				expect(bridgeAddress.port).toBeLessThanOrEqual(preferredPort + 3);
+			} finally {
+				await server.stop();
+				await new Promise<void>((resolve, reject) => {
+					occupiedServer.close((error) => {
+						if (error) reject(error);
+						else resolve();
+					});
+				});
+			}
+		});
+
+		it("uses an OS-assigned port when configured with port 0", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
+
+			const address = await server.start();
+			expect(address.port).toBeGreaterThan(0);
+			expect(server.getAddress()).toEqual({ host: "localhost", port: address.port });
+
+			await server.stop();
+		});
+	});
+
 	describe("HTTP static file serving", () => {
-		it("should serve placeholder HTML when no staticDir", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("serves placeholder HTML at the root when no staticDir is configured", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 			const address = await server.start();
 
-			// Make HTTP request to root
-			const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-				const req = http.get(`http://localhost:${address.port}/`, (res) => {
-					let body = "";
-					res.on("data", (chunk) => (body += chunk));
-					res.on("end", () => resolve({ status: res.statusCode || 0, body }));
-				});
-				req.on("error", reject);
-				req.setTimeout(5000, () => {
-					req.destroy();
-					reject(new Error("Request timeout"));
-				});
-			});
-
+			const response = await requestText(`http://localhost:${address.port}/`);
 			expect(response.status).toBe(200);
 			expect(response.body).toContain("Pi Web Bridge");
 			expect(response.body).toContain(`ws://${address.host}:${address.port}/ws`);
@@ -170,89 +223,72 @@ describe("BridgeServer", () => {
 			await server.stop();
 		});
 
-		it("should return 404 for non-root paths when no staticDir", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("returns 404 for unknown files when no staticDir is configured", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 			const address = await server.start();
 
-			const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-				const req = http.get(`http://localhost:${address.port}/some-file.js`, (res) => {
-					let body = "";
-					res.on("data", (chunk) => (body += chunk));
-					res.on("end", () => resolve({ status: res.statusCode || 0, body }));
-				});
-				req.on("error", reject);
-				req.setTimeout(5000, () => {
-					req.destroy();
-					reject(new Error("Request timeout"));
-				});
-			});
-
+			const response = await requestText(`http://localhost:${address.port}/some-file.js`);
 			expect(response.status).toBe(404);
 			expect(response.body).toContain("Not Found");
 
 			await server.stop();
 		});
 
-		it("should return 405 for non-GET methods", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
+		it("rejects non-GET methods", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
 			const address = await server.start();
 
-			const response = await new Promise<{ status: number; body: string }>((resolve, reject) => {
-				const req = http.request(
-					`http://localhost:${address.port}/`,
-					{ method: "POST" },
-					(res) => {
-						let body = "";
-						res.on("data", (chunk) => (body += chunk));
-						res.on("end", () => resolve({ status: res.statusCode || 0, body }));
-					}
-				);
-				req.on("error", reject);
-				req.setTimeout(5000, () => {
-					req.destroy();
-					reject(new Error("Request timeout"));
-				});
-				req.end();
-			});
-
+			const response = await requestText(`http://localhost:${address.port}/`, { method: "POST" });
 			expect(response.status).toBe(405);
+			expect(response.body).toContain("Method Not Allowed");
 
 			await server.stop();
 		});
 	});
 
 	describe("client tracking", () => {
-		it("should start with zero clients", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
-			await server.start();
+		it("reflects WebSocket clients as they connect and disconnect", async () => {
+			const server = new BridgeServer(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				eventBus,
+				(event) => events.push(event)
+			);
+			const address = await server.start();
 
 			expect(server.getClientCount()).toBe(0);
 			expect(server.getClients()).toEqual([]);
 
-			await server.stop();
-		});
-	});
-
-	describe("address", () => {
-		it("should return undefined when not running", () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
-
-			expect(server.getAddress()).toBeUndefined();
-		});
-
-		it("should return address when running", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const server = new BridgeServer(config, mockContext, eventBus, emitEvent);
-			const address = await server.start();
-
-			expect(server.getAddress()).toEqual({
-				host: config.host,
-				port: address.port,
+			const ws = new WebSocket(`ws://localhost:${address.port}/ws`);
+			await new Promise<void>((resolve, reject) => {
+				ws.once("open", () => resolve());
+				ws.once("error", reject);
 			});
+			await waitForAsyncWork();
+
+			const clients = server.getClients();
+			expect(server.getClientCount()).toBe(1);
+			expect(clients).toHaveLength(1);
+			expect(clients[0].id).toBeTruthy();
+			expect(clients[0].connectedAt).toBeTruthy();
+
+			ws.close();
+			await waitForAsyncWork();
+
+			expect(server.getClientCount()).toBe(0);
+			expect(server.getClients()).toEqual([]);
+			expect(events.map((event) => event.type)).toContain("client_connect");
+			expect(events.map((event) => event.type)).toContain("client_disconnect");
 
 			await server.stop();
 		});

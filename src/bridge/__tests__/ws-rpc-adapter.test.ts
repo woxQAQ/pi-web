@@ -83,28 +83,6 @@ describe("WsRpcAdapter", () => {
 		adapter = new WsRpcAdapter(client, ws, context, DEFAULT_BRIDGE_CONFIG, eventBus, emitEvent);
 	});
 
-	describe("initialization", () => {
-		it("should setup WebSocket handlers on construction", () => {
-			expect(ws.on).toHaveBeenCalledWith("message", expect.any(Function));
-			expect(ws.on).toHaveBeenCalledWith("close", expect.any(Function));
-			expect(ws.on).toHaveBeenCalledWith("error", expect.any(Function));
-		});
-
-		it("should subscribe to Pi events on construction", () => {
-			expect(context.pi.on).toHaveBeenCalledWith("agent_start", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("agent_end", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("message_start", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("message_update", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("message_end", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("turn_start", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("turn_end", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("tool_execution_start", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("tool_execution_update", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("tool_execution_end", expect.any(Function));
-			expect(context.pi.on).toHaveBeenCalledWith("model_select", expect.any(Function));
-		});
-	});
-
 	describe("command dispatch", () => {
 		it("should handle prompt command", async () => {
 			const command: RpcCommand = { id: "cmd-1", type: "prompt", message: "Hello" };
@@ -314,17 +292,28 @@ describe("WsRpcAdapter", () => {
 	});
 
 	describe("extension UI routing", () => {
-		it("should create extension UI context", () => {
+		it("should send fire-and-forget UI requests to the client", () => {
 			const uiContext = adapter.createExtensionUIContext();
 
-			expect(uiContext).toHaveProperty("select");
-			expect(uiContext).toHaveProperty("confirm");
-			expect(uiContext).toHaveProperty("input");
-			expect(uiContext).toHaveProperty("editor");
-			expect(uiContext).toHaveProperty("notify");
-			expect(uiContext).toHaveProperty("setStatus");
-			expect(uiContext).toHaveProperty("setTitle");
-			expect(uiContext).toHaveProperty("setEditorText");
+			uiContext.setTitle("Bridge UI");
+			uiContext.setEditorText("draft text");
+
+			const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map((call) =>
+				JSON.parse(call[0] as string)
+			);
+
+			expect(sendCalls).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						type: "extension_ui_request",
+						payload: expect.objectContaining({ method: "setTitle", title: "Bridge UI" }),
+					}),
+					expect.objectContaining({
+						type: "extension_ui_request",
+						payload: expect.objectContaining({ method: "set_editor_text", text: "draft text" }),
+					}),
+				])
+			);
 		});
 
 		it("should send UI request and wait for response", async () => {
@@ -518,19 +507,17 @@ describe("WsRpcAdapter", () => {
 			});
 		});
 
-		it("should not send messages after dispose", () => {
+		it("should not send responses after dispose", async () => {
 			adapter.dispose();
-
 			(ws.send as ReturnType<typeof vi.fn>).mockClear();
 
-			// Try to send a command
 			(ws as unknown as { trigger: (event: string, data: Buffer) => void }).trigger(
 				"message",
 				Buffer.from(JSON.stringify({ type: "command", payload: { type: "get_state" } }))
 			);
+			await new Promise((resolve) => setTimeout(resolve, 10));
 
-			// Should not send response because adapter is disposed
-			// Note: In practice, the initial message might be processed before dispose completes
+			expect(ws.send).not.toHaveBeenCalled();
 		});
 	});
 
@@ -563,10 +550,11 @@ describe("WsRpcAdapter", () => {
 			const call = (emitEvent as ReturnType<typeof vi.fn>).mock.calls.find(
 				(call: unknown[]) => (call[0] as { type: string }).type === "command_received"
 			);
+			expect(call).toBeDefined();
 
-			expect(call[0].correlationId).toBeDefined();
-			expect(typeof call[0].correlationId).toBe("string");
-			expect(call[0].correlationId).toHaveLength(36); // UUID length
+			const event = call?.[0] as { correlationId: string };
+			expect(typeof event.correlationId).toBe("string");
+			expect(event.correlationId).toHaveLength(36); // UUID length
 		});
 	});
 

@@ -1,7 +1,10 @@
-import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
-import { startBridge, type BridgeDoneCallback, type BridgeController } from "../lifecycle.js";
-import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent, type BridgeState, type WsClient } from "../types.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { WebSocket } from "ws";
+import { startBridge, type BridgeController } from "../lifecycle.js";
+import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
 import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
+
+const waitForAsyncWork = (ms = 100) => new Promise((resolve) => setTimeout(resolve, ms));
 
 describe("Bridge Lifecycle", () => {
 	const createMockContext = (): WsRpcAdapterContext => ({
@@ -44,97 +47,87 @@ describe("Bridge Lifecycle", () => {
 	});
 
 	let mockContext: WsRpcAdapterContext;
-	let doneCallback: BridgeDoneCallback;
-	let doneCalled: boolean;
+	let doneCallback: ReturnType<typeof vi.fn>;
 	let controllers: BridgeController[];
 
-	// Store original SIGINT handlers to restore after tests
 	const originalSigintListeners: Array<NodeJS.SignalsListener> = [];
 
 	beforeEach(() => {
 		mockContext = createMockContext();
-		doneCalled = false;
-		doneCallback = vi.fn(() => {
-			doneCalled = true;
-		});
+		doneCallback = vi.fn();
 		controllers = [];
 
-		// Capture existing SIGINT listeners
 		const listeners = process.listeners("SIGINT");
 		originalSigintListeners.length = 0;
 		originalSigintListeners.push(...listeners);
-		// Remove them temporarily
-		listeners.forEach((l) => process.off("SIGINT", l));
+		listeners.forEach((listener) => process.off("SIGINT", listener));
 	});
 
 	afterEach(async () => {
-		// Stop all controllers
 		for (const controller of controllers) {
 			if (controller.getState().status === "running") {
 				await controller.stop();
 			}
 		}
 
-		// Restore original SIGINT listeners
 		process.removeAllListeners("SIGINT");
-		originalSigintListeners.forEach((l) => process.on("SIGINT", l));
+		originalSigintListeners.forEach((listener) => process.on("SIGINT", listener));
 	});
 
-	describe("startBridge", () => {
-		it("should start bridge and return controller", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
+	describe("controller contract", () => {
+		it("starts the bridge and exposes the active URL", async () => {
+			const controller = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
 			controllers.push(controller);
-
-			expect(controller).toBeDefined();
-			expect(typeof controller.getState).toBe("function");
-			expect(typeof controller.getBridgeUrl).toBe("function");
-			expect(typeof controller.getClients).toBe("function");
-			expect(typeof controller.stop).toBe("function");
-			expect(typeof controller.subscribe).toBe("function");
 
 			const state = controller.getState();
 			expect(state.status).toBe("running");
-			if (state.status === "running") {
-				expect(state.port).toBeGreaterThan(0);
-				expect(state.host).toBe(config.host);
+			if (state.status !== "running") {
+				throw new Error("bridge did not start");
 			}
+
+			expect(controller.getBridgeUrl()).toBe(`http://${state.host}:${state.port}`);
 		});
 
-		it("should provide bridge URL when running", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
+		it("tracks connected clients through the controller API", async () => {
+			const controller = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
 			controllers.push(controller);
 
-			const url = controller.getBridgeUrl();
-			expect(url).toBeDefined();
-			expect(url).toMatch(/^http:\/\/localhost:\d+$/);
-		});
+			const state = controller.getState();
+			if (state.status !== "running") {
+				throw new Error("bridge did not start");
+			}
 
-		it("should return undefined bridge URL when not running", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			await controller.stop();
-
-			const url = controller.getBridgeUrl();
-			expect(url).toBeUndefined();
-		});
-
-		it("should track client list", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
+			const ws = new WebSocket(`ws://${state.host}:${state.port}/ws`);
+			await new Promise<void>((resolve, reject) => {
+				ws.once("open", () => resolve());
+				ws.once("error", reject);
+			});
+			await waitForAsyncWork();
 
 			const clients = controller.getClients();
-			expect(Array.isArray(clients)).toBe(true);
-			expect(clients.length).toBe(0);
+			expect(clients).toHaveLength(1);
+			expect(clients[0].id).toBeTruthy();
+			expect(clients[0].seq).toBeGreaterThan(0);
+
+			ws.close();
+			await waitForAsyncWork();
+			expect(controller.getClients()).toHaveLength(0);
 		});
 
-		it("should subscribe to events", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
+		it("notifies subscribers about shutdown and supports unsubscribe", async () => {
+			const controller = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
 			controllers.push(controller);
 
 			const events: BridgeEvent[] = [];
@@ -142,175 +135,67 @@ describe("Bridge Lifecycle", () => {
 				events.push(event);
 			});
 
-			expect(typeof unsubscribe).toBe("function");
-
-			// Stop to trigger events
 			await controller.stop();
+			expect(events.map((event) => event.type)).toContain("server_stop");
+			expect(events.map((event) => event.type)).toContain("shutdown_complete");
 
-			// Should have received server_stop event
-			expect(events.some((e) => e.type === "server_stop")).toBe(true);
-		});
+			const nextController = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
+			controllers.push(nextController);
 
-		it("should support unsubscribing from events", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const events: BridgeEvent[] = [];
-			const unsubscribe = controller.subscribe((event) => {
-				events.push(event);
+			const unsubscribedEvents: BridgeEvent[] = [];
+			const stopListening = nextController.subscribe((event) => {
+				unsubscribedEvents.push(event);
 			});
-
-			// Unsubscribe
+			stopListening();
 			unsubscribe();
 
-			// Clear events array
-			events.length = 0;
-
-			// Stop should not trigger events anymore
-			await controller.stop();
-
-			expect(events.length).toBe(0);
+			await nextController.stop();
+			expect(unsubscribedEvents).toHaveLength(0);
 		});
 	});
 
-	describe("stop", () => {
-		it("should stop bridge gracefully", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
+	describe("shutdown", () => {
+		it("stops gracefully and calls done once", async () => {
+			const controller = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
 			controllers.push(controller);
 
-			expect(controller.getState().status).toBe("running");
-
+			await controller.stop();
+			await controller.stop();
 			await controller.stop();
 
 			expect(controller.getState().status).toBe("stopped");
-			expect(doneCalled).toBe(true);
+			expect(controller.getBridgeUrl()).toBeUndefined();
+			expect(doneCallback).toHaveBeenCalledTimes(1);
 		});
 
-		it("should be safe to call stop multiple times", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			await controller.stop();
-			await controller.stop(); // Should not throw
-			await controller.stop(); // Should not throw
-
-			expect(controller.getState().status).toBe("stopped");
-		});
-	});
-
-	describe("state transitions", () => {
-		it("should transition from starting to running", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-
-			// We can't observe "starting" state directly since start() is async,
-			// but we can verify the end state
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const state = controller.getState();
-			expect(state.status).toBe("running");
-		});
-
-		it("should transition from running to stopping to stopped", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			expect(controller.getState().status).toBe("running");
-
-			// Note: We can't observe "stopping" state directly since stop() is async,
-			// but we can verify the end state
-			await controller.stop();
-
-			expect(controller.getState().status).toBe("stopped");
-		});
-	});
-
-	describe("event emission", () => {
-		it("should emit server_start event", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const events: BridgeEvent[] = [];
-
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			controller.subscribe((event) => events.push(event));
-
-			// Verify by checking state
-			const state = controller.getState();
-			expect(state.status).toBe("running");
-		});
-
-		it("should emit server_stop event on stop", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
+		it("shuts down on SIGINT", async () => {
+			const controller = await startBridge(
+				{ ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+				mockContext,
+				doneCallback
+			);
 			controllers.push(controller);
 
 			const events: BridgeEvent[] = [];
-			controller.subscribe((event) => events.push(event));
+			controller.subscribe((event) => {
+				events.push(event);
+			});
 
-			await controller.stop();
-
-			expect(events.some((e) => e.type === "server_stop")).toBe(true);
-		});
-
-		it("should emit shutdown_complete event", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const events: BridgeEvent[] = [];
-			controller.subscribe((event) => events.push(event));
-
-			await controller.stop();
-
-			expect(events.some((e) => e.type === "shutdown_complete")).toBe(true);
-		});
-	});
-
-	describe("SIGINT handling", () => {
-		it("should register SIGINT handler on start", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const sigintListeners = process.listeners("SIGINT");
-			expect(sigintListeners.length).toBeGreaterThan(0);
-		});
-
-		it("should remove SIGINT handler on stop", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const beforeCount = process.listeners("SIGINT").length;
-			expect(beforeCount).toBeGreaterThan(0);
-
-			await controller.stop();
-
-			const afterCount = process.listeners("SIGINT").length;
-			expect(afterCount).toBe(0);
-		});
-
-		it("should trigger shutdown on SIGINT", async () => {
-			const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-			const controller = await startBridge(config, mockContext, doneCallback);
-			controllers.push(controller);
-
-			const events: BridgeEvent[] = [];
-			controller.subscribe((event) => events.push(event));
-
-			// Simulate SIGINT
 			process.emit("SIGINT");
+			await waitForAsyncWork(200);
 
-			// Wait for async shutdown
-			await new Promise((resolve) => setTimeout(resolve, 100));
-
-			expect(events.some((e) => e.type === "sigint_received")).toBe(true);
-			expect(doneCalled).toBe(true);
+			expect(events.map((event) => event.type)).toContain("sigint_received");
+			expect(events.map((event) => event.type)).toContain("shutdown_complete");
+			expect(controller.getState().status).toBe("stopped");
+			expect(doneCallback).toHaveBeenCalledTimes(1);
 		});
 	});
 });

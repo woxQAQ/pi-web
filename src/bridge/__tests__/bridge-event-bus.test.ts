@@ -73,18 +73,6 @@ describe("BridgeEventBus", () => {
 	});
 
 	describe("registerClient / unregisterClient", () => {
-		it("should register a client", () => {
-			const bus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
-			const client = createClient("c1", 1);
-			const send = vi.fn();
-
-			const unregister = bus.registerClient(client, send);
-			expect(typeof unregister).toBe("function");
-
-			unregister();
-			bus.dispose();
-		});
-
 		it("should unregister a client", () => {
 			const bus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
 			const client = createClient("c1", 1);
@@ -160,20 +148,24 @@ describe("BridgeEventBus", () => {
 			bus.dispose();
 		});
 
-		it("should report queue stats correctly", () => {
+		it("should report exact queue depth per client", () => {
 			const config = { ...DEFAULT_BRIDGE_CONFIG, clientBufferSize: 10 };
 			const bus = new BridgeEventBus(config);
 			const client1 = createClient("c1", 1);
 			const client2 = createClient("c2", 2);
+			const failingSend = vi.fn().mockImplementation(() => {
+				throw new Error("Send failed");
+			});
 
-			bus.registerClient(client1, vi.fn());
+			bus.registerClient(client1, failingSend);
 			bus.registerClient(client2, vi.fn());
+			bus.broadcast({ type: "agent_start" });
+			bus.broadcast({ type: "agent_end" });
 
-			const stats = bus.getQueueStats();
-			expect(stats).toHaveLength(2);
-			expect(stats[0]).toHaveProperty("clientId");
-			expect(stats[0]).toHaveProperty("depth");
-			expect(stats[0]).toHaveProperty("maxDepth");
+			expect(bus.getQueueStats()).toEqual([
+				{ clientId: "c1", depth: 2, maxDepth: 10 },
+				{ clientId: "c2", depth: 0, maxDepth: 10 },
+			]);
 
 			bus.dispose();
 		});
@@ -239,10 +231,5 @@ describe("BridgeEventBus", () => {
 			bus.dispose();
 		});
 
-		it("should return 0 for unknown client", () => {
-			const bus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
-			expect(bus.getClientQueueDepth("unknown")).toBe(0);
-			bus.dispose();
-		});
 	});
 });

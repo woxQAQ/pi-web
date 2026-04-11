@@ -10,7 +10,7 @@ import * as crypto from "node:crypto";
 import { WebSocket } from "ws";
 import { startBridge, type BridgeController } from "../lifecycle.js";
 import { createBridgeTerminalView } from "../terminal-log-view.js";
-import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent, type WsClient } from "../types.js";
+import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
 import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
 
 // Test timeout for async operations
@@ -120,17 +120,16 @@ describe("Bridge Integration", () => {
 		);
 
 		it(
-			"should emit server_start event",
+			"should publish shutdown lifecycle events to subscribers",
 			async () => {
 				const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
 				controller = await startBridge(config, mockContext, vi.fn());
 
 				controller.subscribe((event) => events.push(event));
-
-				// Stop to trigger server_stop event for verification
 				await controller.stop();
 
 				expect(events.some((e) => e.type === "server_stop")).toBe(true);
+				expect(events.some((e) => e.type === "shutdown_complete")).toBe(true);
 			},
 			TEST_TIMEOUT
 		);
@@ -455,54 +454,6 @@ describe("Bridge Integration", () => {
 
 				expect(response.success).toBe(false);
 				expect(response.error).toContain("unknown");
-
-				ws.close();
-			},
-			TEST_TIMEOUT
-		);
-	});
-
-	describe("Event Streaming", () => {
-		it(
-			"should receive events broadcasted to WebSocket clients",
-			async () => {
-				const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
-				controller = await startBridge(config, mockContext, vi.fn());
-
-				const address = controller.getState();
-				if (address.status !== "running") {
-					throw new Error("Bridge not running");
-				}
-
-				const wsUrl = `ws://${address.host}:${address.port}/ws`;
-				const ws = new WebSocket(wsUrl);
-
-				await new Promise<void>((resolve, reject) => {
-					ws.on("open", resolve);
-					ws.on("error", reject);
-					setTimeout(() => reject(new Error("Connection timeout")), 5000);
-				});
-
-				const receivedEvents: unknown[] = [];
-				ws.on("message", (data) => {
-					try {
-						const msg = JSON.parse(data.toString());
-						if (msg.type === "event") {
-							receivedEvents.push(msg.payload);
-						}
-					} catch {
-						// Ignore parse errors
-					}
-				});
-
-				// Trigger an event by calling sendUserMessage which registers an event handler
-				// Events are sent via the pi.on handlers registered in WsRpcAdapter
-
-				// Wait a moment for setup
-				await new Promise((resolve) => setTimeout(resolve, 100));
-
-				// Verify we can receive events (the connection is established)
-				expect(receivedEvents).toBeDefined();
 
 				ws.close();
 			},
