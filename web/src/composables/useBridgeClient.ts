@@ -4,6 +4,8 @@ import type {
 	RpcResponse,
 	RpcSessionState,
 	RpcSlashCommand,
+	RpcExtensionUIRequest,
+	RpcExtensionUIResponse,
 	ClientMessage,
 	ServerMessage,
 } from "../shared-types";
@@ -48,6 +50,29 @@ const sessions = ref<SessionEntry[]>([]);
 const treeEntries = ref<TreeEntry[]>([]);
 const commands = ref<RpcSlashCommand[]>([]);
 const isStreaming = ref(false);
+
+// ---------------------------------------------------------------------------
+// Extension UI state
+// ---------------------------------------------------------------------------
+
+/** Current dialog-requiring extension UI request, or null. */
+const pendingExtensionRequest = ref<RpcExtensionUIRequest | null>(null);
+
+/** Toast notification entries from extension notify calls. */
+const notifications = ref<
+	Array<{ message: string; notifyType?: string; id: string }>
+>([]);
+
+/** Status bar entries from extension setStatus calls. */
+const statusEntries = ref<Record<string, string>>({});
+
+/** Widget entries from extension setWidget calls. */
+const widgetEntries = ref<
+	Record<string, { lines: string[]; placement?: string }>
+>({});
+
+/** Prefill text from set_editor_text, consumed by ComposerBar. */
+const prefillText = ref<string | null>(null);
 
 // ---------------------------------------------------------------------------
 // Connection management
@@ -111,6 +136,17 @@ function sendPrompt(message: string) {
 	});
 }
 
+/** Send a response back to the server resolving a pending extension UI request. */
+function respondToUIRequest(payload: RpcExtensionUIResponse) {
+	pendingExtensionRequest.value = null;
+	sendEnvelope({ type: "extension_ui_response", payload });
+}
+
+/** Remove a toast notification by its id. */
+function dismissNotification(id: string) {
+	notifications.value = notifications.value.filter((n) => n.id !== id);
+}
+
 // ---------------------------------------------------------------------------
 // Message handling
 // ---------------------------------------------------------------------------
@@ -127,8 +163,9 @@ function handleServerMessage(raw: MessageEvent) {
 		handleResponse(envelope.payload);
 	} else if (envelope.type === "event") {
 		handleEvent(envelope.payload as Record<string, unknown>);
+	} else if (envelope.type === "extension_ui_request") {
+		handleExtensionUIRequest(envelope.payload as RpcExtensionUIRequest);
 	}
-	// extension_ui_request is handled separately if needed later
 }
 
 function handleResponse(payload: RpcResponse) {
@@ -229,6 +266,56 @@ function handleEvent(payload: Record<string, unknown>) {
 	}
 }
 
+/** Handle extension UI requests routed from Pi over the WebSocket. */
+function handleExtensionUIRequest(payload: RpcExtensionUIRequest) {
+	switch (payload.method) {
+		case "select":
+		case "confirm":
+		case "input":
+		case "editor":
+			// Dialog-requiring methods: store for UI to render
+			pendingExtensionRequest.value = payload;
+			break;
+		case "notify":
+			notifications.value = [
+				...notifications.value,
+				{
+					message: payload.message,
+					notifyType: payload.notifyType,
+					id: payload.id,
+				},
+			];
+			break;
+		case "setTitle":
+			document.title = payload.title;
+			break;
+		case "set_editor_text":
+			prefillText.value = payload.text;
+			break;
+		case "setStatus":
+			statusEntries.value = {
+				...statusEntries.value,
+				[payload.statusKey]: payload.statusText ?? "",
+			};
+			break;
+		case "setWidget":
+			if (payload.widgetLines) {
+				widgetEntries.value = {
+					...widgetEntries.value,
+					[payload.widgetKey]: {
+						lines: payload.widgetLines,
+						placement: payload.widgetPlacement,
+					},
+				};
+			} else {
+				// undefined widgetLines means remove
+				const { [payload.widgetKey]: _, ...rest } = widgetEntries.value;
+				widgetEntries.value = rest;
+			}
+			break;
+	}
+}
+
 // ---------------------------------------------------------------------------
 // Initial data fetch after connection
 // ---------------------------------------------------------------------------
@@ -267,6 +354,9 @@ function connect() {
 
 	ws.addEventListener("close", () => {
 		connectionStatus.value = "disconnected";
+		// Clear extension UI state
+		pendingExtensionRequest.value = null;
+		notifications.value = [];
 		// Clear pending requests
 		for (const [id, pending] of pendingRequests) {
 			clearTimeout(pending.timer);
@@ -318,6 +408,14 @@ export function useBridgeClient() {
 		treeEntries: readonly(treeEntries),
 		commands: readonly(commands),
 		isStreaming: readonly(isStreaming),
+		// Extension UI
+		pendingExtensionRequest: readonly(pendingExtensionRequest),
+		notifications: readonly(notifications),
+		statusEntries: readonly(statusEntries),
+		widgetEntries: readonly(widgetEntries),
+		prefillText: readonly(prefillText),
+		respondToUIRequest,
+		dismissNotification,
 		sendCommand,
 		sendPrompt,
 		connect,

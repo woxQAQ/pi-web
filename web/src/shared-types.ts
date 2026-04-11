@@ -11,6 +11,8 @@ export type {
 	RpcResponse,
 	RpcSessionState,
 	RpcSlashCommand,
+	RpcExtensionUIRequest,
+	RpcExtensionUIResponse,
 	ClientMessage,
 	ServerMessage,
 } from "../../src/bridge/types";
