@@ -35,3 +35,19 @@ export function getLanIps(): string[] {
 
 	return ips;
 }
+
+/**
+ * Check if an IPv4 address falls within the Tailscale CGNAT range.
+ *
+ * Tailscale assigns IPs from 100.64.0.0/10 (100.64.0.0 – 100.127.255.255).
+ *
+ * @param addr IPv4 address string
+ * @returns true if the address is in the Tailscale range
+ */
+export function isTailscaleIp(addr: string): boolean {
+	const parts = addr.split(".").map(Number);
+	if (parts.length !== 4) return false;
+	if (parts.some(isNaN)) return false;
+	// 100.64.0.0/10 = 100.01000000.0.0 to 100.01111111.255.255
+	return parts[0] === 100 && (parts[1] & 0b11000000) === 0b01000000;
+}

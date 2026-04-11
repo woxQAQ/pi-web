@@ -227,6 +227,7 @@ export type BridgeEvent =
 			correlationId?: string;
 			error: string;
 	  }
+	| { type: "auth_rejected"; clientIp: string; protocol: "http" | "ws" }
 	| { type: "sigint_received" }
 	| { type: "shutdown_complete" };
 

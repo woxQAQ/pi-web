@@ -11,7 +11,7 @@ import * as http from "node:http";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
-import { getLanIps } from "./network.js";
+import { getLanIps, isTailscaleIp } from "./network.js";
 import type { BridgeConfig, BridgeEvent, WsClient } from "./types.js";
 import { BridgeEventBus } from "./bridge-event-bus.js";
 import { WsRpcAdapter, type WsRpcAdapterContext } from "./ws-rpc-adapter.js";
@@ -145,9 +145,11 @@ export class BridgeServer {
 					verifyClient: (info, callback) => {
 						const url = new URL(info.req.url || "/", `http://${info.req.headers.host}`);
 						const clientToken = url.searchParams.get("token");
+						const clientIp = info.req.socket.remoteAddress || "unknown";
 						if (clientToken === this.token) {
 							callback(true);
 						} else {
+							this.emitEvent({ type: "auth_rejected", clientIp, protocol: "ws" });
 							callback(false, 401, "Unauthorized: invalid or missing token");
 						}
 					},
@@ -258,6 +260,8 @@ export class BridgeServer {
 			// Check cookie
 			const cookies = parseCookies(req.headers.cookie);
 			if (cookies.pi_token !== this.token) {
+				const clientIp = req.socket.remoteAddress || "unknown";
+				this.emitEvent({ type: "auth_rejected", clientIp, protocol: "http" });
 				res.writeHead(401, { "Content-Type": "text/plain" });
 				res.end("Unauthorized");
 				return;
@@ -279,7 +283,7 @@ export class BridgeServer {
 			// No static directory - return 404 placeholder
 			if (safePath === "/index.html") {
 				res.writeHead(200, { "Content-Type": "text/html" });
-				res.end(getPlaceholderHtml(this.host, this.port));
+				res.end(getPlaceholderHtml(this.host, this.port, this.token));
 			} else {
 				res.writeHead(404, { "Content-Type": "text/plain" });
 				res.end("Not Found - No web bundle configured");
@@ -439,10 +443,16 @@ function parseCookies(header: string | undefined): Record<string, string> {
 /**
  * Get placeholder HTML when no static bundle exists
  */
-function getPlaceholderHtml(host: string, port: number): string {
+function getPlaceholderHtml(host: string, port: number, token: string): string {
 	const lanIps = getLanIps();
+	const tokenParam = token ? `?token=${token}` : "";
+	const wsUrl = (ip: string) => `ws://${ip}:${port}/ws`;
+	const httpUrl = (ip: string) => `http://${ip}:${port}${tokenParam}`;
 	const lanUrlLines = lanIps.length > 0
-		? lanIps.map(ip => `<span class="code">ws://${ip}:${port}/ws</span>`).join("<br>\n\t\t\t")
+		? lanIps.map(ip => {
+				const label = isTailscaleIp(ip) ? " 🦎 Tailscale" : "";
+				return `<span class="code">${httpUrl(ip)}</span>${label}`;
+			}).join("<br>\n\t\t\t")
 		: "";
 
 	return `<!DOCTYPE html>
@@ -481,7 +491,7 @@ function getPlaceholderHtml(host: string, port: number): string {
 		
 		<div class="info">
 			<strong>Bridge Address:</strong><br>
-			<span class="code">ws://localhost:${port}/ws</span>
+			<span class="code">http://localhost:${port}${tokenParam}</span>
 		</div>
 		${lanIps.length > 0 ? `<div class="lan-info">
 			<strong>📡 LAN Addresses (use on other devices):</strong><br>

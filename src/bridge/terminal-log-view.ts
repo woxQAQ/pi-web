@@ -7,7 +7,7 @@
  */
 
 import type { BridgeConfig, BridgeEvent, BridgeState, WsClient } from "./types.js";
-import { getLanIps } from "./network.js";
+import { getLanIps, isTailscaleIp } from "./network.js";
 
 /**
  * Log entry with timestamp
@@ -290,7 +290,8 @@ export function createBridgeTerminalView(
 	subscribe: (handler: (event: BridgeEvent) => void) => () => void,
 	getState: () => BridgeState,
 	getClients: () => WsClient[],
-	config: BridgeConfig
+	config: BridgeConfig,
+	getToken: () => string
 ): TerminalLogView & { dispose: () => void } {
 	// Internal log storage
 	const maxLines = 100;
@@ -312,8 +313,13 @@ export function createBridgeTerminalView(
 		switch (event.type) {
 			case "server_start": {
 				const lanIps = getLanIps();
-				const lanInfo = lanIps.length > 0 ? ` (LAN: ${lanIps.map(ip => `http://${ip}:${event.port}`).join(", ")})` : "";
-				addLog(`Server started on ${event.host}:${event.port}${lanInfo}`, "info");
+				const token = getToken();
+				const tokenHint = token ? ` (token: ${token.slice(0, 8)}...)` : "";
+				const lanInfo = lanIps.length > 0 ? ` (LAN: ${lanIps.map(ip => {
+					const label = isTailscaleIp(ip) ? " [Tailscale]" : "";
+					return `http://${ip}:${event.port}${label}`;
+				}).join(", ")})` : "";
+				addLog(`Server started on ${event.host}:${event.port}${tokenHint}${lanInfo}`, "info");
 				break;
 			}
 			case "server_stop":
@@ -342,6 +348,9 @@ export function createBridgeTerminalView(
 				break;
 			case "shutdown_complete":
 				addLog("Shutdown complete", "shutdown");
+				break;
+			case "auth_rejected":
+				addLog(`Auth rejected (${event.protocol}) from ${event.clientIp}`, "error");
 				break;
 		}
 	});
@@ -391,11 +400,14 @@ export function createBridgeTerminalView(
 			// Status line
 			const statusIndicator = getStatusIndicator(state.status);
 			if (state.status === "running") {
-				lines.push(`${statusIndicator} Bridge: http://localhost:${state.port}`);
+				const token = getToken();
+				const tokenParam = token ? `?token=${token}` : "";
+				lines.push(`${statusIndicator} Bridge: http://localhost:${state.port}${tokenParam}`);
 				// Show LAN IPs for mobile/remote access
 				const lanIps = getLanIps();
 				for (const ip of lanIps) {
-					lines.push(`  📡 LAN: http://${ip}:${state.port}`);
+					const tailscaleLabel = isTailscaleIp(ip) ? " (Tailscale)" : "";
+					lines.push(`  📡 LAN: http://${ip}:${state.port}${tokenParam}${tailscaleLabel}`);
 				}
 				lines.push(`  WebSocket: ws://localhost:${state.port}/ws`);
 			} else if (state.status === "starting") {

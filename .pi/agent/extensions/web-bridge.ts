@@ -169,7 +169,8 @@ export default async function webBridgeCommand(ctx: ExtensionContext): Promise<v
 		(handler) => bridgeController!.subscribe(handler),
 		() => bridgeController!.getState(),
 		() => bridgeController!.getClients(),
-		config
+		config,
+		() => bridgeController!.getToken()
 	);
 
 	// Render the custom UI - this degrades terminal to read-only log view

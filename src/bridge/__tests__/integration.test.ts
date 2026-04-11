@@ -478,12 +478,11 @@ describe("Bridge Integration", () => {
 					(handler) => controller!.subscribe(handler),
 					() => controller!.getState(),
 					() => controller!.getClients(),
-					config
+					config,
+					() => controller!.getToken()
 				);
 
 				const renderOutput = terminalView.render();
-
-				expect(renderOutput).toBeInstanceOf(Array);
 				expect(renderOutput.length).toBeGreaterThan(0);
 				expect(renderOutput.some((line) => line.includes("Pi Web Bridge"))).toBe(true);
 				expect(renderOutput.some((line) => line.includes("Bridge:"))).toBe(true);
@@ -503,10 +502,9 @@ describe("Bridge Integration", () => {
 					(handler) => controller!.subscribe(handler),
 					() => controller!.getState(),
 					() => controller!.getClients(),
-					config
+					config,
+					() => controller!.getToken()
 				);
-
-				// Initial render - no clients
 				const initialRender = terminalView.render();
 				expect(initialRender.some((line) => line.includes("Clients: 0"))).toBe(true);
 

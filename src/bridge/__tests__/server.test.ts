@@ -320,7 +320,7 @@ describe("BridgeServer", () => {
 			const response = await requestText(`http://localhost:${address.port}/?token=${TOKEN}`);
 			expect(response.status).toBe(200);
 			expect(response.body).toContain("Pi Web Bridge");
-			expect(response.body).toContain(`ws://localhost:${address.port}/ws`);
+			expect(response.body).toContain(`http://localhost:${address.port}`);
 
 			await server.stop();
 		});
