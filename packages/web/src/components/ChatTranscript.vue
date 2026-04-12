@@ -302,7 +302,7 @@ defineExpose({ preserveScroll });
 	padding: 12px 16px;
 	border: 1px solid var(--border);
 	border-radius: 18px 18px 8px 18px;
-	background: linear-gradient(180deg, var(--panel-2), var(--panel));
+	background: var(--panel-2);
 }
 
 .markdown-body + .markdown-body,
