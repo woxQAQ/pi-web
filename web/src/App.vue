@@ -22,6 +22,7 @@ const {
 	isReconnecting,
 	reconnectCount,
 	lastDisconnectReason,
+	connectionError,
 	sendPrompt,
 	sendCommand,
 	pendingExtensionRequest,
@@ -208,7 +209,13 @@ watch(
 			</main>
 		</div>
 
-		<div v-if="notifications.length > 0" class="toast-container">
+		<div v-if="connectionError || notifications.length > 0" class="toast-container">
+			<div v-if="connectionError" class="toast-item error" role="alert">
+				<div class="toast-copy">
+					<span class="toast-type">error</span>
+					<span class="toast-message">{{ connectionError }}</span>
+				</div>
+			</div>
 			<div
 				v-for="notif in notifications"
 				:key="notif.id"
@@ -255,6 +262,9 @@ watch(
 	--overlay: rgba(0, 0, 0, 0.72);
 	--backdrop: rgba(0, 0, 0, 0.45);
 	--composer-fade: rgba(10, 10, 10, 0.96);
+	--error-bg: rgba(127, 29, 29, 0.28);
+	--error-border: rgba(248, 113, 113, 0.42);
+	--error-text: #fecaca;
 	display: flex;
 	flex-direction: column;
 	height: 100vh;
@@ -285,6 +295,9 @@ watch(
 	--overlay: rgba(0, 0, 0, 0.22);
 	--backdrop: rgba(0, 0, 0, 0.12);
 	--composer-fade: rgba(250, 250, 250, 0.96);
+	--error-bg: #fff1f2;
+	--error-border: #fecdd3;
+	--error-text: #9f1239;
 	color-scheme: light;
 }
 
@@ -513,6 +526,16 @@ watch(
 	border: 1px solid var(--border-strong);
 	box-shadow: var(--shadow);
 	animation: toast-in 0.16s ease;
+}
+
+.toast-item.error {
+	background: var(--error-bg);
+	border-color: var(--error-border);
+}
+
+.toast-item.error .toast-type,
+.toast-item.error .toast-message {
+	color: var(--error-text);
 }
 
 .toast-copy {

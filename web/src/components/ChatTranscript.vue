@@ -2,6 +2,7 @@
 import { ref, watch, nextTick } from "vue";
 import type { TranscriptEntry } from "../composables/useBridgeClient";
 import { contentBlocks, isToolResultMessage, messageContent } from "../transcript";
+import MarkdownRenderer from "./MarkdownRenderer.vue";
 
 const props = defineProps<{
 	messages: readonly TranscriptEntry[];
@@ -176,9 +177,7 @@ defineExpose({ preserveScroll });
 							<div v-else class="tool-pending">Running...</div>
 						</div>
 
-						<div v-else-if="block.kind === 'text' && block.text" class="text-block">
-							{{ block.text }}
-						</div>
+						<MarkdownRenderer v-else-if="block.kind === 'text' && block.text" :content="block.text" />
 					</template>
 				</div>
 			</div>
@@ -309,15 +308,11 @@ defineExpose({ preserveScroll });
 	background: linear-gradient(180deg, var(--panel-2), var(--panel));
 }
 
-.text-block {
-	white-space: pre-wrap;
-}
-
-.text-block + .text-block,
-.text-block + .thinking-block,
-.text-block + .tool-call-block,
-.thinking-block + .text-block,
-.tool-call-block + .text-block,
+.markdown-body + .markdown-body,
+.markdown-body + .thinking-block,
+.markdown-body + .tool-call-block,
+.thinking-block + .markdown-body,
+.tool-call-block + .markdown-body,
 .tool-call-block + .thinking-block,
 .thinking-block + .tool-call-block {
 	margin-top: 12px;

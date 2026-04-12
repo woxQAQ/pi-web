@@ -56,6 +56,7 @@ const isStreaming = ref(false);
 // Reconnect diagnostics
 const reconnectCount = ref(0);
 const lastDisconnectReason = ref("");
+const connectionError = ref("");
 
 // ---------------------------------------------------------------------------
 // Extension UI state
@@ -89,6 +90,7 @@ let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let reconnectDelay = 1000;
 const MAX_RECONNECT_DELAY = 30_000;
 let disposed = false;
+let requestIdCounter = 0;
 
 /** Ephemeral auth token extracted from the initial URL query param. */
 let authToken = "";
@@ -120,6 +122,7 @@ function resetReconnectDelay() {
 }
 
 function scheduleReconnect() {
+	if (connectionError.value) return;
 	if (reconnectTimer) clearTimeout(reconnectTimer);
 	reconnectTimer = setTimeout(() => {
 		if (!disposed) connect();
@@ -133,9 +136,26 @@ function sendEnvelope(msg: ClientMessage) {
 	}
 }
 
+function createRequestId(): string {
+	const cryptoApi = globalThis.crypto;
+	if (cryptoApi?.randomUUID) return cryptoApi.randomUUID();
+
+	if (cryptoApi?.getRandomValues) {
+		const bytes = new Uint8Array(16);
+		cryptoApi.getRandomValues(bytes);
+		bytes[6] = (bytes[6] & 0x0f) | 0x40;
+		bytes[8] = (bytes[8] & 0x3f) | 0x80;
+		const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+		return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
+	}
+
+	requestIdCounter += 1;
+	return `req_${Date.now().toString(36)}_${requestIdCounter}_${Math.random().toString(36).slice(2)}`;
+}
+
 function sendCommand(payload: RpcCommand): Promise<RpcResponse> {
 	return new Promise((resolve, reject) => {
-		const id = payload.id ?? crypto.randomUUID();
+		const id = payload.id ?? createRequestId();
 		const command = { ...payload, id };
 		const timer = setTimeout(() => {
 			pendingRequests.delete(id);
@@ -371,6 +391,14 @@ function connect() {
 	if (disposed) return;
 
 	captureToken();
+	if (!authToken) {
+		connectionStatus.value = "disconnected";
+		connectionError.value = "Missing authentication token. Open the bridge URL with its token parameter.";
+		lastDisconnectReason.value = connectionError.value;
+		return;
+	}
+
+	connectionError.value = "";
 	connectionStatus.value = "connecting";
 	const protocol = location.protocol === "https:" ? "wss:" : "ws:";
 	const wsUrl = authToken
@@ -380,6 +408,7 @@ function connect() {
 
 	ws.addEventListener("open", () => {
 		connectionStatus.value = "connected";
+		connectionError.value = "";
 		lastDisconnectReason.value = "";
 		resetReconnectDelay();
 		fetchInitialState();
@@ -438,7 +467,7 @@ export function useBridgeClient() {
 	}
 
 	const isReconnecting = computed(
-		() => connectionStatus.value === "disconnected" && !disposed,
+		() => connectionStatus.value === "disconnected" && !disposed && !connectionError.value,
 	);
 
 	return {
@@ -453,6 +482,7 @@ export function useBridgeClient() {
 		isReconnecting,
 		reconnectCount: readonly(reconnectCount),
 		lastDisconnectReason: readonly(lastDisconnectReason),
+		connectionError: readonly(connectionError),
 		// Extension UI
 		pendingExtensionRequest: readonly(pendingExtensionRequest),
 		notifications: readonly(notifications),

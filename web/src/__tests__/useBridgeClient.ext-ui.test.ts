@@ -28,7 +28,7 @@ class MockWebSocket {
 }
 
 // Mock location for connect()
-vi.stubGlobal("location", { protocol: "http:", host: "localhost:8080" });
+vi.stubGlobal("location", { protocol: "http:", host: "localhost:8080", search: "?token=test-token" });
 
 // Provide a minimal document mock so Vue's runtime-dom can initialize.
 // Vue's runtime-dom calls doc.createElement("div") at module load time.
@@ -50,6 +50,7 @@ beforeEach(() => {
 	originalWebSocket = globalThis.WebSocket;
 	// @ts-expect-error mock
 	globalThis.WebSocket = MockWebSocket;
+	vi.stubGlobal("location", { protocol: "http:", host: "localhost:8080", search: "?token=test-token" });
 	mockWsInstances.length = 0;
 });
 
@@ -91,6 +92,16 @@ function simulateOpen(ws: MockWebSocket) {
 describe("extension_ui_request handling", () => {
 	beforeEach(() => {
 		vi.resetModules();
+	});
+
+	it("shows an auth error and skips reconnect when token is missing", async () => {
+		vi.stubGlobal("location", { protocol: "http:", host: "localhost:8080", search: "" });
+
+		const client = await importComposable();
+
+		expect(mockWsInstances).toHaveLength(0);
+		expect(client.connectionError.value).toContain("Missing authentication token");
+		expect(client.isReconnecting.value).toBe(false);
 	});
 
 	it("handles select method by setting pendingExtensionRequest", async () => {
