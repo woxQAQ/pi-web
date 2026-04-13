@@ -25,7 +25,6 @@ defineProps<{
 	background: var(--panel);
 	border-bottom: 1px solid var(--border);
 	color: var(--text-muted);
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.72rem;
 	flex-shrink: 0;
 	z-index: 19;

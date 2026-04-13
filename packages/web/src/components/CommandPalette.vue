@@ -152,7 +152,6 @@ defineExpose({ handleKeydown });
 }
 
 .cmd-name {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.78rem;
 	color: var(--text);
 	white-space: nowrap;

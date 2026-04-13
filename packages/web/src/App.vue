@@ -423,7 +423,6 @@ watch(
 }
 
 .session-kicker {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.68rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
@@ -462,9 +461,6 @@ watch(
 	color: var(--text-subtle);
 }
 
-.network-url {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
-}
 
 .theme-toggle {
 	justify-content: center;
@@ -603,7 +599,6 @@ watch(
 	border-radius: 999px;
 	border: 1px solid var(--border);
 	background: var(--panel);
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.68rem;
 	color: var(--text-subtle);
 }
@@ -650,7 +645,6 @@ watch(
 }
 
 .toast-type {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.66rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;

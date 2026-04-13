@@ -35,7 +35,7 @@ const editDiff = computed(() => {
 </script>
 
 <template>
-	<article class="tool-card" :data-status="model.status">
+	<article class="tool-card" :data-status="model.status" :data-tool="block.toolName">
 		<header class="tool-card-header">
 			<div class="tool-card-heading">
 				<span class="tool-card-label">{{ model.label }}</span>
@@ -55,21 +55,23 @@ const editDiff = computed(() => {
 		</header>
 
 		<DiffView v-if="showPreview && editDiff" :diff="editDiff" />
-		<HighlightedCode
-			v-else-if="showPreview && model.preview && block.toolName === 'read'"
-			:code="model.preview"
-			:path="readPath"
-		/>
+		<div v-else-if="showPreview && model.preview && block.toolName === 'read'" class="tool-card-code-panel">
+			<HighlightedCode
+				:code="model.preview"
+				:path="readPath"
+			/>
+		</div>
 		<pre v-else-if="showPreview && model.preview" class="tool-card-preview">{{ model.preview }}</pre>
 
 		<div v-if="expanded && hasDetails" class="tool-card-details">
 			<section v-for="section in model.details" :key="section.label" class="tool-card-section">
 				<div class="tool-card-section-label">{{ section.label }}</div>
-				<HighlightedCode
-					v-if="block.toolName === 'read' && section.label === 'Contents'"
-					:code="section.text"
-					:path="readPath"
-				/>
+				<div v-if="block.toolName === 'read' && section.label === 'Contents'" class="tool-card-code-panel">
+					<HighlightedCode
+						:code="section.text"
+						:path="readPath"
+					/>
+				</div>
 				<pre v-else class="tool-card-section-text">{{ section.text }}</pre>
 			</section>
 		</div>
@@ -114,7 +116,6 @@ const editDiff = computed(() => {
 
 .tool-card-label,
 .tool-card-section-label {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.64rem;
 	font-weight: 600;
 	text-transform: uppercase;
@@ -129,17 +130,21 @@ const editDiff = computed(() => {
 	gap: 8px;
 }
 
-.tool-card-title,
-.tool-card-meta,
-.tool-card-toggle {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
-}
 
 .tool-card-title {
 	font-size: 0.78rem;
 	line-height: 1.5;
 	color: var(--text);
 	word-break: break-word;
+}
+
+.tool-card[data-tool="bash"] .tool-card-label,
+.tool-card[data-tool="bash"] .tool-card-title,
+.tool-card[data-tool="bash"] .tool-card-meta,
+.tool-card[data-tool="bash"] .tool-card-preview,
+.tool-card[data-tool="bash"] .tool-card-section-label,
+.tool-card[data-tool="bash"] .tool-card-section-text {
+	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 }
 
 .tool-card-meta {
@@ -180,12 +185,26 @@ const editDiff = computed(() => {
 .tool-card-preview,
 .tool-card-section-text {
 	margin: 0;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
+	font-family: inherit;
 	font-size: 0.72rem;
 	line-height: 1.6;
 	white-space: pre-wrap;
 	word-break: break-word;
 	color: var(--text-muted);
+}
+
+.tool-card-code-panel {
+	border: 1px solid var(--border-strong);
+	border-radius: 10px;
+	background: var(--tool-card-bg-strong);
+	overflow: auto;
+	max-height: 360px;
+}
+
+.tool-card-code-panel :deep(pre) {
+	margin: 0;
+	padding: 10px 12px;
+	background: transparent !important;
 }
 
 .tool-card[data-status="error"] .tool-card-preview,

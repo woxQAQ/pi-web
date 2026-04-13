@@ -139,7 +139,6 @@ resizeTextarea();
 						v-model="inputText"
 						class="prompt-input"
 						rows="1"
-						placeholder="Type a message or use / commands"
 						:disabled="isDisabled"
 						@keydown="handleInputKeydown"
 						@input="resizeTextarea"
@@ -162,13 +161,13 @@ resizeTextarea();
 							:disabled="isDisabled"
 							@select="handleModelSelect"
 						/>
-						<span class="composer-pill composer-pill-model">model {{ currentModelText }}</span>
+						<span class="composer-pill composer-pill-model">{{ currentModelText }}</span>
 					</div>
 
 					<div class="composer-hints">
-						<span class="composer-pill">{{ statusText }}</span>
-						<span class="composer-pill">Enter send</span>
-						<span class="composer-pill">Shift+Enter newline</span>
+						<!-- <span class="composer-pill">{{ statusText }}</span> -->
+						<!-- <span class="composer-pill">Enter send</span> -->
+						<!-- <span class="composer-pill">Shift+Enter newline</span> -->
 					</div>
 				</div>
 			</div>

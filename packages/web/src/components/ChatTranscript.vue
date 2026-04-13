@@ -243,7 +243,6 @@ defineExpose({ preserveScroll });
 	border-radius: 999px;
 	border: 1px solid var(--border);
 	background: var(--panel);
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.68rem;
 	color: var(--text-subtle);
 }
@@ -275,7 +274,6 @@ defineExpose({ preserveScroll });
 
 .message-role {
 	display: inline-block;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.64rem;
 	font-weight: 600;
 	text-transform: uppercase;
@@ -329,7 +327,6 @@ defineExpose({ preserveScroll });
 	background: none;
 	border: none;
 	color: var(--text-muted);
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.7rem;
 	cursor: pointer;
 }
@@ -341,7 +338,7 @@ defineExpose({ preserveScroll });
 .thinking-content {
 	margin: 8px 0 0;
 	padding: 10px 0 0;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
+	font-family: inherit;
 	font-size: 0.74rem;
 	line-height: 1.55;
 	color: var(--text-muted);
@@ -373,10 +370,6 @@ defineExpose({ preserveScroll });
 	gap: 12px;
 }
 
-.tool-result-card-label,
-.tool-result-card-toggle {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
-}
 
 .tool-result-card-label {
 	font-size: 0.66rem;
@@ -404,7 +397,7 @@ defineExpose({ preserveScroll });
 .tool-result-card-preview,
 .tool-result-card-details {
 	margin: 0;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
+	font-family: inherit;
 	font-size: 0.72rem;
 	line-height: 1.6;
 	white-space: pre-wrap;

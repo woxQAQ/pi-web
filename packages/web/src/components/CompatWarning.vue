@@ -44,7 +44,6 @@ function handleDismiss() {
 
 .compat-kicker {
 	flex-shrink: 0;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.66rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;

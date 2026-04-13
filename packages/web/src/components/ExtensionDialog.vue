@@ -191,7 +191,6 @@ watch(() => props.request, initFromRequest, { immediate: true });
 
 .dialog-kicker {
 	margin-bottom: 6px;
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.66rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;

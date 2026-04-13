@@ -53,7 +53,6 @@ const emit = defineEmits<{
 }
 
 .rail-title {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.68rem;
 	font-weight: 600;
 	text-transform: uppercase;

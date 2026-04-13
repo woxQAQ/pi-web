@@ -175,7 +175,6 @@ function handleNavigate(entryId: string) {
 .status-token,
 .tree-role,
 .tree-state {
-	font-family: "SF Mono", "Monaco", "Menlo", monospace;
 	font-size: 0.68rem;
 	text-transform: uppercase;
 	letter-spacing: 0.08em;
