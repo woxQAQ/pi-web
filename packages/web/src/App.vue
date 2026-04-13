@@ -16,6 +16,7 @@ const {
   connectionStatus,
   transcript,
   sessionState,
+  sessionStats,
   sessions,
   treeEntries,
   isHistoricalView,
@@ -230,6 +231,7 @@ watch(
         :available-models="availableModels"
         :current-model="currentModel"
         :current-thinking-level="currentThinkingLevel"
+        :session-stats="sessionStats"
         @submit="handlePrompt"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"

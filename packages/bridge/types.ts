@@ -52,7 +52,7 @@ export type RpcCommand =
   | { id?: string; type: "bash"; command: string }
   | { id?: string; type: "abort_bash" }
   // Session
-  | { id?: string; type: "get_session_stats" }
+  | { id?: string; type: "get_session_stats"; sessionPath?: string }
   | { id?: string; type: "export_html"; outputPath?: string }
   | { id?: string; type: "switch_session"; sessionPath: string }
   | {

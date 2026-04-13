@@ -1006,7 +1006,113 @@ export class WsRpcAdapter {
       // =================================================================
 
       case "get_session_stats": {
+        const requestedPath = command.sessionPath as string | undefined;
+        const liveSessionPath = ctx.sessionManager.getSessionFile();
+        const targetPath = requestedPath ?? liveSessionPath;
+
+        // If targeting a historical (non-live) session, read from disk
+        if (targetPath && targetPath !== liveSessionPath && fs.existsSync(targetPath)) {
+          try {
+            const diskSession = openSessionManager(targetPath);
+            const branch = diskSession.getBranch();
+            let totalCost = 0;
+            let lastAssistantEntry: {
+              usage?: { input?: number; output?: number; cacheRead?: number; cacheWrite?: number };
+            } | null = null;
+            let lastModel: { provider?: string; modelId?: string } | null = null;
+            for (const entry of branch) {
+              const e = entry as {
+                type?: string;
+                provider?: string;
+                modelId?: string;
+                message?: {
+                  role?: string;
+                  usage?: {
+                    cost?: { total?: number };
+                    input?: number;
+                    output?: number;
+                    cacheRead?: number;
+                    cacheWrite?: number;
+                  };
+                };
+              };
+              if (e.type === "model_change") {
+                lastModel = { provider: e.provider, modelId: e.modelId };
+              }
+              if (
+                e.type === "message" &&
+                e.message?.role === "assistant" &&
+                e.message?.usage?.cost
+              ) {
+                totalCost += e.message.usage.cost.total ?? 0;
+                // Only use entries with actual input tokens for context estimation
+                if ((e.message.usage.input ?? 0) > 0) {
+                  lastAssistantEntry = e.message;
+                }
+              }
+            }
+
+            // Reconstruct context info from last assistant usage + model registry
+            let tokens: number | null = null;
+            let contextWindow = 0;
+            let percent: number | null = null;
+            if (lastAssistantEntry?.usage) {
+              const u = lastAssistantEntry.usage;
+              tokens = (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
+            }
+            if (lastModel?.provider && lastModel?.modelId && tokens != null) {
+              const models = await ctx.modelRegistry.getAvailable();
+              const matched = models.find(
+                (m: unknown) =>
+                  (m as { provider: string; id: string }).provider === lastModel!.provider &&
+                  (m as { provider: string; id: string }).id === lastModel!.modelId,
+              );
+              if (matched) {
+                contextWindow = (matched as { contextWindow?: number }).contextWindow ?? 0;
+                if (contextWindow > 0) {
+                  percent = Math.round((tokens / contextWindow) * 100 * 10) / 10;
+                }
+              }
+            }
+
+            return {
+              id: correlationId,
+              type: "response",
+              command: "get_session_stats",
+              success: true,
+              data: {
+                tokens,
+                contextWindow,
+                percent,
+                messageCount: diskSession.getEntries()?.length ?? 0,
+                cost: totalCost,
+              },
+            };
+          } catch {
+            // Fall through to live session stats
+          }
+        }
+
+        // Live session: use context API
         const usage = ctx.getContextUsage();
+        const branch = ctx.sessionManager.getBranch();
+        let totalCost = 0;
+        for (const entry of branch) {
+          const e = entry as {
+            type?: string;
+            message?: {
+              role?: string;
+              usage?: { cost?: { total?: number } };
+            };
+          };
+          if (
+            e.type === "message" &&
+            e.message?.role === "assistant" &&
+            e.message?.usage?.cost
+          ) {
+            totalCost += e.message.usage.cost.total ?? 0;
+          }
+        }
         return {
           id: correlationId,
           type: "response",
@@ -1017,6 +1123,7 @@ export class WsRpcAdapter {
             contextWindow: usage?.contextWindow ?? 0,
             percent: usage?.percent ?? null,
             messageCount: ctx.sessionManager.getEntries()?.length ?? 0,
+            cost: totalCost,
           },
         };
       }

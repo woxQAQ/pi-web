@@ -70,6 +70,15 @@ const currentModel = ref<RpcModelInfo | null>(null);
 const currentThinkingLevel = ref<string | null>(null);
 const isStreaming = ref(false);
 
+// Session stats (context usage + cost)
+const sessionStats = ref<{
+  tokens: number | null;
+  contextWindow: number;
+  percent: number | null;
+  messageCount: number;
+  cost: number;
+} | null>(null);
+
 // Reconnect diagnostics
 const reconnectCount = ref(0);
 const lastDisconnectReason = ref("");
@@ -221,7 +230,6 @@ async function setThinkingLevel(level: string) {
   const response = await sendCommand({ type: "set_thinking_level", level });
   if (response.success) {
     currentThinkingLevel.value = normalizeThinkingLevel(level);
-    sendCommand({ type: "get_state" }).catch(() => {});
   }
   return response;
 }
@@ -341,6 +349,11 @@ function handleResponse(payload: RpcResponse) {
               sessionFile: data.sessionPath ?? sessionState.value?.sessionFile,
             } as RpcSessionState;
           }
+          // Fetch stats for the switched session
+          sendCommand({
+            type: "get_session_stats",
+            sessionPath: data.sessionPath,
+          }).catch(() => {});
         }
         break;
       }
@@ -384,6 +397,19 @@ function handleResponse(payload: RpcResponse) {
       }
       case "set_thinking_level":
         break;
+      case "get_session_stats": {
+        const data = payload.data as
+          | {
+              tokens: number | null;
+              contextWindow: number;
+              percent: number | null;
+              messageCount: number;
+              cost: number;
+            }
+          | undefined;
+        if (data) sessionStats.value = data;
+        break;
+      }
     }
   }
 }
@@ -435,6 +461,7 @@ function handleEvent(payload: Record<string, unknown>) {
       isStreaming.value = false;
       // Refresh state after agent completes
       sendCommand({ type: "get_state" }).catch(() => {});
+      sendCommand({ type: "get_session_stats" }).catch(() => {});
       break;
     }
     case "model_select": {
@@ -512,6 +539,7 @@ async function fetchInitialState() {
       sendCommand({ type: "list_sessions" }),
       sendCommand({ type: "get_commands" }),
       sendCommand({ type: "get_available_models" }),
+      sendCommand({ type: "get_session_stats" }),
     ]);
   } catch {
     // Individual errors already handled by reject; swallow aggregate
@@ -630,6 +658,7 @@ export function useBridgeClient() {
     currentModel: readonly(currentModel),
     currentThinkingLevel: readonly(currentThinkingLevel),
     isStreaming: readonly(isStreaming),
+    sessionStats: readonly(sessionStats),
     // Reconnect diagnostics
     isReconnecting,
     reconnectCount: readonly(reconnectCount),

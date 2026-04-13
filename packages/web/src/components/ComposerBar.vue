@@ -226,7 +226,7 @@ resizeTextarea();
 <style scoped>
 .composer-bar {
   flex-shrink: 0;
-  padding: 16px 24px 12px;
+  padding: 6px 24px 12px;
   padding-bottom: max(12px, env(safe-area-inset-bottom));
   background: linear-gradient(to top, var(--bg), var(--composer-fade));
 }

@@ -4,7 +4,7 @@
   "description": "Pi extension: WebSocket bridge for browser-based interaction",
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "check": "tsgo -p tsconfig.json",
     "build:web": "vite build packages/web/",
     "dev:web": "vite packages/web/",
     "test": "vitest run --reporter=verbose",
@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@mariozechner/pi-coding-agent": "^0.65.0",
+    "@typescript/native-preview": "7.0.0-dev.20260413.1",
     "dompurify": "^3.3.3",
     "lucide-vue-next": "^1.0.0",
     "marked": "^18.0.0",

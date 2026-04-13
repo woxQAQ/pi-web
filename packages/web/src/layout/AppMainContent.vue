@@ -3,6 +3,7 @@ import { ref } from "vue";
 import ChatTranscript from "../components/ChatTranscript.vue";
 import CompatWarning from "../components/CompatWarning.vue";
 import ComposerBar from "../components/ComposerBar.vue";
+import SessionStatsBar from "../components/SessionStatsBar.vue";
 import type {
   ConnectionStatus,
   TranscriptEntry,
@@ -20,6 +21,13 @@ defineProps<{
   availableModels: readonly RpcModelInfo[];
   currentModel: RpcModelInfo | null;
   currentThinkingLevel: string | null;
+  sessionStats: {
+    tokens: number | null;
+    contextWindow: number;
+    percent: number | null;
+    messageCount: number;
+    cost: number;
+  } | null;
 }>();
 
 const emit = defineEmits<{
@@ -56,6 +64,7 @@ defineExpose({ preserveTranscriptScroll });
       :messages="transcript"
       :is-streaming="isStreaming"
     />
+    <SessionStatsBar :stats="sessionStats" />
     <ComposerBar
       :connection-status="connectionStatus"
       :commands="commands"
