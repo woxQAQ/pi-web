@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { SendHorizontal } from "lucide-vue-next";
+import { CornerDownLeft } from "lucide-vue-next";
 import { computed, nextTick, ref, watch } from "vue";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
 import type { RpcSlashCommand } from "../shared-types";
@@ -175,14 +175,6 @@ resizeTextarea();
             @keydown="handleInputKeydown"
             @input="resizeTextarea"
           />
-          <button
-            class="send-btn"
-            :disabled="!canSubmit"
-            aria-label="Send message"
-            @click="handleSubmit"
-          >
-            <SendHorizontal class="send-icon" aria-hidden="true" />
-          </button>
         </div>
 
         <div class="composer-footer-row">
@@ -217,6 +209,14 @@ resizeTextarea();
               </select>
             </label>
           </div>
+          <button
+            class="send-btn"
+            :disabled="!canSubmit"
+            aria-label="Send message"
+            @click="handleSubmit"
+          >
+            <CornerDownLeft class="send-icon" aria-hidden="true" />
+          </button>
         </div>
       </div>
     </div>
@@ -241,7 +241,7 @@ resizeTextarea();
   display: flex;
   flex-direction: column;
   gap: 10px;
-  padding: 12px;
+  padding: 6px;
   border-radius: 18px;
   border: 1px solid var(--border);
   background: linear-gradient(
@@ -272,7 +272,7 @@ resizeTextarea();
 
 .composer-main-row {
   display: flex;
-  align-items: flex-end;
+  align-items: flex-start;
   gap: 10px;
   min-width: 0;
 }
@@ -305,8 +305,8 @@ resizeTextarea();
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 25px;
+  height: 25px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: var(--button-bg);
@@ -338,7 +338,7 @@ resizeTextarea();
 .composer-footer-row {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
+  justify-content: space-between;
   gap: 12px;
   padding-top: 10px;
   border-top: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
