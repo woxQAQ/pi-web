@@ -407,6 +407,7 @@ function handleResponse(payload: RpcResponse) {
           sessionState.value = null;
         }
         sessionStats.value = null;
+        sendCommand({ type: "get_state" }).catch(() => {});
         sendCommand({ type: "list_sessions" }).catch(() => {});
         break;
       }

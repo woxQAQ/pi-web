@@ -633,6 +633,7 @@ export class WsRpcAdapter {
   // /web command runtime.
   private selectedSessionPath: string | null = null;
   private selectedSession: AgentSession | null = null;
+  private pendingSessionManager: SessionManager | null = null;
   private selectedSessionUnsubscribe: (() => void) | undefined;
 
   constructor(
@@ -733,6 +734,7 @@ export class WsRpcAdapter {
     this.selectedSessionUnsubscribe = undefined;
     this.selectedSession?.dispose();
     this.selectedSession = null;
+    this.pendingSessionManager = null;
   }
 
   private async ensureSelectedSession(): Promise<AgentSession> {
@@ -745,13 +747,15 @@ export class WsRpcAdapter {
       return this.selectedSession;
     }
 
-    if (!fs.existsSync(sessionPath)) {
+    if (!fs.existsSync(sessionPath) && !this.pendingSessionManager) {
       throw new Error("Selected session file not found");
     }
 
     this.disposeSelectedSession();
 
-    const sessionManager = openSessionManager(sessionPath);
+    const sessionManager =
+      this.pendingSessionManager ?? openSessionManager(sessionPath);
+    this.pendingSessionManager = null;
     const created = await createAgentSession({
       cwd: sessionManager.getCwd() || this.context.ctx.cwd,
       sessionManager,
@@ -802,8 +806,14 @@ export class WsRpcAdapter {
       };
     }
 
-    if (this.selectedSessionPath && fs.existsSync(this.selectedSessionPath)) {
-      return buildStateFromStoredSession(openSessionManager(this.selectedSessionPath));
+    if (
+      this.selectedSessionPath &&
+      (fs.existsSync(this.selectedSessionPath) || this.pendingSessionManager)
+    ) {
+      const sm =
+        this.pendingSessionManager ??
+        openSessionManager(this.selectedSessionPath);
+      return buildStateFromStoredSession(sm);
     }
 
     const { pi, ctx } = this.context;
@@ -1662,28 +1672,7 @@ export class WsRpcAdapter {
         if (sessionFile) {
           this.selectedSessionPath = sessionFile;
         }
-
-        const created = await createAgentSession({
-          cwd: sessionManager.getCwd() || cwd,
-          sessionManager,
-        });
-        await created.session.bindExtensions({
-          uiContext: this.createExtensionUIContext() as never,
-          onError: (error) => {
-            console.error(
-              `WsRpcAdapter[${this.client.id}]: Detached session extension error:`,
-              error,
-            );
-          },
-          shutdownHandler: () => {},
-        });
-        this.selectedSession = created.session;
-        this.selectedSessionUnsubscribe = created.session.subscribe((event) => {
-          this.sendResponse({
-            type: "event",
-            payload: toClientEventPayload(event),
-          });
-        });
+        this.pendingSessionManager = sessionManager;
 
         return {
           id: correlationId,
