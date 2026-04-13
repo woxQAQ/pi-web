@@ -45,7 +45,7 @@ const filterText = computed(() => {
 const currentModelText = computed(() => {
   if (!props.selectedModel)
     return props.models.length > 0 ? "choose model" : "no models";
-  return `${props.selectedModel.name} · ${props.selectedModel.provider}/${props.selectedModel.id}`;
+  return `${props.selectedModel.provider}/${props.selectedModel.id}`;
 });
 const selectedThinkingLevel = computed(() => {
   if (props.thinkingLevel === "normal") return "medium";
@@ -190,12 +190,10 @@ resizeTextarea();
             <ModelDropdown
               :models="models"
               :selected-model="selectedModel"
+              :label="currentModelText"
               :disabled="isDisabled"
               @select="handleModelSelect"
             />
-            <span class="composer-pill composer-pill-model">{{
-              currentModelText
-            }}</span>
             <label
               class="thinking-control"
               :style="{
@@ -364,7 +362,9 @@ resizeTextarea();
 .thinking-control::before {
   content: "Thinking";
   position: absolute;
+  top: 50%;
   left: 10px;
+  transform: translateY(-50%);
   font-family: "SF Mono", "Monaco", "Menlo", monospace;
   font-size: 0.62rem;
   color: var(--text-subtle);
@@ -397,28 +397,6 @@ resizeTextarea();
   cursor: not-allowed;
 }
 
-.composer-pill {
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  height: 26px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  background: color-mix(in srgb, var(--panel) 70%, transparent);
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
-  font-size: 0.66rem;
-  color: var(--text-subtle);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.composer-pill-model {
-  justify-content: flex-start;
-  min-width: 0;
-  max-width: 100%;
-}
 
 @media (max-width: 900px) {
   .composer-bar {
@@ -466,11 +444,6 @@ resizeTextarea();
     padding-top: 8px;
   }
 
-  .composer-pill {
-    font-size: 0.62rem;
-    height: 24px;
-    padding: 0 8px;
-  }
 }
 
 .sr-only {

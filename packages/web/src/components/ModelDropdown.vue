@@ -6,6 +6,7 @@ import { filterModels, getModelKey, type RpcModelInfo } from "../utils/models";
 const props = defineProps<{
   models: RpcModelInfo[];
   selectedModel: RpcModelInfo | null;
+  label?: string;
   disabled?: boolean;
 }>();
 
@@ -177,7 +178,8 @@ onBeforeUnmount(() => {
       @click="toggleDropdown"
     >
       <Bot class="model-trigger-icon" aria-hidden="true" />
-      <span class="sr-only">Select model</span>
+      <span v-if="label" class="model-trigger-label">{{ label }}</span>
+      <span v-else class="sr-only">Select model</span>
     </button>
 
     <div v-if="isOpen" class="model-menu">
@@ -237,13 +239,14 @@ onBeforeUnmount(() => {
 .model-trigger {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 34px;
-  height: 34px;
-  padding: 0;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--button-bg) 86%, transparent);
+  gap: 8px;
+  min-width: 0;
+  max-width: min(100%, 520px);
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
   color: var(--text-subtle);
   cursor: pointer;
   transition:
@@ -269,6 +272,16 @@ onBeforeUnmount(() => {
 .model-trigger-icon {
   width: 16px;
   height: 16px;
+  flex-shrink: 0;
+}
+
+.model-trigger-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-size: 0.66rem;
 }
 
 .model-menu {
