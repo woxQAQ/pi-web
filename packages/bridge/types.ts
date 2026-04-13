@@ -137,7 +137,14 @@ export type RpcResponse =
       type: "response";
       command: "new_session";
       success: true;
-      data: { cancelled: boolean };
+      data: {
+        messages: unknown[];
+        treeEntries: RpcTreeEntry[];
+        sessionId: string;
+        sessionName: string;
+        sessionPath: string;
+        cancelled: boolean;
+      };
     }
   | {
       id?: string;

@@ -1209,6 +1209,13 @@ describe("WsRpcAdapter", () => {
     });
 
     it("should handle new_session command", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-test-"));
+      const sessionFile = path.join(tmpDir, "session.jsonl");
+      // Seed a dummy session file so path.dirname gives a valid dir
+      const sm = SessionManager.create(tmpDir, tmpDir);
+      const existingFile = sm.getSessionFile()!;
+      (context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>).mockReturnValue(existingFile);
+
       const command: RpcCommand = { id: "cmd-1", type: "new_session" };
       (
         ws as unknown as { trigger: (event: string, data: Buffer) => void }
@@ -1219,11 +1226,18 @@ describe("WsRpcAdapter", () => {
 
       await new Promise((r) => setTimeout(r, 10));
 
-      expect(context.ctx.newSession).toHaveBeenCalled();
+      // ctx.newSession should NOT be called (bridge creates session locally)
+      expect(context.ctx.newSession).not.toHaveBeenCalled();
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
       expect(lastCall.payload.success).toBe(true);
+      expect(lastCall.payload.data.cancelled).toBe(false);
+      expect(lastCall.payload.data.sessionId).toBeTruthy();
+      expect(lastCall.payload.data.messages).toEqual([]);
+
+      // Clean up temp dir
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it("should handle fork command", async () => {

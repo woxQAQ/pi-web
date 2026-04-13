@@ -375,9 +375,37 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "new_session": {
-        rawTranscript.value = [];
-        treeEntries.value = [];
-        sessionState.value = null;
+        const data = payload.data as
+          | {
+              messages: TranscriptEntry[];
+              treeEntries?: TreeEntry[];
+              sessionId?: string;
+              sessionName?: string;
+              sessionPath?: string;
+            }
+          | undefined;
+        if (data && Array.isArray(data.messages)) {
+          rawTranscript.value = [...data.messages];
+          if (data.sessionPath) {
+            activeTreeSessionPath.value = data.sessionPath;
+            liveSessionPath.value = data.sessionPath;
+          }
+          if (Array.isArray(data.treeEntries)) {
+            treeEntries.value = data.treeEntries;
+          }
+          if (data.sessionId) {
+            sessionState.value = {
+              ...sessionState.value,
+              sessionId: data.sessionId,
+              sessionName: data.sessionName,
+              sessionFile: data.sessionPath ?? sessionState.value?.sessionFile,
+            } as RpcSessionState;
+          }
+        } else {
+          rawTranscript.value = [];
+          treeEntries.value = [];
+          sessionState.value = null;
+        }
         sendCommand({ type: "list_sessions" }).catch(() => {});
         break;
       }

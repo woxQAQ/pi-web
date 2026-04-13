@@ -1626,21 +1626,34 @@ export class WsRpcAdapter {
       }
 
       case "new_session": {
-        if (this.selectedSessionPath) {
-          this.selectedSessionPath = null;
-          this.disposeSelectedSession();
+        const cwd = ctx.cwd;
+        const currentSessionFile =
+          this.selectedSessionPath ?? ctx.sessionManager.getSessionFile();
+        const sessionDir = currentSessionFile
+          ? path.dirname(currentSessionFile)
+          : undefined;
+
+        this.disposeSelectedSession();
+
+        const sessionManager = SessionManager.create(cwd, sessionDir);
+        const sessionFile = sessionManager.getSessionFile();
+        if (sessionFile) {
+          this.selectedSessionPath = sessionFile;
         }
-        const result = await ctx.newSession(
-          command.parentSession
-            ? { parentSession: command.parentSession }
-            : undefined,
-        );
+
         return {
           id: correlationId,
           type: "response",
           command: "new_session",
           success: true,
-          data: result,
+          data: {
+            messages: flattenMessagesForTranscript(sessionManager.getBranch()),
+            treeEntries: buildTreeEntriesFromSession(sessionManager),
+            sessionId: sessionManager.getSessionId(),
+            sessionName: sessionDisplayName(sessionManager, sessionFile),
+            sessionPath: sessionFile ?? "",
+            cancelled: false,
+          },
         };
       }
 
