@@ -119,6 +119,15 @@ function handleSessionSelect(sessionPath: string) {
   sidebarOpen.value = false;
 }
 
+function handleRefreshSessions() {
+  sendCommand({ type: "list_sessions" }).catch(() => {});
+}
+
+function handleNewSession() {
+  sendCommand({ type: "new_session" }).catch(() => {});
+  sidebarOpen.value = false;
+}
+
 function handleTreeNavigate(entryId: string) {
   if (isHistoricalView.value) return;
   treePanelOpen.value = false;
@@ -218,6 +227,8 @@ watch(
         @close-sidebar="sidebarOpen = false"
         @open-tree-panel="openTreePanel"
         @select-session="handleSessionSelect"
+        @refresh-sessions="handleRefreshSessions"
+        @new-session="handleNewSession"
       />
 
       <AppMainContent

@@ -15,7 +15,9 @@ const emit = defineEmits<{
   <div class="session-rail">
     <div class="rail-header">
       <span class="rail-title">Sessions</span>
-      <slot name="header-action"></slot>
+      <div class="rail-actions">
+        <slot name="header-actions"></slot>
+      </div>
     </div>
     <ul v-if="sessions.length > 0" class="rail-list">
       <li
@@ -57,6 +59,12 @@ const emit = defineEmits<{
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
+}
+
+.rail-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .rail-list {

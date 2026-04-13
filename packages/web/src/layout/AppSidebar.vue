@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ListTree } from "lucide-vue-next";
+import { ListTree, RefreshCw, Plus } from "lucide-vue-next";
 import type { SessionEntry } from "../composables/useBridgeClient";
 import SessionRail from "../components/SessionRail.vue";
 
@@ -15,6 +15,8 @@ const emit = defineEmits<{
   closeSidebar: [];
   openTreePanel: [];
   selectSession: [sessionPath: string];
+  refreshSessions: [];
+  newSession: [];
 }>();
 </script>
 
@@ -25,16 +27,34 @@ const emit = defineEmits<{
       :active-session-id="activeSessionId"
       @select="emit('selectSession', $event)"
     >
-      <template #header-action>
+      <template #header-actions>
         <button
           class="tree-rail-button"
           :class="{ active: treePanelOpen }"
           type="button"
-          :aria-label="isHistoricalView ? 'Browse tree' : 'Open tree'"
-          :title="isHistoricalView ? 'Browse tree' : 'Open tree'"
+          aria-label="Browse tree"
+          title="Browse tree"
           @click="emit('openTreePanel')"
         >
           <ListTree aria-hidden="true" />
+        </button>
+        <button
+          class="tree-rail-button"
+          type="button"
+          aria-label="Refresh sessions"
+          title="Refresh sessions"
+          @click="emit('refreshSessions')"
+        >
+          <RefreshCw aria-hidden="true" />
+        </button>
+        <button
+          class="tree-rail-button"
+          type="button"
+          aria-label="New session"
+          title="New session"
+          @click="emit('newSession')"
+        >
+          <Plus aria-hidden="true" />
         </button>
       </template>
     </SessionRail>

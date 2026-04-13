@@ -374,6 +374,13 @@ function handleResponse(payload: RpcResponse) {
         }
         break;
       }
+      case "new_session": {
+        rawTranscript.value = [];
+        treeEntries.value = [];
+        sessionState.value = null;
+        sendCommand({ type: "list_sessions" }).catch(() => {});
+        break;
+      }
       case "get_commands": {
         const data = payload.data as
           | { commands: RpcSlashCommand[] }
