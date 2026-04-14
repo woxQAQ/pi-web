@@ -290,14 +290,14 @@ export function createBridgeTerminalView(
     onUpdate?.();
   };
 
-  const unsubscribe = subscribe((event) => {
+  const unsubscribe = subscribe(event => {
     switch (event.type) {
       case "server_start": {
         const lanIps = getLanIps();
         const lanInfo =
           lanIps.length > 0
             ? ` (LAN: ${lanIps
-                .map((ip) => {
+                .map(ip => {
                   const label = isTailscaleIp(ip) ? " [Tailscale]" : "";
                   return `http://${ip}:${event.port}${label}`;
                 })

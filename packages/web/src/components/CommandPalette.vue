@@ -19,7 +19,7 @@ const filtered = computed(() => {
   const q = props.filter.toLowerCase();
   if (!q) return props.commands;
   return props.commands.filter(
-    (c) =>
+    c =>
       c.name.toLowerCase().includes(q) ||
       (c.description ?? "").toLowerCase().includes(q),
   );

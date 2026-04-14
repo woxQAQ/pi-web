@@ -1,12 +1,16 @@
 # Pi Web
 
-Pi Web exposes a live Pi session through a browser UI. Run `/web` inside Pi, open the generated URL, and continue the same session from a desktop or mobile browser while the terminal switches to a read-only bridge view.
+Pi Web exposes a live Pi session through a browser UI. Run `/web` inside Pi,
+open the generated URL, and continue the same session from a desktop or mobile
+browser while the terminal switches to a read-only bridge view.
 
 ## What It Does
 
 - Mirror an active Pi session into a browser UI over HTTP + WebSocket
-- Keep the browser connected to the same session state, transcript, model selection, and slash commands
-- Support session switching, tree navigation, extension dialogs, notifications, and reconnect flow
+- Keep the browser connected to the same session state, transcript, model
+  selection, and slash commands
+- Support session switching, tree navigation, extension dialogs, notifications,
+  and reconnect flow
 - Expose LAN and Tailscale-friendly URLs for continuing work from another device
 - Reuse a fixed default port so the browser URL stays stable across `/web` runs
 
@@ -15,11 +19,14 @@ Pi Web exposes a live Pi session through a browser UI. Run `/web` inside Pi, ope
 The current implementation includes:
 
 - A bridge server embedded in the Pi extension process
-- A Vue-based chat UI with transcript rendering, code highlighting, diff views, and model selection
+- A Vue-based chat UI with transcript rendering, code highlighting, diff views,
+  and model selection
 - Session rail and tree navigation for browsing session history
 - Reconnect handling for temporary network interruptions
-- Extension UI routing for prompts, confirmations, editor input, notifications, and status updates
-- A terminal log view that shows bridge state, connected clients, and shutdown instructions
+- Extension UI routing for prompts, confirmations, editor input, notifications,
+  and status updates
+- A terminal log view that shows bridge state, connected clients, and shutdown
+  instructions
 
 ## Requirements
 
@@ -49,11 +56,13 @@ http://localhost:8080
 
 Open that URL in a browser.
 
-Press `Ctrl+C` in the terminal to stop the bridge and return to the normal Pi TUI.
+Press `Ctrl+C` in the terminal to stop the bridge and return to the normal Pi
+TUI.
 
 ## Configuration
 
-Pi Web reads its runtime settings from environment variables before the extension starts.
+Pi Web reads its runtime settings from environment variables before the
+extension starts.
 
 | Variable         | Default   | Description                                                     |
 | ---------------- | --------- | --------------------------------------------------------------- |
@@ -63,8 +72,10 @@ Pi Web reads its runtime settings from environment variables before the extensio
 Notes:
 
 - Binding to `0.0.0.0` allows access from other devices on the same network.
-- The terminal log view also prints detected LAN addresses, including Tailscale IPs when available.
-- There is no bridge token anymore. Any client that can reach the bridge port can connect.
+- The terminal log view also prints detected LAN addresses, including Tailscale
+  IPs when available.
+- There is no bridge token anymore. Any client that can reach the bridge port
+  can connect.
 
 ## Development
 
@@ -81,7 +92,8 @@ npm run dev:web     # run the Vite dev server for the web UI
 ### Typical Local Workflow
 
 1. Run `npm run dev:web` while working on the browser UI.
-2. Start Pi. The bridge uses port `8080` by default, which matches the Vite `/ws` proxy target.
+2. Start Pi. The bridge uses port `8080` by default, which matches the Vite
+   `/ws` proxy target.
 3. Run `/web` in Pi.
 4. Open the Vite URL for fast frontend iteration.
 
@@ -90,7 +102,8 @@ npm run dev:web     # run the Vite dev server for the web UI
 Pi Web is split into three parts:
 
 - `packages/bin/` registers the `/web` command and manages the Pi-side lifecycle
-- `packages/bridge/` implements the HTTP server, WebSocket RPC bridge, event fan-out, and terminal log view
+- `packages/bridge/` implements the HTTP server, WebSocket RPC bridge, event
+  fan-out, and terminal log view
 - `packages/web/` contains the Vue client that talks to the bridge over `/ws`
 
 At runtime:
@@ -98,7 +111,8 @@ At runtime:
 1. `/web` starts the bridge server inside the Pi process.
 2. The server serves static assets from `web-dist/` when available.
 3. Browser clients connect to `/ws` on the same bridge origin.
-4. The bridge maps WebSocket RPC messages onto Pi's extension APIs and forwards events back to the browser.
+4. The bridge maps WebSocket RPC messages onto Pi's extension APIs and forwards
+   events back to the browser.
 
 ## Project Structure
 

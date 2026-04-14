@@ -128,7 +128,7 @@ describe("extension_ui_request handling", () => {
 
     // Tree data is loaded lazily when the panel is opened.
     const treeRequests = sentCommandTypes.filter(
-      (type) => type === "list_tree_entries",
+      type => type === "list_tree_entries",
     );
     expect(treeRequests).toHaveLength(0);
   });
@@ -841,14 +841,14 @@ describe("extension_ui_request handling", () => {
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise(resolve => setTimeout(resolve, 80));
 
     const refreshRequest = ws.send.mock.calls
       .map(
         ([message]: [string]) =>
           JSON.parse(message) as { payload?: { type?: string; id?: string } },
       )
-      .find((message) => message.payload?.type === "get_messages");
+      .find(message => message.payload?.type === "get_messages");
 
     expect(refreshRequest?.payload?.id).toBeTruthy();
 
@@ -865,7 +865,7 @@ describe("extension_ui_request handling", () => {
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 80));
+    await new Promise(resolve => setTimeout(resolve, 80));
 
     expect(client.transcript.value).toEqual([
       { id: "user-1", role: "user", content: "Hello" },
@@ -899,7 +899,7 @@ describe("extension_ui_request handling", () => {
         ([message]: [string]) =>
           JSON.parse(message) as { payload?: { type?: string; id?: string } },
       )
-      .find((message) => message.payload?.type === "abort");
+      .find(message => message.payload?.type === "abort");
 
     expect(abortRequest?.payload?.id).toBeTruthy();
 

@@ -1,6 +1,7 @@
 # AGENTS.md
 
-This file provides guidance to coding agents when working with code in this repository.
+This file provides guidance to coding agents when working with code in this
+repository.
 
 ## Commands
 
@@ -13,15 +14,20 @@ This file provides guidance to coding agents when working with code in this repo
 
 ## Dev Workflow
 
-When working on the browser UI, set `PI_BRIDGE_PORT=8080` before starting Pi so the Vite `/ws` proxy has a stable target. Run `npm run dev:web`, start Pi, run `/web`, then open the Vite URL.
+When working on the browser UI, set `PI_BRIDGE_PORT=8080` before starting Pi so
+the Vite `/ws` proxy has a stable target. Run `npm run dev:web`, start Pi, run
+`/web`, then open the Vite URL.
 
 ## Architecture
 
 - `packages/bin/` — Pi extension entry point, registers `/web` command
-- `packages/bridge/` — HTTP server, WebSocket RPC bridge, auth, terminal log view
+- `packages/bridge/` — HTTP server, WebSocket RPC bridge, auth, terminal log
+  view
 - `packages/web/` — Vue 3 client (Vite + vitest)
 
 ## important tips
 
-- You should read the source code of @mariozechner/pi-coding-agent, @mariozechner/pi-ai carefuilly, especially the wire protocol of pi
-- Do not add thin wrapper functions around existing functions unless the wrapper adds real value beyond renaming.
+- You should read the source code of @mariozechner/pi-coding-agent,
+  @mariozechner/pi-ai carefuilly, especially the wire protocol of pi
+- Do not add thin wrapper functions around existing functions unless the wrapper
+  adds real value beyond renaming.

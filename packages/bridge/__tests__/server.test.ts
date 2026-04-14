@@ -7,7 +7,7 @@ import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
 import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
 
 const waitForAsyncWork = (ms = 100) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise(resolve => setTimeout(resolve, ms));
 
 const requestText = (
   url: string,
@@ -36,9 +36,9 @@ const requestText = (
     if (options?.headers) {
       Object.assign(opts.headers as Record<string, string>, options.headers);
     }
-    const request = http.request(opts, (response) => {
+    const request = http.request(opts, response => {
       let body = "";
-      response.on("data", (chunk) => {
+      response.on("data", chunk => {
         body += chunk;
       });
       response.on("end", () => {
@@ -119,7 +119,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       const address = await server.start();
@@ -140,7 +140,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       await server.start();
@@ -154,7 +154,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       await server.start();
@@ -170,7 +170,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       const first = await server.start();
@@ -191,7 +191,7 @@ describe("BridgeServer", () => {
         res.writeHead(200);
         res.end("occupied");
       });
-      await new Promise<void>((resolve) =>
+      await new Promise<void>(resolve =>
         occupiedServer.listen(0, "127.0.0.1", () => resolve()),
       );
 
@@ -210,7 +210,7 @@ describe("BridgeServer", () => {
         },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       try {
@@ -221,7 +221,7 @@ describe("BridgeServer", () => {
       } finally {
         await server.stop();
         await new Promise<void>((resolve, reject) => {
-          occupiedServer.close((error) => {
+          occupiedServer.close(error => {
             if (error) reject(error);
             else resolve();
           });
@@ -234,7 +234,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
 
       const address = await server.start();
@@ -254,7 +254,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -271,7 +271,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -293,7 +293,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -312,7 +312,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -330,7 +330,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -353,7 +353,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -373,7 +373,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -397,7 +397,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -422,8 +422,8 @@ describe("BridgeServer", () => {
 
       expect(server.getClientCount()).toBe(0);
       expect(server.getClients()).toEqual([]);
-      expect(events.map((event) => event.type)).toContain("client_connect");
-      expect(events.map((event) => event.type)).toContain("client_disconnect");
+      expect(events.map(event => event.type)).toContain("client_connect");
+      expect(events.map(event => event.type)).toContain("client_disconnect");
 
       await server.stop();
     });
@@ -437,7 +437,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
         eventBus,
-        (event) => {
+        event => {
           events.push(event);
           if (event.type === "client_connect") {
             clientCountAtConnect = server.getClientCount();
@@ -455,7 +455,7 @@ describe("BridgeServer", () => {
       await waitForAsyncWork();
 
       const connectEvent = events.find(
-        (event) => event.type === "client_connect",
+        event => event.type === "client_connect",
       );
       expect(connectEvent).toBeTruthy();
       expect(clientCountAtConnect).toBe(1);
@@ -484,7 +484,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0, staticDir: tmpDir },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -534,7 +534,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0, staticDir: tmpDir },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 
@@ -571,7 +571,7 @@ describe("BridgeServer", () => {
         { ...DEFAULT_BRIDGE_CONFIG, port: 0, staticDir: tmpDir },
         mockContext,
         eventBus,
-        (event) => events.push(event),
+        event => events.push(event),
       );
       const address = await server.start();
 

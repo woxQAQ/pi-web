@@ -5,7 +5,7 @@ import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
 import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
 
 const waitForAsyncWork = (ms = 100) =>
-  new Promise((resolve) => setTimeout(resolve, ms));
+  new Promise(resolve => setTimeout(resolve, ms));
 
 describe("Bridge Lifecycle", () => {
   const createMockContext = (): WsRpcAdapterContext => ({
@@ -63,7 +63,7 @@ describe("Bridge Lifecycle", () => {
     const listeners = process.listeners("SIGINT");
     originalSigintListeners.length = 0;
     originalSigintListeners.push(...listeners);
-    listeners.forEach((listener) => process.off("SIGINT", listener));
+    listeners.forEach(listener => process.off("SIGINT", listener));
   });
 
   afterEach(async () => {
@@ -74,9 +74,7 @@ describe("Bridge Lifecycle", () => {
     }
 
     process.removeAllListeners("SIGINT");
-    originalSigintListeners.forEach((listener) =>
-      process.on("SIGINT", listener),
-    );
+    originalSigintListeners.forEach(listener => process.on("SIGINT", listener));
   });
 
   describe("controller contract", () => {
@@ -138,13 +136,13 @@ describe("Bridge Lifecycle", () => {
       controllers.push(controller);
 
       const events: BridgeEvent[] = [];
-      const unsubscribe = controller.subscribe((event) => {
+      const unsubscribe = controller.subscribe(event => {
         events.push(event);
       });
 
       await controller.stop();
-      expect(events.map((event) => event.type)).toContain("server_stop");
-      expect(events.map((event) => event.type)).toContain("shutdown_complete");
+      expect(events.map(event => event.type)).toContain("server_stop");
+      expect(events.map(event => event.type)).toContain("shutdown_complete");
 
       const nextController = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
@@ -154,7 +152,7 @@ describe("Bridge Lifecycle", () => {
       controllers.push(nextController);
 
       const unsubscribedEvents: BridgeEvent[] = [];
-      const stopListening = nextController.subscribe((event) => {
+      const stopListening = nextController.subscribe(event => {
         unsubscribedEvents.push(event);
       });
       stopListening();
@@ -192,15 +190,15 @@ describe("Bridge Lifecycle", () => {
       controllers.push(controller);
 
       const events: BridgeEvent[] = [];
-      controller.subscribe((event) => {
+      controller.subscribe(event => {
         events.push(event);
       });
 
       process.emit("SIGINT");
       await waitForAsyncWork(200);
 
-      expect(events.map((event) => event.type)).toContain("sigint_received");
-      expect(events.map((event) => event.type)).toContain("shutdown_complete");
+      expect(events.map(event => event.type)).toContain("sigint_received");
+      expect(events.map(event => event.type)).toContain("shutdown_complete");
       expect(controller.getState().status).toBe("stopped");
       expect(doneCallback).toHaveBeenCalledTimes(1);
     });

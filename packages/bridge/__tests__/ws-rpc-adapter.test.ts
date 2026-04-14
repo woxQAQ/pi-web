@@ -40,7 +40,7 @@ const createMockWebSocket = (): WebSocket => {
     send: vi.fn(),
     readyState: 1, // WebSocket.OPEN
     trigger: (event: string, ...args: unknown[]) => {
-      handlers[event]?.forEach((h) => h(...args));
+      handlers[event]?.forEach(h => h(...args));
     },
   } as unknown as WebSocket;
 };
@@ -174,7 +174,7 @@ describe("WsRpcAdapter", () => {
       );
 
       // Wait for async handling
-      await new Promise((r) => setTimeout(r, 30));
+      await new Promise(r => setTimeout(r, 30));
 
       // Should NOT call pi.sendUserMessage (that would trigger TUI switch)
       expect(context.pi.sendUserMessage).not.toHaveBeenCalled();
@@ -211,7 +211,7 @@ describe("WsRpcAdapter", () => {
         sessionFile,
         [
           JSON.stringify(header),
-          ...rawEntries.map((e) => JSON.stringify(e)),
+          ...rawEntries.map(e => JSON.stringify(e)),
         ].join("\n"),
       );
 
@@ -244,7 +244,7 @@ describe("WsRpcAdapter", () => {
           }),
         ),
       );
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       // Now send prompt with image
       const command: RpcCommand = {
@@ -266,7 +266,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise(r => setTimeout(r, 20));
 
       expect(context.pi.sendUserMessage).not.toHaveBeenCalled();
       expect(promptSpy).toHaveBeenCalledWith("Inspect this image", {
@@ -342,7 +342,7 @@ describe("WsRpcAdapter", () => {
         ),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       (
         ws as unknown as { trigger: (event: string, data: Buffer) => void }
@@ -360,7 +360,7 @@ describe("WsRpcAdapter", () => {
         ),
       );
 
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise(r => setTimeout(r, 20));
 
       expect(context.pi.sendUserMessage).not.toHaveBeenCalled();
       expect(createAgentSessionMock).toHaveBeenCalledTimes(1);
@@ -426,7 +426,7 @@ describe("WsRpcAdapter", () => {
         ),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       (
         ws as unknown as { trigger: (event: string, data: Buffer) => void }
@@ -451,7 +451,7 @@ describe("WsRpcAdapter", () => {
         ),
       );
 
-      await new Promise((r) => setTimeout(r, 20));
+      await new Promise(r => setTimeout(r, 20));
 
       expect(promptSpy).toHaveBeenCalledWith("Continue with context", {
         source: "rpc",
@@ -478,7 +478,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(context.pi.sendUserMessage).toHaveBeenCalledWith("Steer message", {
         deliverAs: "steer",
@@ -498,7 +498,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(context.pi.sendUserMessage).toHaveBeenCalledWith("Follow up", {
         deliverAs: "followUp",
@@ -514,7 +514,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(context.ctx.abort).toHaveBeenCalled();
     });
@@ -528,7 +528,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       expect(sendCalls.length).toBeGreaterThan(0);
@@ -552,7 +552,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       expect(sendCalls.length).toBeGreaterThan(0);
@@ -575,7 +575,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -602,7 +602,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(context.ctx.modelRegistry.getAvailable).toHaveBeenCalled();
       expect(context.pi.setModel).toHaveBeenCalled();
@@ -628,7 +628,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -647,7 +647,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -690,7 +690,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -714,7 +714,7 @@ describe("WsRpcAdapter", () => {
       uiContext.setEditorText("draft text");
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
-        (call) => JSON.parse(call[0] as string),
+        call => JSON.parse(call[0] as string),
       );
 
       expect(sendCalls).toEqual(
@@ -744,7 +744,7 @@ describe("WsRpcAdapter", () => {
       const selectPromise = uiContext.select("Choose one", ["a", "b", "c"]);
 
       // Should have sent a UI request
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
 
@@ -821,7 +821,7 @@ describe("WsRpcAdapter", () => {
         ),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       // Should not throw, just log a warning
       expect(ws.send).not.toHaveBeenCalledWith(
@@ -835,7 +835,7 @@ describe("WsRpcAdapter", () => {
       // Start input request
       const inputPromise = uiContext.input("Enter name");
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
       const requestId = lastCall.payload.id;
@@ -867,7 +867,7 @@ describe("WsRpcAdapter", () => {
       // Get the agent_start handler registered in subscribeToEvents
       const agentStartHandler = (
         context.pi.on as ReturnType<typeof vi.fn>
-      ).mock.calls.find((call) => call[0] === "agent_start")?.[1];
+      ).mock.calls.find(call => call[0] === "agent_start")?.[1];
 
       expect(agentStartHandler).toBeDefined();
 
@@ -901,7 +901,7 @@ describe("WsRpcAdapter", () => {
         ws as unknown as { trigger: (event: string, data: Buffer) => void }
       ).trigger("message", Buffer.from("invalid json"));
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
@@ -919,7 +919,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "unknown_type" })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
@@ -991,7 +991,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1031,7 +1031,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1070,7 +1070,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1123,7 +1123,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1179,7 +1179,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1246,7 +1246,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1283,7 +1283,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1309,7 +1309,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1336,7 +1336,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1361,7 +1361,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = sendCalls[sendCalls.length - 1][0] as string;
@@ -1378,7 +1378,7 @@ describe("WsRpcAdapter", () => {
 
       // Start a request
       const selectPromise = uiContext.select("Choose", ["a", "b"]);
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       // Dispose before response
       adapter.dispose();
@@ -1410,7 +1410,7 @@ describe("WsRpcAdapter", () => {
           JSON.stringify({ type: "command", payload: { type: "get_state" } }),
         ),
       );
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise(resolve => setTimeout(resolve, 10));
 
       expect(ws.send).not.toHaveBeenCalled();
     });
@@ -1429,7 +1429,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(emitEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -1447,7 +1447,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const call = (emitEvent as ReturnType<typeof vi.fn>).mock.calls.find(
         (call: unknown[]) =>
@@ -1475,7 +1475,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       expect(context.pi.setSessionName).toHaveBeenCalledWith(
         "New Session Name",
@@ -1499,7 +1499,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
@@ -1523,7 +1523,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       // ctx.newSession should NOT be called (bridge creates session locally)
       expect(context.ctx.newSession).not.toHaveBeenCalled();
@@ -1574,7 +1574,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       // ctx.fork should NOT be called (bridge creates fork locally)
       expect(context.ctx.fork).not.toHaveBeenCalled();
@@ -1619,7 +1619,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
@@ -1662,7 +1662,7 @@ describe("WsRpcAdapter", () => {
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 10));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
       const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);

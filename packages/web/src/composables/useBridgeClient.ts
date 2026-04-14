@@ -166,7 +166,7 @@ function updateCurrentModel(value: unknown) {
 
 function updateAvailableModels(values: unknown[]) {
   availableModels.value = values
-    .map((value) => normalizeRpcModel(value))
+    .map(value => normalizeRpcModel(value))
     .filter((model): model is RpcModelInfo => model !== null);
 
   if (currentModel.value) {
@@ -196,7 +196,7 @@ function createRequestId(): string {
     cryptoApi.getRandomValues(bytes);
     bytes[6] = (bytes[6] & 0x0f) | 0x40;
     bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+    const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, "0"));
     return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
   }
 
@@ -219,7 +219,7 @@ function sendCommand(payload: RpcCommand): Promise<RpcResponse> {
 
 function hasPendingMessageIds(): boolean {
   return rawTranscript.value.some(
-    (entry) => typeof entry.role === "string" && !entry.id,
+    entry => typeof entry.role === "string" && !entry.id,
   );
 }
 
@@ -274,7 +274,7 @@ async function fetchWorkspaceEntries(
 
   workspaceEntriesLoading.value = true;
   workspaceEntriesRequest = sendCommand({ type: "list_workspace_entries" })
-    .then((response) => {
+    .then(response => {
       if (response.success) {
         const data = response.data as
           | { entries?: RpcWorkspaceEntry[] }
@@ -316,7 +316,7 @@ function respondToUIRequest(payload: RpcExtensionUIResponse) {
 
 /** Remove a toast notification by its id. */
 function dismissNotification(id: string) {
-  notifications.value = notifications.value.filter((n) => n.id !== id);
+  notifications.value = notifications.value.filter(n => n.id !== id);
 }
 
 // ---------------------------------------------------------------------------
@@ -326,7 +326,7 @@ function dismissNotification(id: string) {
 function findTranscriptMessageIndex(msg: TranscriptEntry): number {
   if (msg.id) {
     const exactMatch = rawTranscript.value.findIndex(
-      (entry) => entry.id === msg.id,
+      entry => entry.id === msg.id,
     );
     if (exactMatch >= 0) return exactMatch;
   }

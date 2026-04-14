@@ -22,7 +22,7 @@ describe("createBridgeTerminalView", () => {
     const unsubscribe = vi.fn();
 
     const view = createBridgeTerminalView(
-      (eventHandler) => {
+      eventHandler => {
         handler = eventHandler;
         return unsubscribe;
       },

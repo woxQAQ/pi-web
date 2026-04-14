@@ -41,7 +41,7 @@ function syncHighlightedIndex() {
   }
 
   const selectedIndex = filteredModels.value.findIndex(
-    (model) => getModelKey(model) === selectedKey.value,
+    model => getModelKey(model) === selectedKey.value,
   );
   highlightedIndex.value = selectedIndex >= 0 ? selectedIndex : 0;
 }
@@ -129,7 +129,7 @@ function handleDocumentMousedown(event: MouseEvent) {
   }
 }
 
-watch(isOpen, (open) => {
+watch(isOpen, open => {
   if (typeof document === "undefined") return;
   if (open) {
     document.addEventListener("mousedown", handleDocumentMousedown);

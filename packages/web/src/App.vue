@@ -48,7 +48,7 @@ const {
 const activeSessionId = computed(() => sessionState.value?.sessionId ?? null);
 const activeSessionLabel = computed(() => {
   const active = sessions.value.find(
-    (session) => session.id === activeSessionId.value,
+    session => session.id === activeSessionId.value,
   );
   return (
     active?.name ??
@@ -102,7 +102,7 @@ const debugModeLabel = computed(() =>
 );
 
 let preferencesLoaded = false;
-watch(connectionStatus, async (status) => {
+watch(connectionStatus, async status => {
   if (status !== "connected" || preferencesLoaded) return;
   preferencesLoaded = true;
   try {
@@ -133,7 +133,7 @@ watch(connectionStatus, async (status) => {
   }
 });
 
-watch(theme, (value) => {
+watch(theme, value => {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(THEME_CACHE_KEY, value);
   }
@@ -142,7 +142,7 @@ watch(theme, (value) => {
   );
 });
 
-watch(debugMode, (value) => {
+watch(debugMode, value => {
   if (!debugModeAvailable) return;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
@@ -152,7 +152,7 @@ watch(debugMode, (value) => {
   );
 });
 
-watch(connectionStatus, (status) => {
+watch(connectionStatus, status => {
   if (status === "disconnected") {
     mainContentRef.value?.preserveTranscriptScroll();
   }
@@ -246,7 +246,7 @@ function handleDismissNotification(id: string) {
 
 watch(
   notifications,
-  (current) => {
+  current => {
     for (const n of current) {
       if (!(n as Record<string, unknown>)._timerSet) {
         (n as Record<string, unknown>)._timerSet = true;

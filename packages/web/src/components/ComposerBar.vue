@@ -106,7 +106,7 @@ const selectedThinkingLevel = computed(() => {
 const selectedThinkingLabel = computed(
   () =>
     THINKING_LEVEL_OPTIONS.find(
-      (option) => option.value === selectedThinkingLevel.value,
+      option => option.value === selectedThinkingLevel.value,
     )?.label ?? "Off",
 );
 const thinkingSelectWidth = computed(
@@ -174,7 +174,7 @@ function resizeTextarea() {
   });
 }
 
-watch(inputText, (val) => {
+watch(inputText, val => {
   showPalette.value = val.startsWith("/");
   if (showPalette.value) {
     dismissedMentionKey.value = null;
@@ -239,7 +239,7 @@ async function addAttachmentsFromFiles(
 
 function removeAttachment(id: string) {
   attachments.value = attachments.value.filter(
-    (attachment) => attachment.id !== id,
+    attachment => attachment.id !== id,
   );
   if (attachments.value.length === 0) {
     clearAttachmentNotice();
@@ -357,8 +357,8 @@ function extractPastedFiles(event: ClipboardEvent): File[] {
   if (directFiles.length > 0) return directFiles;
 
   const pastedFiles = Array.from(event.clipboardData?.items ?? [])
-    .filter((item) => item.kind === "file")
-    .map((item) => item.getAsFile())
+    .filter(item => item.kind === "file")
+    .map(item => item.getAsFile())
     .filter((file): file is File => file !== null);
 
   return extractSupportedImageFiles(pastedFiles);

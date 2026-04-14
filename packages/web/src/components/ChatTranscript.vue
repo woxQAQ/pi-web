@@ -118,7 +118,7 @@ watch(
 
 watch(
   () => props.isStreaming,
-  async (streaming) => {
+  async streaming => {
     if (streaming) {
       await nextTick();
       if (container.value) {

@@ -257,7 +257,7 @@ export function getWorkspaceMentionSuggestions(
           { value: normalizeSearchText(label), bonus: 40 },
           { value: normalizeSearchText(searchablePath), bonus: 14 },
           { value: normalizeSearchText(entry.path), bonus: 0 },
-        ].filter((field) => field.value);
+        ].filter(field => field.value);
 
         for (const token of tokens) {
           let tokenScore = 0;
@@ -283,7 +283,7 @@ export function getWorkspaceMentionSuggestions(
 
       return { entry, index, score };
     })
-    .filter((entry) => entry.score > 0)
+    .filter(entry => entry.score > 0)
     .sort(
       (a, b) =>
         b.score - a.score ||

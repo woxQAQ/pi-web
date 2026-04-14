@@ -9,7 +9,7 @@ const lines = computed(() => {
   return props.diff
     .replace(/\r/g, "")
     .split("\n")
-    .map((line) => ({
+    .map(line => ({
       text: line,
       kind: classifyLine(line),
     }));

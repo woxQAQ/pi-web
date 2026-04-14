@@ -52,7 +52,7 @@ export function upsertModel(
   model: RpcModelInfo,
 ): RpcModelInfo[] {
   const key = getModelKey(model);
-  const index = models.findIndex((entry) => getModelKey(entry) === key);
+  const index = models.findIndex(entry => getModelKey(entry) === key);
   if (index === -1) return [...models, model];
   const next = [...models];
   next[index] = model;
@@ -144,7 +144,7 @@ export function filterModels(
 
       return { model, index, score };
     })
-    .filter((entry) => entry.score > 0)
+    .filter(entry => entry.score > 0)
     .sort((a, b) => b.score - a.score || a.index - b.index)
-    .map((entry) => entry.model);
+    .map(entry => entry.model);
 }

@@ -17,7 +17,7 @@ describe("buildToolCardModel", () => {
     expect(model.label).toBe("Read file");
     expect(model.title).toBe("src/main.ts:10-14");
     expect(model.preview).toContain("const value = 1;");
-    expect(model.details.map((detail) => detail.label)).toEqual(["Contents"]);
+    expect(model.details.map(detail => detail.label)).toEqual(["Contents"]);
   });
 
   it("uses file content previews for successful writes", () => {

@@ -113,7 +113,7 @@ describe("Bridge Integration", () => {
     const listeners = process.listeners("SIGINT");
     originalSigintListeners.length = 0;
     originalSigintListeners.push(...listeners);
-    listeners.forEach((l) => process.off("SIGINT", l));
+    listeners.forEach(l => process.off("SIGINT", l));
   });
 
   afterEach(async () => {
@@ -125,7 +125,7 @@ describe("Bridge Integration", () => {
 
     // Restore original SIGINT listeners
     process.removeAllListeners("SIGINT");
-    originalSigintListeners.forEach((l) => process.on("SIGINT", l));
+    originalSigintListeners.forEach(l => process.on("SIGINT", l));
   });
 
   describe("Server Lifecycle", () => {
@@ -151,11 +151,11 @@ describe("Bridge Integration", () => {
         const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
         controller = await startBridge(config, mockContext, vi.fn());
 
-        controller.subscribe((event) => events.push(event));
+        controller.subscribe(event => events.push(event));
         await controller.stop();
 
-        expect(events.some((e) => e.type === "server_stop")).toBe(true);
-        expect(events.some((e) => e.type === "shutdown_complete")).toBe(true);
+        expect(events.some(e => e.type === "server_stop")).toBe(true);
+        expect(events.some(e => e.type === "shutdown_complete")).toBe(true);
       },
       TEST_TIMEOUT,
     );
@@ -187,7 +187,7 @@ describe("Bridge Integration", () => {
         expect(ws.readyState).toBe(WebSocket.OPEN);
 
         ws.close();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
       },
       TEST_TIMEOUT,
     );
@@ -198,7 +198,7 @@ describe("Bridge Integration", () => {
         const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
         controller = await startBridge(config, mockContext, vi.fn());
 
-        controller.subscribe((event) => events.push(event));
+        controller.subscribe(event => events.push(event));
 
         const address = controller.getState();
         if (address.status !== "running") {
@@ -215,15 +215,15 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for client_connect event
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         ws.close();
 
         // Wait for client_disconnect event
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
-        expect(events.some((e) => e.type === "client_connect")).toBe(true);
-        expect(events.some((e) => e.type === "client_disconnect")).toBe(true);
+        expect(events.some(e => e.type === "client_connect")).toBe(true);
+        expect(events.some(e => e.type === "client_disconnect")).toBe(true);
       },
       TEST_TIMEOUT,
     );
@@ -261,7 +261,7 @@ describe("Bridge Integration", () => {
         };
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -328,7 +328,7 @@ describe("Bridge Integration", () => {
         };
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -433,7 +433,7 @@ describe("Bridge Integration", () => {
         };
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -480,7 +480,7 @@ describe("Bridge Integration", () => {
         const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
         controller = await startBridge(config, mockContext, vi.fn());
 
-        controller.subscribe((event) => events.push(event));
+        controller.subscribe(event => events.push(event));
 
         const address = controller.getState();
         if (address.status !== "running") {
@@ -497,7 +497,7 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for client_connect
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         const commandId = "test-cmd-4";
         const command = {
@@ -509,7 +509,7 @@ describe("Bridge Integration", () => {
         };
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -546,7 +546,7 @@ describe("Bridge Integration", () => {
         controller = await startBridge(config, mockContext, vi.fn());
 
         const terminalView = createBridgeTerminalView(
-          (handler) => controller!.subscribe(handler),
+          handler => controller!.subscribe(handler),
           () => controller!.getState(),
           () => controller!.getClients(),
           config,
@@ -554,12 +554,10 @@ describe("Bridge Integration", () => {
 
         const renderOutput = terminalView.render();
         expect(renderOutput.length).toBeGreaterThan(0);
-        expect(
-          renderOutput.some((line) => line.includes("Pi Web Bridge")),
-        ).toBe(true);
-        expect(renderOutput.some((line) => line.includes("Bridge:"))).toBe(
+        expect(renderOutput.some(line => line.includes("Pi Web Bridge"))).toBe(
           true,
         );
+        expect(renderOutput.some(line => line.includes("Bridge:"))).toBe(true);
 
         terminalView.dispose();
       },
@@ -573,13 +571,13 @@ describe("Bridge Integration", () => {
         controller = await startBridge(config, mockContext, vi.fn());
 
         const terminalView = createBridgeTerminalView(
-          (handler) => controller!.subscribe(handler),
+          handler => controller!.subscribe(handler),
           () => controller!.getState(),
           () => controller!.getClients(),
           config,
         );
         const initialRender = terminalView.render();
-        expect(initialRender.some((line) => line.includes("Clients: 0"))).toBe(
+        expect(initialRender.some(line => line.includes("Clients: 0"))).toBe(
           true,
         );
 
@@ -599,11 +597,11 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for event propagation
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Re-render - should show client
         const updatedRender = terminalView.render();
-        expect(updatedRender.some((line) => line.includes("Clients: 1"))).toBe(
+        expect(updatedRender.some(line => line.includes("Clients: 1"))).toBe(
           true,
         );
 
@@ -645,7 +643,7 @@ describe("Bridge Integration", () => {
               reject(new Error(`Timeout waiting for response to ${cmdId}`));
             }, 5000);
 
-            ws.on("message", (data) => {
+            ws.on("message", data => {
               try {
                 const msg = JSON.parse(data.toString());
                 if (msg.type === "response" && msg.payload?.id === cmdId) {
@@ -719,7 +717,7 @@ describe("Bridge Integration", () => {
         });
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response") {
@@ -769,7 +767,7 @@ describe("Bridge Integration", () => {
         });
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response") {
@@ -826,11 +824,11 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for client registration with EventBus
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Listen for event messages from the server
         const receivedEvents: unknown[] = [];
-        ws.on("message", (data) => {
+        ws.on("message", data => {
           try {
             const msg = JSON.parse(data.toString());
             if (msg.type === "event") {
@@ -855,7 +853,7 @@ describe("Bridge Integration", () => {
         agentStartHandler?.({ type: "agent_start", sessionId: "test-session" });
 
         // Wait for event delivery
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Verify the event was delivered via EventBus to the WS client
         expect(receivedEvents.length).toBeGreaterThanOrEqual(1);
@@ -890,11 +888,11 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for registration
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Disconnect
         ws.close();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Verify client count is 0
         expect(controller!.getClients()).toHaveLength(0);
@@ -947,7 +945,7 @@ describe("Bridge Integration", () => {
         );
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -1004,7 +1002,7 @@ describe("Bridge Integration", () => {
         );
 
         const responsePromise = new Promise<unknown>((resolve, reject) => {
-          ws.on("message", (data) => {
+          ws.on("message", data => {
             try {
               const msg = JSON.parse(data.toString());
               if (msg.type === "response" && msg.payload?.id === commandId) {
@@ -1040,16 +1038,16 @@ describe("Bridge Integration", () => {
         const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
         controller = await startBridge(config, mockContext, vi.fn());
 
-        controller.subscribe((event) => events.push(event));
+        controller.subscribe(event => events.push(event));
 
         // Simulate SIGINT
         process.emit("SIGINT");
 
         // Wait for async shutdown
-        await new Promise((resolve) => setTimeout(resolve, 200));
+        await new Promise(resolve => setTimeout(resolve, 200));
 
-        expect(events.some((e) => e.type === "sigint_received")).toBe(true);
-        expect(events.some((e) => e.type === "shutdown_complete")).toBe(true);
+        expect(events.some(e => e.type === "sigint_received")).toBe(true);
+        expect(events.some(e => e.type === "shutdown_complete")).toBe(true);
 
         // Controller should be stopped
         expect(controller.getState().status).toBe("stopped");
@@ -1066,7 +1064,7 @@ describe("Bridge Integration", () => {
         const allEvents: BridgeEvent[] = [];
 
         controller = await startBridge(config, mockContext, vi.fn());
-        controller.subscribe((event) => allEvents.push(event));
+        controller.subscribe(event => allEvents.push(event));
 
         const address = controller.getState();
         if (address.status !== "running") {
@@ -1084,7 +1082,7 @@ describe("Bridge Integration", () => {
         });
 
         // Wait for client_connect event
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Send a command that will succeed
         ws.send(
@@ -1095,7 +1093,7 @@ describe("Bridge Integration", () => {
         );
 
         // Wait for command_received event
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Note: command_error is only emitted on dispatch exceptions, not for
         // commands that return error responses (like unsupported commands)
@@ -1103,13 +1101,13 @@ describe("Bridge Integration", () => {
 
         // Disconnect client
         ws.close();
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise(resolve => setTimeout(resolve, 100));
 
         // Stop the bridge
         await controller.stop();
 
         // Verify all lifecycle events were emitted
-        const eventTypes = allEvents.map((e) => e.type);
+        const eventTypes = allEvents.map(e => e.type);
 
         // Required events per slice verification:
         // - server_stop

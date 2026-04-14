@@ -182,10 +182,10 @@ function collectWorkspaceEntries(
   return [
     ...Array.from(directories)
       .sort((a, b) => a.localeCompare(b))
-      .map((entryPath) => ({ path: entryPath, kind: "directory" as const })),
+      .map(entryPath => ({ path: entryPath, kind: "directory" as const })),
     ...Array.from(files)
       .sort((a, b) => a.localeCompare(b))
-      .map((entryPath) => ({ path: entryPath, kind: "file" as const })),
+      .map(entryPath => ({ path: entryPath, kind: "file" as const })),
   ];
 }
 
@@ -219,8 +219,8 @@ function listWorkspaceFilesFallback(cwd: string): string[] {
         fs
           .readFileSync(rootIgnoreFile, "utf8")
           .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter((line) => line.length > 0 && !line.startsWith("#")),
+          .map(line => line.trim())
+          .filter(line => line.length > 0 && !line.startsWith("#")),
       )
     : new Set<string>();
 
@@ -300,7 +300,7 @@ function buildVisibleTree(
     const visibleChildren = buildVisibleTree(node.children, activeLeafId);
     const containsActiveLeaf =
       node.entry.id === activeLeafId ||
-      visibleChildren.some((child) => child.containsActiveLeaf);
+      visibleChildren.some(child => child.containsActiveLeaf);
     const hidden = HIDDEN_TREE_ENTRY_TYPES.has(node.entry.type);
 
     if (hidden) {
@@ -368,7 +368,7 @@ function flattenVisibleTree(
       ? Math.max(0, displayIndent - 1)
       : -1;
     const children = orderTreeChildren(node.children);
-    const hasActiveChild = children.some((child) => child.containsActiveLeaf);
+    const hasActiveChild = children.some(child => child.containsActiveLeaf);
 
     entries.push({
       id: node.entry.id,
@@ -423,7 +423,7 @@ function buildTrackColumns(
   const columns: RpcTreeTrackColumn[] = [];
 
   for (let level = 0; level < displayIndent; level++) {
-    const gutter = gutters.find((item) => item.position === level);
+    const gutter = gutters.find(item => item.position === level);
     if (gutter) {
       columns.push(gutter.show ? "line" : "blank");
       continue;
@@ -441,10 +441,8 @@ function buildTrackColumns(
 function orderTreeChildren(
   children: readonly VisibleTreeNodeLike[],
 ): VisibleTreeNodeLike[] {
-  const activeChildren = children.filter((child) => child.containsActiveLeaf);
-  const inactiveChildren = children.filter(
-    (child) => !child.containsActiveLeaf,
-  );
+  const activeChildren = children.filter(child => child.containsActiveLeaf);
+  const inactiveChildren = children.filter(child => !child.containsActiveLeaf);
   return [...activeChildren, ...inactiveChildren];
 }
 
@@ -463,7 +461,7 @@ function buildTreeEntriesFromBranch(
   branch: readonly unknown[],
 ): RpcTreeEntry[] {
   return branch
-    .filter((entry) => {
+    .filter(entry => {
       const typedEntry = entry as { type?: string; id?: string };
       if (!typedEntry.id) return false;
       if (typedEntry.type && HIDDEN_TREE_ENTRY_TYPES.has(typedEntry.type))
@@ -510,8 +508,8 @@ function flattenMessagesForTranscript(
   branch: readonly SessionEntry[],
 ): unknown[] {
   return branch
-    .filter((entry) => entry.type === "message")
-    .map((entry) => {
+    .filter(entry => entry.type === "message")
+    .map(entry => {
       const messageEntry = entry as Extract<SessionEntry, { type: "message" }>;
       return {
         id: messageEntry.id,
@@ -592,7 +590,7 @@ function sessionDisplayName(
 
   const firstUserEntry = sessionManager
     .getEntries()
-    .find((entry) => entry.type === "message" && entry.message.role === "user");
+    .find(entry => entry.type === "message" && entry.message.role === "user");
   if (firstUserEntry && firstUserEntry.type === "message") {
     const text = collapseWhitespace(
       extractMessageText(
@@ -651,12 +649,12 @@ function describeSessionEntry(entry: SessionEntry): string {
       const customText = Array.isArray(entry.content)
         ? entry.content
             .filter(
-              (item) =>
+              item =>
                 typeof item === "object" &&
                 item !== null &&
                 (item as { type?: string }).type === "text",
             )
-            .map((item) => (item as { text?: string }).text ?? "")
+            .map(item => (item as { text?: string }).text ?? "")
             .join(" ")
         : typeof entry.content === "string"
           ? entry.content
@@ -762,7 +760,7 @@ function extractMessageText(message: {
   if (!Array.isArray(message.content)) return "";
 
   return message.content
-    .map((block) => {
+    .map(block => {
       if (typeof block === "string") return block;
       if (typeof block !== "object" || block === null) return "";
       const typedBlock = block as {
@@ -843,7 +841,7 @@ export class WsRpcAdapter {
    * Setup WebSocket message handlers
    */
   private setupWebSocket(): void {
-    this.ws.on("message", (data) => {
+    this.ws.on("message", data => {
       if (this.disposed) return;
       this.handleMessage(data.toString());
     });
@@ -852,7 +850,7 @@ export class WsRpcAdapter {
       this.dispose();
     });
 
-    this.ws.on("error", (err) => {
+    this.ws.on("error", err => {
       console.error(`WsRpcAdapter[${this.client.id}]: WebSocket error:`, err);
       this.emitEvent({
         type: "command_error",
@@ -971,7 +969,7 @@ export class WsRpcAdapter {
 
     await created.session.bindExtensions({
       uiContext: this.createExtensionUIContext() as never,
-      onError: (error) => {
+      onError: error => {
         console.error(
           `WsRpcAdapter[${this.client.id}]: Detached session extension error:`,
           error,
@@ -981,7 +979,7 @@ export class WsRpcAdapter {
     });
 
     this.selectedSession = created.session;
-    this.selectedSessionUnsubscribe = created.session.subscribe((event) => {
+    this.selectedSessionUnsubscribe = created.session.subscribe(event => {
       this.sendResponse({
         type: "event",
         payload: toClientEventPayload(event),
@@ -1185,7 +1183,7 @@ export class WsRpcAdapter {
           : { source: "rpc" as const, images };
 
         setTimeout(() => {
-          void session.prompt(command.message, promptOptions).catch((error) => {
+          void session.prompt(command.message, promptOptions).catch(error => {
             const message =
               error instanceof Error ? error.message : String(error);
             console.error(
@@ -1235,7 +1233,7 @@ export class WsRpcAdapter {
         const images = normalizeRpcImages(command.images);
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          void session.steer(command.message, images).catch((error) => {
+          void session.steer(command.message, images).catch(error => {
             console.error(
               `WsRpcAdapter[${this.client.id}]: Detached steer failed:`,
               error,
@@ -1258,7 +1256,7 @@ export class WsRpcAdapter {
         const images = normalizeRpcImages(command.images);
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          void session.followUp(command.message, images).catch((error) => {
+          void session.followUp(command.message, images).catch(error => {
             console.error(
               `WsRpcAdapter[${this.client.id}]: Detached follow_up failed:`,
               error,
@@ -1999,7 +1997,7 @@ export class WsRpcAdapter {
 
       case "get_commands": {
         const commands = pi.getCommands();
-        const rpcCommands: RpcSlashCommand[] = commands.map((cmd) => ({
+        const rpcCommands: RpcSlashCommand[] = commands.map(cmd => ({
           name: cmd.name,
           description: cmd.description,
           source: "extension" as const,
@@ -2311,7 +2309,7 @@ export class WsRpcAdapter {
         createDialogPromise(
           { method: "select", title, options, timeout: opts?.timeout },
           undefined as string | undefined,
-          (r) =>
+          r =>
             "cancelled" in r && r.cancelled
               ? undefined
               : "value" in r
@@ -2327,7 +2325,7 @@ export class WsRpcAdapter {
         createDialogPromise(
           { method: "confirm", title, message, timeout: opts?.timeout },
           false,
-          (r) =>
+          r =>
             "cancelled" in r && r.cancelled
               ? false
               : "confirmed" in r
@@ -2343,7 +2341,7 @@ export class WsRpcAdapter {
         createDialogPromise(
           { method: "input", title, placeholder, timeout: opts?.timeout },
           undefined as string | undefined,
-          (r) =>
+          r =>
             "cancelled" in r && r.cancelled
               ? undefined
               : "value" in r
@@ -2355,7 +2353,7 @@ export class WsRpcAdapter {
         createDialogPromise(
           { method: "editor", title, prefill },
           undefined as string | undefined,
-          (r) =>
+          r =>
             "cancelled" in r && r.cancelled
               ? undefined
               : "value" in r

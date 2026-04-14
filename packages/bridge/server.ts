@@ -174,7 +174,7 @@ export class BridgeServer {
 
     // Close WebSocket server
     if (this.wsServer) {
-      await new Promise<void>((resolve) => {
+      await new Promise<void>(resolve => {
         this.wsServer?.close(() => resolve());
       });
       this.wsServer = undefined;
@@ -183,7 +183,7 @@ export class BridgeServer {
     // Close HTTP server
     if (this.httpServer) {
       await new Promise<void>((resolve, reject) => {
-        this.httpServer?.close((err) => {
+        this.httpServer?.close(err => {
           if (err) reject(err);
           else resolve();
         });
@@ -223,7 +223,7 @@ export class BridgeServer {
    * Get list of connected clients
    */
   getClients(): WsClient[] {
-    return Array.from(this.adapters.values()).map((adapter) => {
+    return Array.from(this.adapters.values()).map(adapter => {
       // Access the private client field through type assertion
       return (adapter as unknown as { client: WsClient }).client;
     });
@@ -352,7 +352,7 @@ export class BridgeServer {
     this.adapters.set(client.id, adapter);
 
     // Register client with EventBus for event fan-out
-    const unregister = this.eventBus.registerClient(client, (data) => {
+    const unregister = this.eventBus.registerClient(client, data => {
       if (ws.readyState === 1) {
         // WebSocket.OPEN
         ws.send(data);
@@ -375,7 +375,7 @@ export class BridgeServer {
       });
     });
 
-    ws.on("error", (err) => {
+    ws.on("error", err => {
       console.error(`WebSocket error for client ${client.id}:`, err);
       this.emitEvent({
         type: "command_error",
@@ -435,7 +435,7 @@ function getPlaceholderHtml(_host: string, port: number): string {
   const lanUrlLines =
     lanIps.length > 0
       ? lanIps
-          .map((ip) => {
+          .map(ip => {
             const label = isTailscaleIp(ip) ? " 🦎 Tailscale" : "";
             return `<span class="code">${httpUrl(ip)}</span>${label}`;
           })

@@ -19,7 +19,7 @@ const query = ref("");
 
 watch(
   () => props.open,
-  (isOpen) => {
+  isOpen => {
     if (!isOpen) {
       query.value = "";
     }
@@ -28,12 +28,12 @@ watch(
 
 const canNavigate = computed(() => !props.isHistoricalView);
 const activePathCount = computed(
-  () => props.entries.filter((entry) => entry.isOnActivePath).length,
+  () => props.entries.filter(entry => entry.isOnActivePath).length,
 );
 const filteredEntries = computed(() => {
   const normalizedQuery = query.value.trim().toLowerCase();
   if (!normalizedQuery) return props.entries;
-  return props.entries.filter((entry) => {
+  return props.entries.filter(entry => {
     const haystack = `${entry.label ?? ""} ${entry.type}`.toLowerCase();
     return haystack.includes(normalizedQuery);
   });

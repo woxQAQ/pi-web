@@ -53,7 +53,7 @@ export function extractSupportedImageFiles(
   source: Iterable<File> | ArrayLike<File> | null | undefined,
 ): File[] {
   if (!source) return [];
-  return Array.from(source).filter((file) => getSupportedImageMimeType(file));
+  return Array.from(source).filter(file => getSupportedImageMimeType(file));
 }
 
 export async function createComposerAttachments(
