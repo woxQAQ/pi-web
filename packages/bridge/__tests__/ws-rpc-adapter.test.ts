@@ -541,6 +541,7 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.success).toBe(true);
       expect(response.payload.data).toHaveProperty("sessionId", "session-123");
       expect(response.payload.data).toHaveProperty("messageCount", 1);
+      expect(response.payload.data).toHaveProperty("sessionName", "Hello");
     });
 
     it("should handle get_messages command", async () => {

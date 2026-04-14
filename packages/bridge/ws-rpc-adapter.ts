@@ -582,23 +582,45 @@ function formatTreeEntryLabel(node: SessionTreeNodeLike): string {
 }
 
 function sessionDisplayName(
-  sessionManager: SessionManager,
+  sessionManager: {
+    getSessionName: () => string | undefined;
+    getEntries: () => unknown[];
+    getSessionId: () => string;
+  },
   sessionPath?: string,
 ): string {
-  const explicitName = sessionManager.getSessionName()?.trim();
-  if (explicitName) return explicitName;
+  const firstUserEntry = sessionManager.getEntries().find(entry => {
+    if (
+      typeof entry === "object" &&
+      entry !== null &&
+      "type" in entry &&
+      entry.type === "message" &&
+      "message" in entry
+    ) {
+      const message = entry.message as { role?: unknown };
+      return message.role === "user";
+    }
 
-  const firstUserEntry = sessionManager
-    .getEntries()
-    .find(entry => entry.type === "message" && entry.message.role === "user");
-  if (firstUserEntry && firstUserEntry.type === "message") {
-    const text = collapseWhitespace(
-      extractMessageText(
-        firstUserEntry.message as { content?: unknown; text?: string },
-      ),
-    );
+    if (typeof entry === "object" && entry !== null && "role" in entry) {
+      return entry.role === "user";
+    }
+
+    return false;
+  });
+
+  if (firstUserEntry && typeof firstUserEntry === "object") {
+    const message =
+      "type" in firstUserEntry &&
+      firstUserEntry.type === "message" &&
+      "message" in firstUserEntry
+        ? (firstUserEntry.message as { content?: unknown; text?: string })
+        : (firstUserEntry as { content?: unknown; text?: string });
+    const text = collapseWhitespace(extractMessageText(message));
     if (text) return text;
   }
+
+  const explicitName = sessionManager.getSessionName()?.trim();
+  if (explicitName) return explicitName;
 
   return sessionPath
     ? path.basename(sessionPath, ".jsonl")
@@ -1026,6 +1048,7 @@ export class WsRpcAdapter {
     }
 
     const { pi, ctx } = this.context;
+    const sessionFile = ctx.sessionManager.getSessionFile();
     return {
       model: ctx.model,
       thinkingLevel: pi.getThinkingLevel(),
@@ -1033,9 +1056,16 @@ export class WsRpcAdapter {
       isCompacting: false,
       steeringMode: "all",
       followUpMode: "all",
-      sessionFile: ctx.sessionManager.getSessionFile(),
+      sessionFile,
       sessionId: ctx.sessionManager.getSessionId(),
-      sessionName: pi.getSessionName() ?? undefined,
+      sessionName: sessionDisplayName(
+        {
+          getSessionName: () => undefined,
+          getEntries: () => ctx.sessionManager.getEntries() ?? [],
+          getSessionId: () => ctx.sessionManager.getSessionId(),
+        },
+        sessionFile,
+      ),
       autoCompactionEnabled: false,
       messageCount: ctx.sessionManager.getEntries()?.length ?? 0,
       pendingMessageCount: ctx.hasPendingMessages() ? 1 : 0,
