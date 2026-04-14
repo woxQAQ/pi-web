@@ -128,14 +128,7 @@ watch(
   },
 );
 
-watch(
-  () => props.messages,
-  () => {
-    expandedToolBlocks.value = new Set();
-    expandedThinking.value = new Set();
-  },
-  { deep: false },
-);
+
 
 defineExpose({ preserveScroll });
 </script>
@@ -401,6 +394,7 @@ defineExpose({ preserveScroll });
 .markdown-body + .tool-card-block,
 .markdown-body + .message-image-block,
 .thinking-block + .markdown-body,
+.thinking-block + .tool-card-block,
 .thinking-block + .message-image-block,
 .tool-card-block + .markdown-body,
 .tool-card-block + .thinking-block,
