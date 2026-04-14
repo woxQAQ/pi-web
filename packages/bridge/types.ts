@@ -27,81 +27,96 @@ export interface RpcWorkspaceEntry {
   kind: "file" | "directory";
 }
 
+/** Map of RPC command types to their specific payload shapes. */
+export interface RpcCommandMap {
+  /** Prompting */
+  prompt: {
+    message: string;
+    images?: RpcImageContent[];
+    streamingBehavior?: "steer" | "followUp";
+  };
+  steer: {
+    message: string;
+    images?: RpcImageContent[];
+  };
+  follow_up: {
+    message: string;
+    images?: RpcImageContent[];
+  };
+  abort: unknown;
+  new_session: { parentSession?: string };
+
+  /** State */
+  get_state: unknown;
+
+  /** Model */
+  set_model: { provider: string; modelId: string };
+  cycle_model: unknown;
+  get_available_models: unknown;
+
+  /** Thinking */
+  set_thinking_level: { level: unknown };
+  cycle_thinking_level: unknown;
+
+  /** Queue modes */
+  set_steering_mode: { mode: "all" | "one-at-a-time" };
+  set_follow_up_mode: { mode: "all" | "one-at-a-time" };
+
+  /** Compaction */
+  compact: { customInstructions?: string };
+  set_auto_compaction: { enabled: boolean };
+
+  /** Retry */
+  set_auto_retry: { enabled: boolean };
+  abort_retry: unknown;
+
+  /** Bash */
+  bash: { command: string };
+  abort_bash: unknown;
+
+  /** Session */
+  get_session_stats: { sessionPath?: string };
+  export_html: { outputPath?: string };
+  switch_session: { sessionPath: string };
+  navigate_tree: {
+    entryId: string;
+    summarize?: boolean;
+    customInstructions?: string;
+    replaceInstructions?: boolean;
+    label?: string;
+  };
+  fork: { entryId: string };
+  get_fork_messages: unknown;
+  get_last_assistant_text: unknown;
+  set_session_name: { name: string };
+
+  /** Messages / Commands */
+  get_messages: unknown;
+  get_commands: unknown;
+
+  /** Discovery */
+  list_sessions: unknown;
+  list_tree_entries: { sessionPath?: string };
+  list_workspace_entries: unknown;
+
+  /** Plugin state persistence */
+  get_plugin_state: { key: string };
+  set_plugin_state: { key: string; value: unknown };
+}
+
 /** All RPC command types that a browser client can send. */
-export type RpcCommand =
-  // Prompting
-  | {
-      id?: string;
-      type: "prompt";
-      message: string;
-      images?: RpcImageContent[];
-      streamingBehavior?: "steer" | "followUp";
-    }
-  | {
-      id?: string;
-      type: "steer";
-      message: string;
-      images?: RpcImageContent[];
-    }
-  | {
-      id?: string;
-      type: "follow_up";
-      message: string;
-      images?: RpcImageContent[];
-    }
-  | { id?: string; type: "abort" }
-  | { id?: string; type: "new_session"; parentSession?: string }
-  // State
-  | { id?: string; type: "get_state" }
-  // Model
-  | { id?: string; type: "set_model"; provider: string; modelId: string }
-  | { id?: string; type: "cycle_model" }
-  | { id?: string; type: "get_available_models" }
-  // Thinking
-  | { id?: string; type: "set_thinking_level"; level: unknown }
-  | { id?: string; type: "cycle_thinking_level" }
-  // Queue modes
-  | { id?: string; type: "set_steering_mode"; mode: "all" | "one-at-a-time" }
-  | { id?: string; type: "set_follow_up_mode"; mode: "all" | "one-at-a-time" }
-  // Compaction
-  | { id?: string; type: "compact"; customInstructions?: string }
-  | { id?: string; type: "set_auto_compaction"; enabled: boolean }
-  // Retry
-  | { id?: string; type: "set_auto_retry"; enabled: boolean }
-  | { id?: string; type: "abort_retry" }
-  // Bash
-  | { id?: string; type: "bash"; command: string }
-  | { id?: string; type: "abort_bash" }
-  // Session
-  | { id?: string; type: "get_session_stats"; sessionPath?: string }
-  | { id?: string; type: "export_html"; outputPath?: string }
-  | { id?: string; type: "switch_session"; sessionPath: string }
-  | {
-      id?: string;
-      type: "navigate_tree";
-      entryId: string;
-      summarize?: boolean;
-      customInstructions?: string;
-      replaceInstructions?: boolean;
-      label?: string;
-    }
-  | { id?: string; type: "fork"; entryId: string }
-  | { id?: string; type: "get_fork_messages" }
-  | { id?: string; type: "get_last_assistant_text" }
-  | { id?: string; type: "set_session_name"; name: string }
-  // Messages / Commands
-  | { id?: string; type: "get_messages" }
-  | { id?: string; type: "get_commands" }
-  // Discovery
-  | { id?: string; type: "list_sessions" }
-  | { id?: string; type: "list_tree_entries"; sessionPath?: string }
-  | { id?: string; type: "list_workspace_entries" }
-  // Plugin state persistence
-  | { id?: string; type: "get_plugin_state"; key: string }
-  | { id?: string; type: "set_plugin_state"; key: string; value: unknown };
+export type RpcCommand = {
+  [K in keyof RpcCommandMap]: { id?: string; type: K } & RpcCommandMap[K];
+}[keyof RpcCommandMap];
 
 /** Helper type to extract the `type` discriminant. */
-export type RpcCommandType = RpcCommand["type"];
+export type RpcCommandType = keyof RpcCommandMap;
+
+/** Extract payload fields for a specific command type. */
+export type RpcCommandPayload<T extends RpcCommandType> = Omit<
+  Extract<RpcCommand, { type: T }>,
+  "id" | "type"
+>;
 
 // ============================================================================
 // RPC State
@@ -147,216 +162,72 @@ export interface RpcTreeEntry {
 // RPC Responses (server → client)
 // ============================================================================
 
+/** Map of RPC command types to their success response data shapes. */
+export interface RpcResponseMap {
+  prompt: void;
+  steer: void;
+  follow_up: void;
+  abort: void;
+  new_session: {
+    messages: unknown[];
+    treeEntries: RpcTreeEntry[];
+    sessionId: string;
+    sessionName: string;
+    sessionPath: string;
+    cancelled: boolean;
+  };
+  get_state: RpcSessionState;
+  set_model: unknown;
+  cycle_model: unknown;
+  get_available_models: { models: unknown[] };
+  set_thinking_level: void;
+  cycle_thinking_level: unknown;
+  set_steering_mode: void;
+  set_follow_up_mode: void;
+  compact: unknown;
+  set_auto_compaction: void;
+  set_auto_retry: void;
+  abort_retry: void;
+  bash: unknown;
+  abort_bash: void;
+  get_session_stats: unknown;
+  export_html: { path: string };
+  switch_session: {
+    messages: unknown[];
+    treeEntries: RpcTreeEntry[];
+    sessionId: string;
+    sessionName: string;
+    sessionPath: string;
+    cancelled: boolean;
+  };
+  navigate_tree: { cancelled: boolean };
+  fork: { text: string; cancelled: boolean };
+  get_fork_messages: { messages: Array<{ entryId: string; text: string }> };
+  get_last_assistant_text: { text: string | null };
+  set_session_name: void;
+  get_messages: { messages: unknown[] };
+  get_commands: { commands: RpcSlashCommand[] };
+  list_sessions: {
+    sessions: Array<{ id: string; name: string; path: string }>;
+  };
+  list_tree_entries: { entries: RpcTreeEntry[]; sessionPath?: string };
+  list_workspace_entries: { entries: RpcWorkspaceEntry[] };
+  get_plugin_state: { value: unknown };
+  set_plugin_state: void;
+}
+
+type RpcResponseData<T> = [T] extends [void] ? unknown : { data: T };
+
 /** Structured responses sent back to the browser client after command dispatch. */
 export type RpcResponse =
-  // Success responses — each maps to a command type
-  | { id?: string; type: "response"; command: "prompt"; success: true }
-  | { id?: string; type: "response"; command: "steer"; success: true }
-  | { id?: string; type: "response"; command: "follow_up"; success: true }
-  | { id?: string; type: "response"; command: "abort"; success: true }
   | {
-      id?: string;
-      type: "response";
-      command: "new_session";
-      success: true;
-      data: {
-        messages: unknown[];
-        treeEntries: RpcTreeEntry[];
-        sessionId: string;
-        sessionName: string;
-        sessionPath: string;
-        cancelled: boolean;
-      };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_state";
-      success: true;
-      data: RpcSessionState;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_model";
-      success: true;
-      data: unknown;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "cycle_model";
-      success: true;
-      data: unknown;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_available_models";
-      success: true;
-      data: { models: unknown[] };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_thinking_level";
-      success: true;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "cycle_thinking_level";
-      success: true;
-      data: unknown;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_steering_mode";
-      success: true;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_follow_up_mode";
-      success: true;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "compact";
-      success: true;
-      data: unknown;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_auto_compaction";
-      success: true;
-    }
-  | { id?: string; type: "response"; command: "set_auto_retry"; success: true }
-  | { id?: string; type: "response"; command: "abort_retry"; success: true }
-  | {
-      id?: string;
-      type: "response";
-      command: "bash";
-      success: true;
-      data: unknown;
-    }
-  | { id?: string; type: "response"; command: "abort_bash"; success: true }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_session_stats";
-      success: true;
-      data: unknown;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "export_html";
-      success: true;
-      data: { path: string };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "switch_session";
-      success: true;
-      data: {
-        messages: unknown[];
-        treeEntries: RpcTreeEntry[];
-        sessionId: string;
-        sessionName: string;
-        sessionPath: string;
-        cancelled: boolean;
-      };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "fork";
-      success: true;
-      data: { text: string; cancelled: boolean };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_fork_messages";
-      success: true;
-      data: { messages: Array<{ entryId: string; text: string }> };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_last_assistant_text";
-      success: true;
-      data: { text: string | null };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_session_name";
-      success: true;
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "navigate_tree";
-      success: true;
-      data: { cancelled: boolean };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_messages";
-      success: true;
-      data: { messages: unknown[] };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "get_commands";
-      success: true;
-      data: { commands: RpcSlashCommand[] };
-    }
-  // Discovery responses
-  | {
-      id?: string;
-      type: "response";
-      command: "list_sessions";
-      success: true;
-      data: { sessions: Array<{ id: string; name: string; path: string }> };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "list_tree_entries";
-      success: true;
-      data: { entries: RpcTreeEntry[]; sessionPath?: string };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "list_workspace_entries";
-      success: true;
-      data: { entries: RpcWorkspaceEntry[] };
-    }
-  // Plugin state persistence
-  | {
-      id?: string;
-      type: "response";
-      command: "get_plugin_state";
-      success: true;
-      data: { value: unknown };
-    }
-  | {
-      id?: string;
-      type: "response";
-      command: "set_plugin_state";
-      success: true;
-    }
-  // Error — any command can fail
+      [K in keyof RpcResponseMap]: {
+        id?: string;
+        type: "response";
+        command: K;
+        success: true;
+      } & RpcResponseData<RpcResponseMap[K]>;
+    }[keyof RpcResponseMap]
   | {
       id?: string;
       type: "response";
