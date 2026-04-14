@@ -24,3 +24,4 @@ When working on the browser UI, set `PI_BRIDGE_PORT=8080` before starting Pi so 
 ## important tips
 
 - You should read the source code of @mariozechner/pi-coding-agent, @mariozechner/pi-ai carefuilly, especially the wire protocol of pi
+- Do not add thin wrapper functions around existing functions unless the wrapper adds real value beyond renaming.

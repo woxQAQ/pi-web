@@ -915,6 +915,30 @@ export class WsRpcAdapter {
     this.pendingSessionManager = null;
   }
 
+  /**
+   * Auto-create a new detached session when no session is selected.
+   * This avoids calling pi.sendUserMessage() which would trigger
+   * a TUI switch away from the bridge's custom terminal view.
+   */
+  private autoCreateSession(): void {
+    const { ctx } = this.context;
+    const cwd = ctx.cwd;
+    const currentSessionFile =
+      this.selectedSessionPath ?? ctx.sessionManager.getSessionFile();
+    const sessionDir = currentSessionFile
+      ? path.dirname(currentSessionFile)
+      : undefined;
+
+    this.disposeSelectedSession();
+
+    const sessionManager = SessionManager.create(cwd, sessionDir);
+    const sessionFile = sessionManager.getSessionFile();
+    if (sessionFile) {
+      this.selectedSessionPath = sessionFile;
+    }
+    this.pendingSessionManager = sessionManager;
+  }
+
   private async ensureSelectedSession(): Promise<AgentSession> {
     const sessionPath = this.selectedSessionPath;
     if (!sessionPath) {
@@ -1129,38 +1153,67 @@ export class WsRpcAdapter {
 
       case "prompt": {
         const images = normalizeRpcImages(command.images);
-        if (this.selectedSessionPath) {
-          const session = await this.ensureSelectedSession();
-          const promptOptions = session.isStreaming
-            ? {
-                source: "rpc" as const,
-                images,
-                streamingBehavior: command.streamingBehavior ?? "steer",
-              }
-            : { source: "rpc" as const, images };
 
-          setTimeout(() => {
-            void session.prompt(command.message, promptOptions).catch((error) => {
-              const message =
-                error instanceof Error ? error.message : String(error);
-              console.error(
-                `WsRpcAdapter[${this.client.id}]: Detached prompt failed:`,
-                message,
-              );
-              this.emitEvent({
-                type: "command_error",
-                client: this.client,
-                commandType: "prompt",
-                correlationId,
-                error: message,
-              });
-            });
-          }, 0);
-        } else {
-          pi.sendUserMessage(buildUserMessageContent(command.message, images), {
-            deliverAs: command.streamingBehavior ?? "steer",
-          });
+        // Auto-create a detached session when no session is selected.
+        // Without this, the fallback calls pi.sendUserMessage() which
+        // drives the live Pi runtime and causes a TUI switch away from
+        // the bridge's custom terminal view.
+        let autoCreated = false;
+        let autoCreatedSm: SessionManager | null = null;
+        if (!this.selectedSessionPath) {
+          this.autoCreateSession();
+          autoCreated = true;
+          autoCreatedSm = this.pendingSessionManager;
         }
+
+        const session = await this.ensureSelectedSession();
+        const promptOptions = session.isStreaming
+          ? {
+              source: "rpc" as const,
+              images,
+              streamingBehavior: command.streamingBehavior ?? "steer",
+            }
+          : { source: "rpc" as const, images };
+
+        setTimeout(() => {
+          void session.prompt(command.message, promptOptions).catch((error) => {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            console.error(
+              `WsRpcAdapter[${this.client.id}]: Detached prompt failed:`,
+              message,
+            );
+            this.emitEvent({
+              type: "command_error",
+              client: this.client,
+              commandType: "prompt",
+              correlationId,
+              error: message,
+            });
+          });
+        }, 0);
+
+        // When auto-created, also push a new_session response so the
+        // client can update its session path, tree, and transcript state.
+        if (autoCreated && autoCreatedSm) {
+          const sm = autoCreatedSm;
+          const sessionFile = sm.getSessionFile();
+          return {
+            id: correlationId,
+            type: "response",
+            command: "new_session",
+            success: true,
+            data: {
+              messages: flattenMessagesForTranscript(sm.getBranch()),
+              treeEntries: buildTreeEntriesFromSession(sm),
+              sessionId: sm.getSessionId(),
+              sessionName: sessionDisplayName(sm, sessionFile),
+              sessionPath: sessionFile ?? "",
+              cancelled: false,
+            },
+          };
+        }
+
         return {
           id: correlationId,
           type: "response",

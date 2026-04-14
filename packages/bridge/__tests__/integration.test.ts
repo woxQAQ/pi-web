@@ -7,7 +7,26 @@
 
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as crypto from "node:crypto";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { WebSocket } from "ws";
+
+const { createAgentSessionMock } = vi.hoisted(() => ({
+  createAgentSessionMock: vi.fn(),
+}));
+
+vi.mock("@mariozechner/pi-coding-agent", async () => {
+  const actual =
+    await vi.importActual<typeof import("@mariozechner/pi-coding-agent")>(
+      "@mariozechner/pi-coding-agent",
+    );
+  return {
+    ...actual,
+    createAgentSession: createAgentSessionMock,
+  };
+});
+
 import { startBridge, type BridgeController } from "../lifecycle.js";
 import { createBridgeTerminalView } from "../terminal-log-view.js";
 import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "../types.js";
@@ -87,6 +106,7 @@ describe("Bridge Integration", () => {
   let events: BridgeEvent[];
 
   beforeEach(() => {
+    createAgentSessionMock.mockReset();
     mockContext = createMockContext();
     events = [];
 
@@ -341,8 +361,45 @@ describe("Bridge Integration", () => {
     );
 
     it(
-      "should handle prompt command",
+      "should handle prompt command via auto-created session",
       async () => {
+        // Set up a real temp directory so SessionManager.create works
+        const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-int-prompt-"));
+        const sessionFile = path.join(tmpDir, "session.jsonl");
+        fs.writeFileSync(
+          sessionFile,
+          JSON.stringify({
+            type: "session",
+            version: 3,
+            id: "int-test-session",
+            timestamp: new Date().toISOString(),
+            cwd: tmpDir,
+          }),
+        );
+        (mockContext.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>).mockReturnValue(sessionFile);
+        (mockContext.ctx as unknown as Record<string, unknown>).cwd = tmpDir;
+
+        // Mock createAgentSession for the auto-created session
+        const promptSpy = vi.fn().mockResolvedValue(undefined);
+        createAgentSessionMock.mockResolvedValue({
+          session: {
+            sessionFile: undefined, // set by autoCreateSession
+            sessionId: "auto-session",
+            isStreaming: false,
+            bindExtensions: vi.fn().mockResolvedValue(undefined),
+            subscribe: vi.fn().mockReturnValue(() => {}),
+            prompt: promptSpy,
+            dispose: vi.fn(),
+            sessionManager: {
+              getSessionFile: vi.fn(),
+              getSessionId: vi.fn().mockReturnValue("auto-session"),
+              getEntries: vi.fn().mockReturnValue([]),
+              getBranch: vi.fn().mockReturnValue([]),
+              getCwd: vi.fn().mockReturnValue(tmpDir),
+            },
+          },
+        });
+
         const config = { ...DEFAULT_BRIDGE_CONFIG, port: 0 };
         controller = await startBridge(config, mockContext, vi.fn());
 
@@ -386,23 +443,26 @@ describe("Bridge Integration", () => {
 
         ws.send(JSON.stringify(command));
 
-        const response = await responsePromise;
+        const response = (await responsePromise) as Record<string, unknown>;
 
+        // When no session is selected, prompt auto-creates a detached session.
+        // The response command is "new_session" (carrying the new session info)
+        // instead of "prompt".
         expect(response).toMatchObject({
           type: "response",
-          command: "prompt",
+          command: "new_session",
           success: true,
         });
+        expect(response.data).toMatchObject({
+          cancelled: false,
+        });
+        expect((response.data as Record<string, unknown>).sessionPath).toBeDefined();
 
-        // Verify sendUserMessage was called
-        expect(mockContext.pi.sendUserMessage).toHaveBeenCalledWith(
-          "Hello from bridge",
-          {
-            deliverAs: "steer",
-          },
-        );
+        // sendUserMessage should NOT be called (that would trigger TUI switch)
+        expect(mockContext.pi.sendUserMessage).not.toHaveBeenCalled();
 
         ws.close();
+        fs.rmSync(tmpDir, { recursive: true, force: true });
       },
       TEST_TIMEOUT,
     );

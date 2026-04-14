@@ -124,7 +124,41 @@ describe("WsRpcAdapter", () => {
   });
 
   describe("command dispatch", () => {
-    it("should handle prompt command", async () => {
+    it("should handle prompt command by auto-creating a session", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-prompt-"));
+      const sessionFile = path.join(tmpDir, "session.jsonl");
+      // Write a minimal session header so SessionManager.open works
+      fs.writeFileSync(
+        sessionFile,
+        JSON.stringify({
+          type: "session",
+          version: 3,
+          id: "live-session",
+          timestamp: new Date().toISOString(),
+          cwd: tmpDir,
+        }),
+      );
+      (context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>).mockReturnValue(sessionFile);
+
+      const promptSpy = vi.fn().mockResolvedValue(undefined);
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile: undefined, // will be set by autoCreateSession
+          sessionId: "auto-session",
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockReturnValue(() => {}),
+          prompt: promptSpy,
+          sessionManager: {
+            getSessionFile: vi.fn().mockReturnValue(undefined),
+            getSessionId: vi.fn().mockReturnValue("auto-session"),
+            getEntries: vi.fn().mockReturnValue([]),
+            getBranch: vi.fn().mockReturnValue([]),
+            getCwd: vi.fn().mockReturnValue(tmpDir),
+          },
+        },
+      });
+
       const command: RpcCommand = {
         id: "cmd-1",
         type: "prompt",
@@ -138,20 +172,65 @@ describe("WsRpcAdapter", () => {
       );
 
       // Wait for async handling
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 30));
 
-      expect(context.pi.sendUserMessage).toHaveBeenCalledWith("Hello", {
-        deliverAs: "steer",
-      });
+      // Should NOT call pi.sendUserMessage (that would trigger TUI switch)
+      expect(context.pi.sendUserMessage).not.toHaveBeenCalled();
       expect(emitEvent).toHaveBeenCalledWith({
         type: "command_received",
         client,
         commandType: "prompt",
         correlationId: "cmd-1",
       });
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it("wraps prompt attachments into Pi image content", async () => {
+    it("wraps prompt attachments into Pi image content (with selected session)", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-attach-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Initial" }],
+        timestamp: Date.now(),
+      });
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) throw new Error("session file was not created");
+
+      const rawEntries = sessionManager.getEntries();
+      const header = {
+        type: "session",
+        version: 3,
+        id: sessionManager.getSessionId(),
+        timestamp: new Date().toISOString(),
+        cwd: tmpDir,
+      };
+      fs.writeFileSync(sessionFile, [JSON.stringify(header), ...rawEntries.map((e) => JSON.stringify(e))].join("\n"));
+
+      const promptSpy = vi.fn().mockResolvedValue(undefined);
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockReturnValue(() => {}),
+          prompt: promptSpy,
+          sessionManager,
+        },
+      });
+
+      // Switch to a session first
+      (ws as unknown as { trigger: (event: string, data: Buffer) => void }).trigger(
+        "message",
+        Buffer.from(JSON.stringify({
+          type: "command",
+          payload: { id: "switch-1", type: "switch_session", sessionPath: sessionFile },
+        })),
+      );
+      await new Promise((r) => setTimeout(r, 10));
+
+      // Now send prompt with image
       const command: RpcCommand = {
         id: "cmd-2",
         type: "prompt",
@@ -164,28 +243,26 @@ describe("WsRpcAdapter", () => {
           },
         ],
       };
-      (
-        ws as unknown as { trigger: (event: string, data: Buffer) => void }
-      ).trigger(
+      (ws as unknown as { trigger: (event: string, data: Buffer) => void }).trigger(
         "message",
         Buffer.from(JSON.stringify({ type: "command", payload: command })),
       );
 
-      await new Promise((r) => setTimeout(r, 10));
+      await new Promise((r) => setTimeout(r, 20));
 
-      expect(context.pi.sendUserMessage).toHaveBeenCalledWith(
-        [
-          { type: "text", text: "Inspect this image" },
+      expect(context.pi.sendUserMessage).not.toHaveBeenCalled();
+      expect(promptSpy).toHaveBeenCalledWith("Inspect this image", {
+        source: "rpc",
+        images: [
           {
             type: "image",
             mimeType: "image/png",
             data: "ZmFrZS1pbWFnZQ==",
           },
         ],
-        {
-          deliverAs: "steer",
-        },
-      );
+      });
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
     it("continues the selected session instead of using pi.sendUserMessage", async () => {
@@ -563,12 +640,23 @@ describe("WsRpcAdapter", () => {
     });
 
     it("should emit command_error event on command dispatch failure", async () => {
-      // Mock sendUserMessage to throw an error
-      (
-        context.pi.sendUserMessage as ReturnType<typeof vi.fn>
-      ).mockImplementation(() => {
-        throw new Error("Dispatch failed");
-      });
+      // The prompt handler auto-creates a session. If that fails, the
+      // error surfaces as a command_error event.
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-err-"));
+      const sessionFile = path.join(tmpDir, "session.jsonl");
+      fs.writeFileSync(
+        sessionFile,
+        JSON.stringify({
+          type: "session",
+          version: 3,
+          id: "err-session",
+          timestamp: new Date().toISOString(),
+          cwd: tmpDir,
+        }),
+      );
+      (context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>).mockReturnValue(sessionFile);
+
+      createAgentSessionMock.mockRejectedValue(new Error("Dispatch failed"));
 
       const command: RpcCommand = {
         id: "cmd-1",
@@ -593,6 +681,8 @@ describe("WsRpcAdapter", () => {
           error: "Dispatch failed",
         }),
       );
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     });
   });
 
