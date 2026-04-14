@@ -16,6 +16,12 @@
 // RPC Commands (client → server)
 // ============================================================================
 
+export interface RpcImageContent {
+  type: "image";
+  data: string;
+  mimeType: string;
+}
+
 /** All RPC command types that a browser client can send. */
 export type RpcCommand =
   // Prompting
@@ -23,11 +29,21 @@ export type RpcCommand =
       id?: string;
       type: "prompt";
       message: string;
-      images?: unknown[];
+      images?: RpcImageContent[];
       streamingBehavior?: "steer" | "followUp";
     }
-  | { id?: string; type: "steer"; message: string; images?: unknown[] }
-  | { id?: string; type: "follow_up"; message: string; images?: unknown[] }
+  | {
+      id?: string;
+      type: "steer";
+      message: string;
+      images?: RpcImageContent[];
+    }
+  | {
+      id?: string;
+      type: "follow_up";
+      message: string;
+      images?: RpcImageContent[];
+    }
   | { id?: string; type: "abort" }
   | { id?: string; type: "new_session"; parentSession?: string }
   // State

@@ -8,6 +8,7 @@
  */
 export type {
   RpcCommand,
+  RpcImageContent,
   RpcResponse,
   RpcSessionState,
   RpcSlashCommand,

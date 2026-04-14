@@ -8,7 +8,7 @@ import type {
   ConnectionStatus,
   TranscriptEntry,
 } from "../composables/useBridgeClient";
-import type { RpcSlashCommand } from "../shared-types";
+import type { RpcImageContent, RpcSlashCommand } from "../shared-types";
 import type { RpcModelInfo } from "../utils/models";
 
 defineProps<{
@@ -32,7 +32,7 @@ defineProps<{
 }>();
 
 const emit = defineEmits<{
-  submit: [message: string];
+  submit: [payload: { message: string; images: RpcImageContent[] }];
   abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];

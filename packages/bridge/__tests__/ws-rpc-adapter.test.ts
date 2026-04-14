@@ -151,6 +151,43 @@ describe("WsRpcAdapter", () => {
       });
     });
 
+    it("wraps prompt attachments into Pi image content", async () => {
+      const command: RpcCommand = {
+        id: "cmd-2",
+        type: "prompt",
+        message: "Inspect this image",
+        images: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: "ZmFrZS1pbWFnZQ==",
+          },
+        ],
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      expect(context.pi.sendUserMessage).toHaveBeenCalledWith(
+        [
+          { type: "text", text: "Inspect this image" },
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: "ZmFrZS1pbWFnZQ==",
+          },
+        ],
+        {
+          deliverAs: "steer",
+        },
+      );
+    });
+
     it("continues the selected session instead of using pi.sendUserMessage", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-session-"));
       const sessionManager = SessionManager.create(tmpDir, tmpDir);
@@ -234,6 +271,102 @@ describe("WsRpcAdapter", () => {
       expect(createAgentSessionMock).toHaveBeenCalledTimes(1);
       expect(promptSpy).toHaveBeenCalledWith("Continue here", {
         source: "rpc",
+      });
+    });
+
+    it("passes prompt attachments through when continuing the selected session", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-session-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Selected session" }],
+        timestamp: Date.now(),
+      });
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      const rawEntries = sessionManager.getEntries();
+      const header = {
+        type: "session",
+        version: 3,
+        id: sessionManager.getSessionId(),
+        timestamp: new Date().toISOString(),
+        cwd: tmpDir,
+      };
+      const lines = [JSON.stringify(header)];
+      for (const entry of rawEntries) {
+        lines.push(JSON.stringify(entry));
+      }
+      fs.writeFileSync(sessionFile, lines.join("\n"));
+
+      const promptSpy = vi.fn().mockResolvedValue(undefined);
+      const subscribeSpy = vi.fn().mockReturnValue(() => {});
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: subscribeSpy,
+          prompt: promptSpy,
+          sessionManager,
+        },
+      });
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "switch-attachments",
+              type: "switch_session",
+              sessionPath: sessionFile,
+            },
+          }),
+        ),
+      );
+
+      await new Promise((r) => setTimeout(r, 10));
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "prompt-attachments",
+              type: "prompt",
+              message: "Continue with context",
+              images: [
+                {
+                  type: "image",
+                  mimeType: "image/webp",
+                  data: "d2VicA==",
+                },
+              ],
+            },
+          }),
+        ),
+      );
+
+      await new Promise((r) => setTimeout(r, 20));
+
+      expect(promptSpy).toHaveBeenCalledWith("Continue with context", {
+        source: "rpc",
+        images: [
+          {
+            type: "image",
+            mimeType: "image/webp",
+            data: "d2VicA==",
+          },
+        ],
       });
     });
 

@@ -9,6 +9,7 @@ import AppMainContent from "./layout/AppMainContent.vue";
 import AppNotifications from "./layout/AppNotifications.vue";
 import AppSidebar from "./layout/AppSidebar.vue";
 import { readInitialDebugMode } from "./utils/debugMode";
+import type { RpcImageContent } from "./shared-types";
 import type { RpcModelInfo } from "./utils/models";
 
 type ThemeMode = "dark" | "light";
@@ -185,8 +186,8 @@ function handleTreeNavigate(entryId: string) {
   sendCommand({ type: "navigate_tree", entryId }).catch(() => {});
 }
 
-function handlePrompt(message: string) {
-  sendPrompt(message);
+function handlePrompt(message: string, images: RpcImageContent[]) {
+  sendPrompt(message, images);
 }
 
 function handleAbort() {
@@ -320,7 +321,7 @@ onBeforeUnmount(() => {
         :current-model="currentModel"
         :current-thinking-level="currentThinkingLevel"
         :session-stats="sessionStats"
-        @submit="handlePrompt"
+        @submit="handlePrompt($event.message, $event.images)"
         @abort="handleAbort"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"

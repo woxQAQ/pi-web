@@ -435,6 +435,38 @@ describe("extension_ui_request handling", () => {
     ).toBe(initialGetStateCount);
   });
 
+  it("sendPrompt forwards image attachments in the prompt payload", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    client.sendPrompt("Inspect this", [
+      {
+        type: "image",
+        mimeType: "image/png",
+        data: "ZmFrZS1pbWFnZQ==",
+      },
+    ]);
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        type: "command",
+        payload: {
+          type: "prompt",
+          message: "Inspect this",
+          images: [
+            {
+              type: "image",
+              mimeType: "image/png",
+              data: "ZmFrZS1pbWFnZQ==",
+            },
+          ],
+          streamingBehavior: "steer",
+        },
+      }),
+    );
+  });
+
   it("handles select method by setting pendingExtensionRequest", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();

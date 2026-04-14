@@ -206,4 +206,28 @@ describe("normalizeTranscript", () => {
       { kind: "thinking", text: "Need to inspect the log first." },
     ]);
   });
+
+  it("exposes inline image blocks with browser-safe data urls", () => {
+    const message = {
+      role: "user",
+      content: [
+        { type: "text", text: "Please inspect this screenshot." },
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: "aGVsbG8=",
+        },
+      ],
+    } satisfies TranscriptEntryLike;
+
+    expect(contentBlocks(message)).toEqual([
+      { kind: "text", text: "Please inspect this screenshot." },
+      {
+        kind: "image",
+        src: "data:image/png;base64,aGVsbG8=",
+        alt: "Image attachment",
+        mimeType: "image/png",
+      },
+    ]);
+  });
 });

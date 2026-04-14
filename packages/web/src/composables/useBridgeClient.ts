@@ -1,6 +1,7 @@
 import { ref, readonly, computed, onUnmounted } from "vue";
 import type {
   RpcCommand,
+  RpcImageContent,
   RpcResponse,
   RpcSessionState,
   RpcSlashCommand,
@@ -244,10 +245,10 @@ function requestTranscriptRefresh(
   }, delayMs);
 }
 
-function sendPrompt(message: string) {
+function sendPrompt(message: string, images?: RpcImageContent[]) {
   sendEnvelope({
     type: "command",
-    payload: { type: "prompt", message, streamingBehavior: "steer" },
+    payload: { type: "prompt", message, images, streamingBehavior: "steer" },
   });
 }
 

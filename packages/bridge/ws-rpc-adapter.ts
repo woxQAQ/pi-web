@@ -17,6 +17,7 @@ import type {
   RpcCommand,
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
+  RpcImageContent,
   RpcResponse,
   RpcSessionState,
   RpcSlashCommand,
@@ -81,9 +82,14 @@ interface PiExtensionCommandContext extends PiExtensionContext {
 /**
  * Pi extension API surface
  */
+interface BridgeTextContent {
+  type: "text";
+  text: string;
+}
+
 interface PiExtensionAPI {
   sendUserMessage: (
-    content: string | unknown[],
+    content: string | Array<BridgeTextContent | RpcImageContent>,
     options?: { deliverAs?: "steer" | "followUp" },
   ) => void;
   setModel: (model: unknown) => Promise<boolean>;
@@ -538,6 +544,42 @@ function describeSessionEntry(entry: SessionEntry): string {
   }
 }
 
+function normalizeRpcImages(images: unknown): RpcImageContent[] | undefined {
+  if (!Array.isArray(images)) return undefined;
+
+  const normalized = images.flatMap((image): RpcImageContent[] => {
+    if (typeof image !== "object" || image === null) return [];
+
+    const data = (image as { data?: unknown }).data;
+    const mimeType = (image as { mimeType?: unknown }).mimeType;
+    if (
+      typeof data !== "string" ||
+      typeof mimeType !== "string" ||
+      !mimeType.startsWith("image/")
+    ) {
+      return [];
+    }
+
+    return [{ type: "image", data, mimeType }];
+  });
+
+  return normalized.length > 0 ? normalized : undefined;
+}
+
+function buildUserMessageContent(
+  message: string,
+  images?: RpcImageContent[],
+): string | Array<BridgeTextContent | RpcImageContent> {
+  if (!images?.length) return message;
+
+  const content: Array<BridgeTextContent | RpcImageContent> = [];
+  if (message) {
+    content.push({ type: "text", text: message });
+  }
+  content.push(...images);
+  return content;
+}
+
 function describeMessage(message: {
   role?: string;
   content?: unknown;
@@ -950,14 +992,16 @@ export class WsRpcAdapter {
       // =================================================================
 
       case "prompt": {
+        const images = normalizeRpcImages(command.images);
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
           const promptOptions = session.isStreaming
             ? {
                 source: "rpc" as const,
+                images,
                 streamingBehavior: command.streamingBehavior ?? "steer",
               }
-            : { source: "rpc" as const };
+            : { source: "rpc" as const, images };
 
           setTimeout(() => {
             void session.prompt(command.message, promptOptions).catch((error) => {
@@ -977,7 +1021,7 @@ export class WsRpcAdapter {
             });
           }, 0);
         } else {
-          pi.sendUserMessage(command.message, {
+          pi.sendUserMessage(buildUserMessageContent(command.message, images), {
             deliverAs: command.streamingBehavior ?? "steer",
           });
         }
@@ -990,16 +1034,19 @@ export class WsRpcAdapter {
       }
 
       case "steer": {
+        const images = normalizeRpcImages(command.images);
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          void session.steer(command.message).catch((error) => {
+          void session.steer(command.message, images).catch((error) => {
             console.error(
               `WsRpcAdapter[${this.client.id}]: Detached steer failed:`,
               error,
             );
           });
         } else {
-          pi.sendUserMessage(command.message, { deliverAs: "steer" });
+          pi.sendUserMessage(buildUserMessageContent(command.message, images), {
+            deliverAs: "steer",
+          });
         }
         return {
           id: correlationId,
@@ -1010,16 +1057,19 @@ export class WsRpcAdapter {
       }
 
       case "follow_up": {
+        const images = normalizeRpcImages(command.images);
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          void session.followUp(command.message).catch((error) => {
+          void session.followUp(command.message, images).catch((error) => {
             console.error(
               `WsRpcAdapter[${this.client.id}]: Detached follow_up failed:`,
               error,
             );
           });
         } else {
-          pi.sendUserMessage(command.message, { deliverAs: "followUp" });
+          pi.sendUserMessage(buildUserMessageContent(command.message, images), {
+            deliverAs: "followUp",
+          });
         }
         return {
           id: correlationId,

@@ -31,7 +31,9 @@ export interface ThinkingContentBlock {
 
 export interface ImageContentBlock {
   kind: "image";
-  text: string;
+  src: string;
+  alt: string;
+  mimeType?: string;
 }
 
 export type ContentBlock =
@@ -48,6 +50,10 @@ interface UnknownBlock {
   arguments?: unknown;
   details?: unknown;
   isError?: boolean;
+  data?: string;
+  mimeType?: string;
+  url?: string;
+  image_url?: string | { url?: string };
 }
 
 export function isErrorMessage(msg: TranscriptEntryLike): boolean {
@@ -63,9 +69,7 @@ export function errorMessageText(msg: TranscriptEntryLike): string {
 }
 
 export function isAbortedMessage(msg: TranscriptEntryLike): boolean {
-  return (
-    (msg as Record<string, unknown>).stopReason === "aborted"
-  );
+  return (msg as Record<string, unknown>).stopReason === "aborted";
 }
 
 export function isToolResultMessage(msg: TranscriptEntryLike): boolean {
@@ -88,8 +92,9 @@ export function messageContent(
         if (
           typedBlock.type === "toolResult" &&
           typeof typedBlock.text === "string"
-        )
+        ) {
           return typedBlock.text;
+        }
         return "";
       })
       .filter(Boolean)
@@ -179,7 +184,20 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
     }
 
     if (type === "image" || type === "image_url") {
-      blocks.push({ kind: "image", text: "[image]" });
+      const src = imageBlockSource(typedBlock);
+      if (src) {
+        blocks.push({
+          kind: "image",
+          src,
+          alt: typedBlock.text || "Image attachment",
+          mimeType:
+            typeof typedBlock.mimeType === "string"
+              ? typedBlock.mimeType
+              : undefined,
+        });
+      } else {
+        blocks.push({ kind: "text", text: "[image]" });
+      }
     }
   }
 
@@ -322,4 +340,28 @@ function toolStatusFromResult(
 ): ToolBlockStatus {
   if (!resultText) return "pending";
   return isError ? "error" : "success";
+}
+
+function imageBlockSource(block: UnknownBlock): string | null {
+  if (typeof block.data === "string" && typeof block.mimeType === "string") {
+    return `data:${block.mimeType};base64,${block.data}`;
+  }
+
+  if (typeof block.url === "string") {
+    return block.url;
+  }
+
+  if (typeof block.image_url === "string") {
+    return block.image_url;
+  }
+
+  if (
+    typeof block.image_url === "object" &&
+    block.image_url !== null &&
+    typeof block.image_url.url === "string"
+  ) {
+    return block.image_url.url;
+  }
+
+  return null;
 }

@@ -150,6 +150,7 @@ defineExpose({ preserveScroll });
       <div class="empty-hints">
         <span class="hint-chip">/ commands</span>
         <span class="hint-chip">Enter send</span>
+        <span class="hint-chip">Drop or paste images</span>
       </div>
     </div>
     <template v-for="(msg, index) in messages" :key="msg.id ?? index">
@@ -237,6 +238,15 @@ defineExpose({ preserveScroll });
               :expanded="isToolBlockExpanded(msg.id, bIdx)"
               @toggle="toggleToolBlock(msg.id, bIdx)"
             />
+
+            <figure v-else-if="block.kind === 'image'" class="message-image-block">
+              <img
+                class="message-image"
+                :src="block.src"
+                :alt="block.alt"
+                loading="lazy"
+              />
+            </figure>
 
             <MarkdownRenderer
               v-else-if="block.kind === 'text' && block.text"
@@ -389,15 +399,36 @@ defineExpose({ preserveScroll });
 .markdown-body + .markdown-body,
 .markdown-body + .thinking-block,
 .markdown-body + .tool-card-block,
+.markdown-body + .message-image-block,
 .thinking-block + .markdown-body,
+.thinking-block + .message-image-block,
 .tool-card-block + .markdown-body,
 .tool-card-block + .thinking-block,
-.thinking-block + .tool-card-block {
+.tool-card-block + .message-image-block,
+.message-image-block + .markdown-body,
+.message-image-block + .thinking-block,
+.message-image-block + .tool-card-block,
+.message-image-block + .message-image-block {
   margin-top: 12px;
 }
 
 .thinking-block {
   padding-left: 10px;
+}
+
+.message-image-block {
+  margin: 0;
+}
+
+.message-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  object-fit: contain;
 }
 
 .thinking-toggle {
