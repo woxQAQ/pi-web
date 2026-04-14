@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CornerDownLeft } from "lucide-vue-next";
+import { CornerDownLeft, Square } from "lucide-vue-next";
 import { computed, nextTick, ref, watch } from "vue";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
 import type { RpcSlashCommand } from "../shared-types";
@@ -18,6 +18,7 @@ const THINKING_LEVEL_OPTIONS = [
 
 const props = defineProps<{
   connectionStatus: ConnectionStatus;
+  isStreaming: boolean;
   commands: RpcSlashCommand[];
   models: RpcModelInfo[];
   selectedModel: RpcModelInfo | null;
@@ -26,6 +27,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   submit: [message: string];
+  abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
 }>();
@@ -63,9 +65,11 @@ const thinkingSelectWidth = computed(
 const normalizedInputText = computed(() =>
   normalizeSubmittedText(inputText.value),
 );
+const showStopButton = computed(() => props.isStreaming);
 const canSubmit = computed(
   () => !isDisabled.value && normalizedInputText.value.length > 0,
 );
+const canAbort = computed(() => !isDisabled.value && props.isStreaming);
 
 function normalizeSubmittedText(value: string): string {
   const normalized = value.replace(/\r\n/g, "\n");
@@ -110,6 +114,19 @@ function handleSubmit() {
   resizeTextarea();
 }
 
+function handleAbort() {
+  if (!canAbort.value) return;
+  emit("abort");
+}
+
+function handlePrimaryAction() {
+  if (showStopButton.value) {
+    handleAbort();
+    return;
+  }
+  handleSubmit();
+}
+
 function handleCommandSelect(commandName: string) {
   inputText.value = "";
   showPalette.value = false;
@@ -132,6 +149,12 @@ function handleThinkingLevelChange(event: Event) {
 }
 
 function handleInputKeydown(e: KeyboardEvent) {
+  if (e.key === "Escape" && props.isStreaming) {
+    e.preventDefault();
+    handleAbort();
+    return;
+  }
+
   if (showPalette.value && paletteRef.value) {
     if (
       e.key === "ArrowDown" ||
@@ -211,11 +234,13 @@ resizeTextarea();
           </div>
           <button
             class="send-btn"
-            :disabled="!canSubmit"
-            aria-label="Send message"
-            @click="handleSubmit"
+            :class="{ stop: showStopButton }"
+            :disabled="showStopButton ? !canAbort : !canSubmit"
+            :aria-label="showStopButton ? 'Stop response' : 'Send message'"
+            @click="handlePrimaryAction"
           >
-            <CornerDownLeft class="send-icon" aria-hidden="true" />
+            <Square v-if="showStopButton" class="send-icon stop-icon" aria-hidden="true" />
+            <CornerDownLeft v-else class="send-icon" aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -325,6 +350,17 @@ resizeTextarea();
   transform: translateY(-1px);
 }
 
+.send-btn.stop {
+  border-color: color-mix(in srgb, var(--error-border) 92%, var(--border));
+  background: color-mix(in srgb, var(--error-bg) 82%, var(--button-bg));
+  color: var(--error-text);
+}
+
+.send-btn.stop:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--error-bg) 92%, var(--button-hover));
+  border-color: color-mix(in srgb, var(--error-border) 100%, var(--border-strong));
+}
+
 .send-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
@@ -333,6 +369,11 @@ resizeTextarea();
 .send-icon {
   width: 15px;
   height: 15px;
+}
+
+.stop-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .composer-footer-row {

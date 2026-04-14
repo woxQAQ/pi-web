@@ -115,6 +115,31 @@ describe("buildToolCardModel", () => {
     expect(model.details).toEqual([]);
   });
 
+  it("hides added and removed stats when an edit does not succeed", () => {
+    const block: ToolContentBlock = {
+      kind: "tool",
+      toolName: "edit",
+      toolArgs: {
+        path: "src/app.ts",
+        edits: [
+          { oldText: "const a = 1;", newText: "const a = 2;" },
+          { oldText: "return a;", newText: "return b;" },
+        ],
+      },
+      argumentsText:
+        '{"path":"src/app.ts","edits":[{"oldText":"const a = 1;","newText":"const a = 2;"},{"oldText":"return a;","newText":"return b;"}]}',
+      resultText: "Could not find the exact text to replace in src/app.ts.",
+      toolStatus: "error",
+    };
+
+    const model = buildToolCardModel(block);
+    expect(model.meta).toBe("2 replacements");
+    expect(model.diffStats).toBeUndefined();
+    expect(model.preview).toBe(
+      "Could not find the exact text to replace in src/app.ts.",
+    );
+  });
+
   it("shows pending tool state as inline status text", () => {
     const block: ToolContentBlock = {
       kind: "tool",

@@ -1,10 +1,12 @@
 <script setup lang="ts">
-import { Menu, Moon, Sun } from "lucide-vue-next";
+import { Bug, Menu, Moon, Sun } from "lucide-vue-next";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
 
 defineProps<{
   theme: "dark" | "light";
   nextThemeLabel: "dark" | "light";
+  debugMode: boolean;
+  debugModeLabel: string;
   activeSessionLabel: string;
   networkUrl: string;
   connectionStatus: ConnectionStatus;
@@ -13,6 +15,7 @@ defineProps<{
 const emit = defineEmits<{
   toggleSidebar: [];
   toggleTheme: [];
+  toggleDebugMode: [];
 }>();
 </script>
 
@@ -34,6 +37,17 @@ const emit = defineEmits<{
     </div>
     <div class="header-status">
       <span v-if="networkUrl" class="network-url">{{ networkUrl }}</span>
+      <button
+        class="debug-toggle"
+        :class="{ active: debugMode }"
+        type="button"
+        :aria-label="debugModeLabel"
+        :title="debugModeLabel"
+        @click="emit('toggleDebugMode')"
+      >
+        <Bug class="debug-icon" aria-hidden="true" />
+        <span class="debug-label">Debug</span>
+      </button>
       <button
         class="theme-toggle"
         type="button"
@@ -143,6 +157,7 @@ const emit = defineEmits<{
 
 .network-url,
 .connection-indicator,
+.debug-toggle,
 .theme-toggle {
   display: inline-flex;
   align-items: center;
@@ -156,12 +171,8 @@ const emit = defineEmits<{
   color: var(--text-subtle);
 }
 
+.debug-toggle,
 .theme-toggle {
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
-  border-radius: 999px;
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -170,6 +181,11 @@ const emit = defineEmits<{
     transform 0.15s ease;
 }
 
+.debug-toggle {
+  padding-right: 12px;
+}
+
+.debug-toggle:hover,
 .theme-toggle:hover {
   background: var(--panel-2);
   border-color: var(--border-strong);
@@ -177,6 +193,20 @@ const emit = defineEmits<{
   transform: translateY(-1px);
 }
 
+.debug-toggle.active {
+  border-color: var(--border-strong);
+  color: var(--text);
+  background: var(--panel-2);
+}
+
+.theme-toggle {
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.debug-icon,
 .theme-icon {
   width: 16px;
   height: 16px;
@@ -230,8 +260,13 @@ const emit = defineEmits<{
   }
 
   .session-kicker,
-  .network-url {
+  .network-url,
+  .debug-label {
     display: none;
+  }
+
+  .debug-toggle {
+    padding-right: 10px;
   }
 }
 </style>

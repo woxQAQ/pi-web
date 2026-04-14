@@ -27,7 +27,12 @@ const TOOL_LABELS: Record<string, string> = {
 export function buildToolCardModel(block: ToolContentBlock): ToolCardModel {
   const args = asRecord(block.toolArgs);
   const title = formatToolTitle(block.toolName, args);
-  const diffStats = buildDiffStats(block.toolName, args, block.resultDetails);
+  const diffStats = buildDiffStats(
+    block.toolName,
+    args,
+    block.resultDetails,
+    block.toolStatus,
+  );
   const meta = formatToolMeta(
     block.toolName,
     args,
@@ -373,8 +378,9 @@ function buildDiffStats(
   toolName: string,
   args: ToolArgsRecord | undefined,
   resultDetails: unknown,
+  status: ToolBlockStatus,
 ): { added: number; removed: number; suffix?: string } | undefined {
-  if (toolName !== "edit") return undefined;
+  if (toolName !== "edit" || status !== "success") return undefined;
   const stats = editDiffStats(args, blockResultDiff(resultDetails));
   if (!stats) return undefined;
   const edits = Array.isArray(args?.edits) ? args.edits.length : undefined;

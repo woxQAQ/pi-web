@@ -21,6 +21,7 @@ describe("normalizeTranscript", () => {
         id: "t1",
         role: "tool",
         content: "stdout: /repo",
+        isError: false,
       },
     ];
 
@@ -55,6 +56,7 @@ describe("normalizeTranscript", () => {
         role: "tool",
         content: "Successfully replaced 1 block(s) in a.ts.",
         details: { diff },
+        isError: false,
       },
     ];
 
@@ -78,8 +80,8 @@ describe("normalizeTranscript", () => {
           { type: "toolCall", name: "read", arguments: '{"path":"b.txt"}' },
         ],
       },
-      { id: "t1", role: "tool", content: "A" },
-      { id: "t2", role: "tool", content: "B" },
+      { id: "t1", role: "tool", content: "A", isError: false },
+      { id: "t2", role: "tool", content: "B", isError: false },
     ];
 
     const normalized = normalizeTranscript(messages);
@@ -156,6 +158,35 @@ describe("normalizeTranscript", () => {
         argumentsText: '{"path":"note.txt","content":"hello"}',
         toolStatus: "pending",
       },
+    ]);
+  });
+
+  it("uses tool result isError when merging failed edit replacements", () => {
+    const normalized = normalizeTranscript([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            name: "edit",
+            arguments: '{"path":"src/app.ts","edits":[{"oldText":"a","newText":"b"}]}',
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: "Could not find the exact text to replace in src/app.ts.",
+        isError: true,
+      },
+    ]);
+
+    expect(contentBlocks(normalized[0])).toEqual([
+      expect.objectContaining({
+        kind: "tool",
+        toolName: "edit",
+        toolStatus: "error",
+        resultText: "Could not find the exact text to replace in src/app.ts.",
+      }),
     ]);
   });
 

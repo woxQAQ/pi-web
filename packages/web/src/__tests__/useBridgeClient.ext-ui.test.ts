@@ -740,6 +740,46 @@ describe("extension_ui_request handling", () => {
     expect(client.notifications.value[0].id).toBe("n2");
   });
 
+  it("abortGeneration sends abort only while streaming", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    await expect(client.abortGeneration()).resolves.toBeNull();
+    expect(ws.send).not.toHaveBeenCalledWith(
+      expect.stringContaining('"type":"abort"'),
+    );
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: { type: "agent_start" },
+    });
+
+    const abortPromise = client.abortGeneration();
+    const abortRequest = ws.send.mock.calls
+      .map(([message]: [string]) =>
+        JSON.parse(message) as { payload?: { type?: string; id?: string } },
+      )
+      .find((message) => message.payload?.type === "abort");
+
+    expect(abortRequest?.payload?.id).toBeTruthy();
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        id: abortRequest?.payload?.id,
+        command: "abort",
+        success: true,
+      },
+    });
+
+    await expect(abortPromise).resolves.toMatchObject({
+      command: "abort",
+      success: true,
+    });
+  });
+
   it("clears pendingExtensionRequest and notifications on WS close", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();

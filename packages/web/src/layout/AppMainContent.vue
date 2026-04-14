@@ -16,6 +16,7 @@ defineProps<{
   statusEntries: Record<string, string>;
   transcript: readonly TranscriptEntry[];
   isStreaming: boolean;
+  isDebugMode: boolean;
   connectionStatus: ConnectionStatus;
   commands: readonly RpcSlashCommand[];
   availableModels: readonly RpcModelInfo[];
@@ -32,6 +33,7 @@ defineProps<{
 
 const emit = defineEmits<{
   submit: [message: string];
+  abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
 }>();
@@ -63,15 +65,18 @@ defineExpose({ preserveTranscriptScroll });
       ref="chatTranscriptRef"
       :messages="transcript"
       :is-streaming="isStreaming"
+      :show-message-ids="isDebugMode"
     />
     <SessionStatsBar :stats="sessionStats" />
     <ComposerBar
       :connection-status="connectionStatus"
+      :is-streaming="isStreaming"
       :commands="commands"
       :models="availableModels"
       :selected-model="currentModel"
       :thinking-level="currentThinkingLevel"
       @submit="emit('submit', $event)"
+      @abort="emit('abort')"
       @select-model="emit('selectModel', $event)"
       @select-thinking-level="emit('selectThinkingLevel', $event)"
     />

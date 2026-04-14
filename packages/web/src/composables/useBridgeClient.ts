@@ -215,6 +215,11 @@ function sendPrompt(message: string) {
   });
 }
 
+function abortGeneration() {
+  if (!isStreaming.value) return Promise.resolve(null);
+  return sendCommand({ type: "abort" });
+}
+
 async function setThinkingLevel(level: string) {
   const response = await sendCommand({ type: "set_thinking_level", level });
   if (response.success) {
@@ -689,6 +694,7 @@ export function useBridgeClient() {
     dismissNotification,
     sendCommand,
     sendPrompt,
+    abortGeneration,
     setThinkingLevel,
     connect,
     disconnect,

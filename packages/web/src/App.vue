@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useBridgeClient } from "./composables/useBridgeClient";
 import ExtensionDialog from "./components/ExtensionDialog.vue";
 import ReconnectBanner from "./components/ReconnectBanner.vue";
@@ -30,6 +30,7 @@ const {
   lastDisconnectReason,
   connectionError,
   sendPrompt,
+  abortGeneration,
   sendCommand,
   setThinkingLevel,
   pendingExtensionRequest,
@@ -62,6 +63,8 @@ const treePanelOpen = ref(false);
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
 
 const THEME_CACHE_KEY = "pi-web-theme";
+const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
+
 function readCachedTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";
   const cached = window.localStorage.getItem(THEME_CACHE_KEY);
@@ -70,26 +73,47 @@ function readCachedTheme(): ThemeMode {
     ? "light"
     : "dark";
 }
+
+function readCachedDebugMode(): boolean {
+  if (typeof window === "undefined") return false;
+  const cached = window.localStorage.getItem(DEBUG_MODE_CACHE_KEY);
+  if (cached === "true" || cached === "false") return cached === "true";
+  return new URLSearchParams(window.location.search).get("debug") === "1";
+}
+
 const theme = ref<ThemeMode>(readCachedTheme());
+const debugMode = ref(readCachedDebugMode());
 const nextThemeLabel = computed<ThemeMode>(() =>
   theme.value === "dark" ? "light" : "dark",
 );
+const debugModeLabel = computed(() =>
+  debugMode.value ? "Disable debug mode" : "Enable debug mode",
+);
 
-let themeLoaded = false;
+let preferencesLoaded = false;
 watch(connectionStatus, async (status) => {
-  if (status !== "connected" || themeLoaded) return;
-  themeLoaded = true;
+  if (status !== "connected" || preferencesLoaded) return;
+  preferencesLoaded = true;
   try {
-    const res = await sendCommand({ type: "get_plugin_state", key: "theme" });
-    if (res.success && (res.data as { value?: unknown }).value) {
-      const saved = (res.data as { value: string }).value;
-      if (saved === "dark" || saved === "light") {
-        theme.value = saved;
-        return;
-      }
+    const [themeRes, debugModeRes] = await Promise.all([
+      sendCommand({ type: "get_plugin_state", key: "theme" }),
+      sendCommand({ type: "get_plugin_state", key: "debugMode" }),
+    ]);
+
+    const savedTheme = (themeRes.data as { value?: unknown } | undefined)
+      ?.value;
+    if (themeRes.success && (savedTheme === "dark" || savedTheme === "light")) {
+      theme.value = savedTheme;
+    }
+
+    const savedDebugMode = (
+      debugModeRes.data as { value?: unknown } | undefined
+    )?.value;
+    if (debugModeRes.success && typeof savedDebugMode === "boolean") {
+      debugMode.value = savedDebugMode;
     }
   } catch {
-    // Server unavailable, keep cached value.
+    // Server unavailable, keep cached values.
   }
 });
 
@@ -98,6 +122,15 @@ watch(theme, (value) => {
     window.localStorage.setItem(THEME_CACHE_KEY, value);
   }
   sendCommand({ type: "set_plugin_state", key: "theme", value }).catch(
+    () => {},
+  );
+});
+
+watch(debugMode, (value) => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
+  }
+  sendCommand({ type: "set_plugin_state", key: "debugMode", value }).catch(
     () => {},
   );
 });
@@ -112,6 +145,10 @@ const compatWarningVisible = ref(false);
 
 function toggleTheme() {
   theme.value = theme.value === "dark" ? "light" : "dark";
+}
+
+function toggleDebugMode() {
+  debugMode.value = !debugMode.value;
 }
 
 function handleSessionSelect(sessionPath: string) {
@@ -136,6 +173,10 @@ function handleTreeNavigate(entryId: string) {
 
 function handlePrompt(message: string) {
   sendPrompt(message);
+}
+
+function handleAbort() {
+  abortGeneration().catch(() => {});
 }
 
 function handleModelSelect(model: RpcModelInfo) {
@@ -197,6 +238,23 @@ watch(
   },
   { deep: true },
 );
+
+function handleGlobalKeydown(event: KeyboardEvent) {
+  if (event.defaultPrevented) return;
+  if (event.key !== "Escape") return;
+  if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return;
+  if (!isStreaming.value) return;
+  event.preventDefault();
+  handleAbort();
+}
+
+onMounted(() => {
+  window.addEventListener("keydown", handleGlobalKeydown);
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("keydown", handleGlobalKeydown);
+});
 </script>
 
 <template>
@@ -204,11 +262,14 @@ watch(
     <AppHeader
       :theme="theme"
       :next-theme-label="nextThemeLabel"
+      :debug-mode="debugMode"
+      :debug-mode-label="debugModeLabel"
       :active-session-label="activeSessionLabel"
       :network-url="networkUrl"
       :connection-status="connectionStatus"
       @toggle-sidebar="sidebarOpen = !sidebarOpen"
       @toggle-theme="toggleTheme"
+      @toggle-debug-mode="toggleDebugMode"
     />
 
     <ReconnectBanner
@@ -237,6 +298,7 @@ watch(
         :status-entries="statusEntries"
         :transcript="transcript"
         :is-streaming="isStreaming"
+        :is-debug-mode="debugMode"
         :connection-status="connectionStatus"
         :commands="commands"
         :available-models="availableModels"
@@ -244,6 +306,7 @@ watch(
         :current-thinking-level="currentThinkingLevel"
         :session-stats="sessionStats"
         @submit="handlePrompt"
+        @abort="handleAbort"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"
       />

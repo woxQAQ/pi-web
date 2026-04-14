@@ -16,6 +16,7 @@ import ToolCard from "./ToolCard.vue";
 const props = defineProps<{
   messages: readonly TranscriptEntry[];
   isStreaming: boolean;
+  showMessageIds: boolean;
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
@@ -96,6 +97,10 @@ function previewText(text: string, maxLines: number = 8): string {
   return `${lines.slice(0, maxLines).join("\n")}\n... ${remaining} more line${remaining === 1 ? "" : "s"}`;
 }
 
+function messageIdLabel(msg: TranscriptEntry): string {
+  return msg.id ?? "missing";
+}
+
 watch(
   () => props.messages.length,
   async () => {
@@ -155,9 +160,14 @@ defineExpose({ preserveScroll });
         <div class="message-content tool-row">
           <div class="tool-result-card">
             <div class="tool-result-card-header">
-              <span class="tool-result-card-label">{{
-                roleLabel(msg.role)
-              }}</span>
+              <div class="tool-result-card-heading">
+                <span class="tool-result-card-label">{{
+                  roleLabel(msg.role)
+                }}</span>
+                <span v-if="showMessageIds" class="message-debug-id">
+                  ID {{ messageIdLabel(msg) }}
+                </span>
+              </div>
               <button
                 type="button"
                 class="tool-result-card-toggle"
@@ -179,17 +189,31 @@ defineExpose({ preserveScroll });
         </div>
       </div>
 
-      <div v-else-if="isErrorMessage(msg)" class="message-row" :class="roleClass(msg.role)">
+      <div
+        v-else-if="isErrorMessage(msg)"
+        class="message-row"
+        :class="roleClass(msg.role)"
+      >
         <div class="message-content" :class="roleClass(msg.role)">
+          <div v-if="showMessageIds" class="message-debug-id">
+            ID {{ messageIdLabel(msg) }}
+          </div>
           <div class="error-block" :class="{ aborted: isAbortedMessage(msg) }">
-            <span class="error-label">{{ isAbortedMessage(msg) ? "Cancelled" : "Error" }}</span>
-            <span v-if="errorMessageText(msg)" class="error-message">{{ errorMessageText(msg) }}</span>
+            <span class="error-label">{{
+              isAbortedMessage(msg) ? "Cancelled" : "Error"
+            }}</span>
+            <span v-if="errorMessageText(msg)" class="error-message">{{
+              errorMessageText(msg)
+            }}</span>
           </div>
         </div>
       </div>
 
       <div v-else class="message-row" :class="roleClass(msg.role)">
         <div class="message-content" :class="roleClass(msg.role)">
+          <div v-if="showMessageIds" class="message-debug-id">
+            ID {{ messageIdLabel(msg) }}
+          </div>
           <template v-for="(block, bIdx) in contentBlocks(msg)" :key="bIdx">
             <div v-if="block.kind === 'thinking'" class="thinking-block">
               <button
@@ -336,6 +360,22 @@ defineExpose({ preserveScroll });
   padding-left: 14px;
 }
 
+.message-debug-id {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 10px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel) 88%, transparent);
+  font-family:
+    ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono",
+    Menlo, monospace;
+  font-size: 0.66rem;
+  line-height: 1;
+  color: var(--text-subtle);
+}
+
 .message-content.user {
   width: fit-content;
   max-width: min(720px, 100%);
@@ -439,9 +479,17 @@ defineExpose({ preserveScroll });
 
 .tool-result-card-header {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+}
+
+.tool-result-card-heading {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
 }
 
 .tool-result-card-label {
@@ -541,6 +589,15 @@ defineExpose({ preserveScroll });
   .tool-row {
     margin-left: 0;
     max-width: 100%;
+  }
+
+  .tool-result-card-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .tool-result-card-toggle {
+    align-self: flex-start;
   }
 
   .streaming-indicator {

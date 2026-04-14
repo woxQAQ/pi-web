@@ -47,6 +47,7 @@ interface UnknownBlock {
   name?: string;
   arguments?: unknown;
   details?: unknown;
+  isError?: boolean;
 }
 
 export function isErrorMessage(msg: TranscriptEntryLike): boolean {
@@ -150,6 +151,10 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
         typedNextBlock?.type === "toolResult"
           ? typedNextBlock.details
           : undefined;
+      const resultIsError =
+        typedNextBlock?.type === "toolResult"
+          ? toolResultIsError(typedNextBlock)
+          : undefined;
 
       blocks.push({
         kind: "tool",
@@ -159,7 +164,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
         argumentsText: toolArgumentsText(typedBlock.arguments),
         resultText,
         resultDetails,
-        toolStatus: toolStatusFromResult(resultText),
+        toolStatus: toolStatusFromResult(resultText, resultIsError),
       });
 
       if (typedNextBlock?.type === "toolResult") {
@@ -239,6 +244,10 @@ function mergeToolResultIntoContent(
     type: "toolResult",
     text: messageContent(toolResultMessage),
     details: toolResultMessage.details,
+    isError:
+      typeof toolResultMessage.isError === "boolean"
+        ? toolResultMessage.isError
+        : undefined,
   });
   return cloned;
 }
@@ -287,6 +296,10 @@ function toolResultText(block: UnknownBlock): string {
   return JSON.stringify(block, null, 2);
 }
 
+function toolResultIsError(block: UnknownBlock): boolean | undefined {
+  return typeof block.isError === "boolean" ? block.isError : undefined;
+}
+
 function parseToolArguments(args: unknown): unknown {
   if (typeof args !== "string") return args;
   const trimmed = args.trim();
@@ -303,15 +316,10 @@ function toolArgumentsText(args: unknown): string {
   return JSON.stringify(args ?? "", null, 2);
 }
 
-function toolStatusFromResult(resultText: string | undefined): ToolBlockStatus {
+function toolStatusFromResult(
+  resultText: string | undefined,
+  isError: boolean | undefined,
+): ToolBlockStatus {
   if (!resultText) return "pending";
-  const firstLine = resultText.split("\n")[0]?.trim() ?? "";
-  if (/^(error|failed)\b/i.test(firstLine)) return "error";
-  if (
-    /\b(command exited with code|timed out|aborted|not found)\b/i.test(
-      resultText,
-    )
-  )
-    return "error";
-  return "success";
+  return isError ? "error" : "success";
 }
