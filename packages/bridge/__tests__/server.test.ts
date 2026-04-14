@@ -377,7 +377,9 @@ describe("BridgeServer", () => {
       );
       const address = await server.start();
 
-      const ws = new WebSocket(`ws://localhost:${address.port}/ws?token=legacy`);
+      const ws = new WebSocket(
+        `ws://localhost:${address.port}/ws?token=legacy`,
+      );
       await new Promise<void>((resolve, reject) => {
         ws.once("open", () => resolve());
         ws.once("error", reject);
@@ -402,9 +404,7 @@ describe("BridgeServer", () => {
       expect(server.getClientCount()).toBe(0);
       expect(server.getClients()).toEqual([]);
 
-      const ws = new WebSocket(
-        `ws://localhost:${address.port}/ws`,
-      );
+      const ws = new WebSocket(`ws://localhost:${address.port}/ws`);
       await new Promise<void>((resolve, reject) => {
         ws.once("open", () => resolve());
         ws.once("error", reject);
@@ -447,9 +447,7 @@ describe("BridgeServer", () => {
       );
       const address = await server.start();
 
-      const ws = new WebSocket(
-        `ws://localhost:${address.port}/ws`,
-      );
+      const ws = new WebSocket(`ws://localhost:${address.port}/ws`);
       await new Promise<void>((resolve, reject) => {
         ws.once("open", () => resolve());
         ws.once("error", reject);
@@ -515,6 +513,45 @@ describe("BridgeServer", () => {
       } finally {
         await server.stop();
         rmSync(tmpDir, { recursive: true, force: true });
+      }
+    });
+
+    it("injects runtime config into served html", async () => {
+      const { mkdtempSync, writeFileSync, rmSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const { tmpdir } = await import("node:os");
+
+      const previousDebugEnv = process.env.PI_WEB_DEBUG;
+      process.env.PI_WEB_DEBUG = "1";
+
+      const tmpDir = mkdtempSync(join(tmpdir(), "bridge-runtime-config-test-"));
+      writeFileSync(
+        join(tmpDir, "index.html"),
+        "<html><head></head><body>Real Bundle</body></html>",
+      );
+
+      const server = new BridgeServer(
+        { ...DEFAULT_BRIDGE_CONFIG, port: 0, staticDir: tmpDir },
+        mockContext,
+        eventBus,
+        (event) => events.push(event),
+      );
+      const address = await server.start();
+
+      try {
+        const response = await requestText(`http://localhost:${address.port}/`);
+        expect(response.status).toBe(200);
+        expect(response.body).toContain(
+          'window.__PI_WEB_CONFIG__={"debugModeAvailable":true}',
+        );
+      } finally {
+        await server.stop();
+        rmSync(tmpDir, { recursive: true, force: true });
+        if (previousDebugEnv === undefined) {
+          delete process.env.PI_WEB_DEBUG;
+        } else {
+          process.env.PI_WEB_DEBUG = previousDebugEnv;
+        }
       }
     });
 

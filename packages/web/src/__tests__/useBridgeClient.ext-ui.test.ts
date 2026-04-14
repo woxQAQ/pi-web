@@ -740,6 +740,60 @@ describe("extension_ui_request handling", () => {
     expect(client.notifications.value[0].id).toBe("n2");
   });
 
+  it("backfills delayed message ids onto existing transcript entries", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "message_start",
+        role: "user",
+        content: "Hello",
+      },
+    });
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "message_end",
+        id: "user-1",
+        role: "user",
+        content: "Hello",
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "message_start",
+        role: "assistant",
+        content: "Hi",
+      },
+    });
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "message_update",
+        id: "assistant-1",
+        role: "assistant",
+        content: "Hi there",
+      },
+    });
+
+    expect(client.transcript.value).toHaveLength(2);
+    expect(client.transcript.value[0]).toMatchObject({
+      id: "user-1",
+      role: "user",
+      content: "Hello",
+    });
+    expect(client.transcript.value[1]).toMatchObject({
+      id: "assistant-1",
+      role: "assistant",
+      content: "Hi there",
+    });
+  });
+
   it("abortGeneration sends abort only while streaming", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();
@@ -757,8 +811,9 @@ describe("extension_ui_request handling", () => {
 
     const abortPromise = client.abortGeneration();
     const abortRequest = ws.send.mock.calls
-      .map(([message]: [string]) =>
-        JSON.parse(message) as { payload?: { type?: string; id?: string } },
+      .map(
+        ([message]: [string]) =>
+          JSON.parse(message) as { payload?: { type?: string; id?: string } },
       )
       .find((message) => message.payload?.type === "abort");
 

@@ -5,6 +5,7 @@ import type { ConnectionStatus } from "../composables/useBridgeClient";
 defineProps<{
   theme: "dark" | "light";
   nextThemeLabel: "dark" | "light";
+  showDebugToggle: boolean;
   debugMode: boolean;
   debugModeLabel: string;
   activeSessionLabel: string;
@@ -38,6 +39,7 @@ const emit = defineEmits<{
     <div class="header-status">
       <span v-if="networkUrl" class="network-url">{{ networkUrl }}</span>
       <button
+        v-if="showDebugToggle"
         class="debug-toggle"
         :class="{ active: debugMode }"
         type="button"

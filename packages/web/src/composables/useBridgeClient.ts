@@ -243,6 +243,37 @@ function dismissNotification(id: string) {
 // Message handling
 // ---------------------------------------------------------------------------
 
+function findTranscriptMessageIndex(msg: TranscriptEntry): number {
+  if (msg.id) {
+    const exactMatch = rawTranscript.value.findIndex(
+      (entry) => entry.id === msg.id,
+    );
+    if (exactMatch >= 0) return exactMatch;
+  }
+
+  const role = typeof msg.role === "string" ? msg.role : null;
+  for (let index = rawTranscript.value.length - 1; index >= 0; index -= 1) {
+    const entry = rawTranscript.value[index];
+    if (entry.id) continue;
+    if (role && entry.role !== role) continue;
+    return index;
+  }
+
+  return msg.id ? -1 : rawTranscript.value.length - 1;
+}
+
+function mergeTranscriptMessage(msg: TranscriptEntry) {
+  const index = findTranscriptMessageIndex(msg);
+  if (index >= 0) {
+    const updated = [...rawTranscript.value];
+    updated[index] = { ...updated[index], ...msg };
+    rawTranscript.value = updated;
+    return;
+  }
+
+  rawTranscript.value = [...rawTranscript.value, msg];
+}
+
 function handleServerMessage(raw: MessageEvent) {
   let envelope: ServerMessage;
   try {
@@ -458,30 +489,13 @@ function handleEvent(payload: Record<string, unknown>) {
       break;
     }
     case "message_update": {
-      // Update the last message with matching id, or append
       const msg = payload as unknown as TranscriptEntry;
-      const idx = msg.id
-        ? rawTranscript.value.findIndex((m) => m.id === msg.id)
-        : rawTranscript.value.length - 1;
-      if (idx >= 0) {
-        const updated = [...rawTranscript.value];
-        updated[idx] = { ...updated[idx], ...msg };
-        rawTranscript.value = updated;
-      } else {
-        rawTranscript.value = [...rawTranscript.value, msg];
-      }
+      mergeTranscriptMessage(msg);
       break;
     }
     case "message_end": {
       const msg = payload as unknown as TranscriptEntry;
-      if (msg.id) {
-        const idx = rawTranscript.value.findIndex((m) => m.id === msg.id);
-        if (idx >= 0) {
-          const updated = [...rawTranscript.value];
-          updated[idx] = { ...updated[idx], ...msg };
-          rawTranscript.value = updated;
-        }
-      }
+      mergeTranscriptMessage(msg);
       break;
     }
     case "agent_start": {

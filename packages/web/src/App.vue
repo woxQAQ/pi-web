@@ -8,6 +8,7 @@ import AppHeader from "./layout/AppHeader.vue";
 import AppMainContent from "./layout/AppMainContent.vue";
 import AppNotifications from "./layout/AppNotifications.vue";
 import AppSidebar from "./layout/AppSidebar.vue";
+import { readInitialDebugMode } from "./utils/debugMode";
 import type { RpcModelInfo } from "./utils/models";
 
 type ThemeMode = "dark" | "light";
@@ -74,11 +75,17 @@ function readCachedTheme(): ThemeMode {
     : "dark";
 }
 
+const debugModeAvailable =
+  typeof window !== "undefined" &&
+  window.__PI_WEB_CONFIG__?.debugModeAvailable === true;
+
 function readCachedDebugMode(): boolean {
   if (typeof window === "undefined") return false;
-  const cached = window.localStorage.getItem(DEBUG_MODE_CACHE_KEY);
-  if (cached === "true" || cached === "false") return cached === "true";
-  return new URLSearchParams(window.location.search).get("debug") === "1";
+  return readInitialDebugMode(
+    debugModeAvailable,
+    window.localStorage.getItem(DEBUG_MODE_CACHE_KEY),
+    window.location.search,
+  );
 }
 
 const theme = ref<ThemeMode>(readCachedTheme());
@@ -95,22 +102,27 @@ watch(connectionStatus, async (status) => {
   if (status !== "connected" || preferencesLoaded) return;
   preferencesLoaded = true;
   try {
-    const [themeRes, debugModeRes] = await Promise.all([
-      sendCommand({ type: "get_plugin_state", key: "theme" }),
-      sendCommand({ type: "get_plugin_state", key: "debugMode" }),
-    ]);
-
+    const themeRes = await sendCommand({
+      type: "get_plugin_state",
+      key: "theme",
+    });
     const savedTheme = (themeRes.data as { value?: unknown } | undefined)
       ?.value;
     if (themeRes.success && (savedTheme === "dark" || savedTheme === "light")) {
       theme.value = savedTheme;
     }
 
-    const savedDebugMode = (
-      debugModeRes.data as { value?: unknown } | undefined
-    )?.value;
-    if (debugModeRes.success && typeof savedDebugMode === "boolean") {
-      debugMode.value = savedDebugMode;
+    if (debugModeAvailable) {
+      const debugModeRes = await sendCommand({
+        type: "get_plugin_state",
+        key: "debugMode",
+      });
+      const savedDebugMode = (
+        debugModeRes.data as { value?: unknown } | undefined
+      )?.value;
+      if (debugModeRes.success && typeof savedDebugMode === "boolean") {
+        debugMode.value = savedDebugMode;
+      }
     }
   } catch {
     // Server unavailable, keep cached values.
@@ -127,6 +139,7 @@ watch(theme, (value) => {
 });
 
 watch(debugMode, (value) => {
+  if (!debugModeAvailable) return;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
   }
@@ -148,6 +161,7 @@ function toggleTheme() {
 }
 
 function toggleDebugMode() {
+  if (!debugModeAvailable) return;
   debugMode.value = !debugMode.value;
 }
 
@@ -262,6 +276,7 @@ onBeforeUnmount(() => {
     <AppHeader
       :theme="theme"
       :next-theme-label="nextThemeLabel"
+      :show-debug-toggle="debugModeAvailable"
       :debug-mode="debugMode"
       :debug-mode-label="debugModeLabel"
       :active-session-label="activeSessionLabel"
@@ -298,7 +313,7 @@ onBeforeUnmount(() => {
         :status-entries="statusEntries"
         :transcript="transcript"
         :is-streaming="isStreaming"
-        :is-debug-mode="debugMode"
+        :is-debug-mode="debugModeAvailable && debugMode"
         :connection-status="connectionStatus"
         :commands="commands"
         :available-models="availableModels"

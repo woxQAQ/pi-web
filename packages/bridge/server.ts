@@ -313,11 +313,16 @@ export class BridgeServer {
         return;
       }
 
+      const body =
+        contentType === "text/html"
+          ? injectRuntimeConfig(data.toString("utf8"))
+          : data;
+
       res.writeHead(200, {
         "Content-Type": contentType,
         "Cache-Control": "no-cache",
       });
-      res.end(data);
+      res.end(body);
     });
   }
 
@@ -403,6 +408,20 @@ const MIME_TYPES: Record<string, string> = {
   ".otf": "font/otf",
   ".eot": "application/vnd.ms-fontobject",
 };
+
+function runtimeDebugModeEnabled(): boolean {
+  const value = process.env.PI_WEB_DEBUG;
+  if (typeof value !== "string") return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "1" || normalized === "true";
+}
+
+function injectRuntimeConfig(html: string): string {
+  const configScript = `<script>window.__PI_WEB_CONFIG__=${JSON.stringify({ debugModeAvailable: runtimeDebugModeEnabled() })};</script>`;
+  return html.includes("</head>")
+    ? html.replace("</head>", `${configScript}</head>`)
+    : `${configScript}${html}`;
+}
 
 /**
  * Parse a Cookie header string into a key-value map.
