@@ -38,6 +38,7 @@ const {
   sendCommand,
   fetchWorkspaceEntries,
   setThinkingLevel,
+  setAutoCompactionEnabled,
   pendingExtensionRequest,
   notifications,
   statusEntries,
@@ -221,6 +222,14 @@ function handleThinkingLevelSelect(level: string) {
   setThinkingLevel(level).catch(() => {});
 }
 
+function handleAutoCompactionToggle(enabled: boolean) {
+  if (sessionState.value?.autoCompactionEnabled === enabled) {
+    return;
+  }
+
+  setAutoCompactionEnabled(enabled).catch(() => {});
+}
+
 async function openTreePanel() {
   sidebarOpen.value = false;
   if (connectionStatus.value === "connected") {
@@ -326,11 +335,13 @@ onBeforeUnmount(() => {
         :available-models="availableModels"
         :current-model="currentModel"
         :current-thinking-level="currentThinkingLevel"
+        :auto-compaction-enabled="sessionState?.autoCompactionEnabled ?? false"
         :session-stats="sessionStats"
         @submit="handlePrompt($event.message, $event.images)"
         @abort="handleAbort"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"
+        @toggle-auto-compaction="handleAutoCompactionToggle"
       />
     </div>
 

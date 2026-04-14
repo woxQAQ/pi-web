@@ -308,6 +308,20 @@ async function setThinkingLevel(level: string) {
   return response;
 }
 
+async function setAutoCompactionEnabled(enabled: boolean) {
+  const response = await sendCommand({
+    type: "set_auto_compaction",
+    enabled,
+  });
+  if (response.success && sessionState.value) {
+    sessionState.value = {
+      ...sessionState.value,
+      autoCompactionEnabled: enabled,
+    };
+  }
+  return response;
+}
+
 /** Send a response back to the server resolving a pending extension UI request. */
 function respondToUIRequest(payload: RpcExtensionUIResponse) {
   pendingExtensionRequest.value = null;
@@ -817,6 +831,7 @@ export function useBridgeClient() {
     fetchWorkspaceEntries,
     abortGeneration,
     setThinkingLevel,
+    setAutoCompactionEnabled,
     connect,
     disconnect,
   };

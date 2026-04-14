@@ -29,6 +29,7 @@ defineProps<{
   availableModels: readonly RpcModelInfo[];
   currentModel: RpcModelInfo | null;
   currentThinkingLevel: string | null;
+  autoCompactionEnabled: boolean;
   sessionStats: {
     tokens: number | null;
     contextWindow: number;
@@ -43,6 +44,7 @@ const emit = defineEmits<{
   abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
+  toggleAutoCompaction: [enabled: boolean];
 }>();
 
 const chatTranscriptRef = ref<InstanceType<typeof ChatTranscript> | null>(null);
@@ -85,10 +87,12 @@ defineExpose({ preserveTranscriptScroll });
       :models="availableModels"
       :selected-model="currentModel"
       :thinking-level="currentThinkingLevel"
+      :auto-compaction-enabled="autoCompactionEnabled"
       @submit="emit('submit', $event)"
       @abort="emit('abort')"
       @select-model="emit('selectModel', $event)"
       @select-thinking-level="emit('selectThinkingLevel', $event)"
+      @toggle-auto-compaction="emit('toggleAutoCompaction', $event)"
     />
   </main>
 </template>

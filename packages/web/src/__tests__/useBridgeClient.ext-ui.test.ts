@@ -435,6 +435,60 @@ describe("extension_ui_request handling", () => {
     ).toBe(initialGetStateCount);
   });
 
+  it("setAutoCompactionEnabled sends the command and updates local state", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "get_state",
+        success: true,
+        data: {
+          sessionId: "session-1",
+          sessionFile: "/tmp/session-1.jsonl",
+          sessionName: "Session 1",
+          thinkingLevel: "medium",
+          isStreaming: false,
+          isCompacting: false,
+          steeringMode: "all",
+          followUpMode: "all",
+          autoCompactionEnabled: false,
+          messageCount: 0,
+          pendingMessageCount: 0,
+        },
+      },
+    });
+
+    const pendingSet = client.setAutoCompactionEnabled(true);
+    expect(ws.send).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"set_auto_compaction"'),
+    );
+
+    const setCommandCall = ws.send.mock.calls.find(([message]: [string]) =>
+      message.includes('"type":"set_auto_compaction"'),
+    );
+    expect(setCommandCall).toBeDefined();
+    const setCommand = JSON.parse(setCommandCall?.[0] as string) as {
+      payload: { id: string };
+    };
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        id: setCommand.payload.id,
+        type: "response",
+        command: "set_auto_compaction",
+        success: true,
+      },
+    });
+
+    await pendingSet;
+    expect(client.sessionState.value?.autoCompactionEnabled).toBe(true);
+  });
+
   it("sendPrompt forwards image attachments in the prompt payload", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();

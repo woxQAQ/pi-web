@@ -45,6 +45,7 @@ const props = defineProps<{
   models: RpcModelInfo[];
   selectedModel: RpcModelInfo | null;
   thinkingLevel: string | null;
+  autoCompactionEnabled: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -52,6 +53,7 @@ const emit = defineEmits<{
   abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
+  toggleAutoCompaction: [enabled: boolean];
 }>();
 
 const MAX_TEXTAREA_HEIGHT = 160;
@@ -331,6 +333,13 @@ function handleThinkingLevelChange(event: Event) {
   emit("selectThinkingLevel", level);
 }
 
+function handleAutoCompactionChange(event: Event) {
+  emit(
+    "toggleAutoCompaction",
+    Boolean((event.target as HTMLInputElement | null)?.checked),
+  );
+}
+
 function handleFilePickerOpen() {
   fileInputRef.value?.click();
 }
@@ -565,6 +574,16 @@ resizeTextarea();
                   {{ option.label }}
                 </option>
               </select>
+            </label>
+            <label class="toggle-chip" :class="{ disabled: isDisabled }">
+              <input
+                class="toggle-chip-input"
+                type="checkbox"
+                :checked="autoCompactionEnabled"
+                :disabled="isDisabled"
+                @change="handleAutoCompactionChange"
+              />
+              <span class="toggle-chip-label">Auto compact</span>
             </label>
           </div>
           <div class="composer-action-cluster">
@@ -906,6 +925,54 @@ resizeTextarea();
 .thinking-select:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.toggle-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+  background: color-mix(in srgb, var(--panel) 70%, transparent);
+  color: var(--text-subtle);
+  cursor: pointer;
+  user-select: none;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
+}
+
+.toggle-chip:hover:not(.disabled),
+.toggle-chip:focus-within {
+  border-color: var(--border-strong);
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.toggle-chip.disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.toggle-chip-input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--text);
+}
+
+.toggle-chip-input:disabled {
+  cursor: not-allowed;
+}
+
+.toggle-chip-label {
+  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-size: 0.66rem;
+  white-space: nowrap;
 }
 
 @media (max-width: 900px) {
