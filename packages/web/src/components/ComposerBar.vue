@@ -71,6 +71,7 @@ const isDragActive = ref(false);
 const attachmentNotice = ref<string | null>(null);
 const cursorOffset = ref(0);
 const dismissedMentionKey = ref<string | null>(null);
+const isComposing = ref(false);
 
 const showPalette = ref(false);
 const filterText = computed(() => {
@@ -408,14 +409,29 @@ async function handleDrop(event: DragEvent) {
   await addAttachmentsFromFiles(event.dataTransfer?.files);
 }
 
+function isInputComposing(event: KeyboardEvent): boolean {
+  return event.isComposing || isComposing.value || event.keyCode === 229;
+}
+
+function handleInputCompositionStart() {
+  isComposing.value = true;
+}
+
+function handleInputCompositionEnd() {
+  isComposing.value = false;
+  handleInputInteraction();
+}
+
 function handleInputKeydown(e: KeyboardEvent) {
+  const composing = isInputComposing(e);
+
   if (
     showPalette.value &&
     paletteRef.value &&
     (e.key === "ArrowDown" ||
       e.key === "ArrowUp" ||
       e.key === "Escape" ||
-      e.key === "Enter")
+      (e.key === "Enter" && !composing))
   ) {
     paletteRef.value.handleKeydown(e);
     return;
@@ -428,7 +444,7 @@ function handleInputKeydown(e: KeyboardEvent) {
       e.key === "ArrowUp" ||
       e.key === "Escape" ||
       ((props.workspaceEntriesLoading || mentionSuggestions.value.length > 0) &&
-        (e.key === "Enter" || e.key === "Tab")))
+        (!composing && (e.key === "Enter" || e.key === "Tab"))))
   ) {
     mentionPaletteRef.value.handleKeydown(e);
     return;
@@ -441,6 +457,7 @@ function handleInputKeydown(e: KeyboardEvent) {
   }
 
   if (e.key === "Enter" && !e.shiftKey && !showPalette.value) {
+    if (composing) return;
     e.preventDefault();
     handleSubmit();
   }
@@ -538,6 +555,8 @@ resizeTextarea();
             @input="handleInputInteraction"
             @keyup="handleInputInteraction"
             @click="handleInputInteraction"
+            @compositionstart="handleInputCompositionStart"
+            @compositionend="handleInputCompositionEnd"
             @select="handleInputInteraction"
             @focus="handleInputInteraction"
             @paste="handleInputPaste"
