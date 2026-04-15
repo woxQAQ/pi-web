@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { ChevronDown, ChevronRight, Sparkle } from "lucide-vue-next";
-import { ref, watch, nextTick } from "vue";
+import { onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue";
 import type { TranscriptEntry } from "../composables/useBridgeClient";
+import { userMessageCopyText } from "../utils/messageCopy";
 import {
   contentBlocks,
   isAbortedMessage,
@@ -20,6 +21,7 @@ const props = defineProps<{
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
+const userCopySelector = "[data-user-message-index]";
 
 let wasDisconnected = false;
 let savedScrollTop = 0;
@@ -100,6 +102,68 @@ function previewText(text: string, maxLines: number = 8): string {
 function messageIdLabel(msg: TranscriptEntry): string {
   return msg.id ?? "missing";
 }
+
+function userMessageElementForNode(node: Node | null): HTMLElement | null {
+  const root = container.value;
+  if (!root || !node) return null;
+
+  const element = node instanceof Element ? node : node.parentElement;
+  const candidate = element?.closest<HTMLElement>(userCopySelector) ?? null;
+  if (!candidate || !root.contains(candidate)) return null;
+  return candidate;
+}
+
+function selectedUserMessageElements(selection: Selection): HTMLElement[] {
+  const root = container.value;
+  if (!root || selection.rangeCount === 0 || selection.isCollapsed) return [];
+
+  const elements = new Set<HTMLElement>();
+  const userElements = root.querySelectorAll<HTMLElement>(userCopySelector);
+
+  for (let index = 0; index < selection.rangeCount; index++) {
+    const range = selection.getRangeAt(index);
+    if (!range.intersectsNode(root)) continue;
+
+    for (const element of userElements) {
+      if (range.intersectsNode(element)) elements.add(element);
+    }
+
+    const startElement = userMessageElementForNode(range.startContainer);
+    const endElement = userMessageElementForNode(range.endContainer);
+    if (startElement) elements.add(startElement);
+    if (endElement) elements.add(endElement);
+  }
+
+  return [...elements];
+}
+
+function selectedUserCopyText(selection: Selection | null): string | null {
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null;
+  }
+
+  const [element, extraElement] = selectedUserMessageElements(selection);
+  if (!element || extraElement) return null;
+
+  const messageIndex = Number(element.dataset.userMessageIndex);
+  const msg = Number.isInteger(messageIndex)
+    ? props.messages[messageIndex]
+    : undefined;
+  if (!msg) return null;
+
+  return userMessageCopyText(msg, selection.toString(), element.innerText);
+}
+
+function handleCopy(event: ClipboardEvent) {
+  const text = selectedUserCopyText(window.getSelection());
+  if (!text || !event.clipboardData) return;
+
+  event.clipboardData.setData("text/plain", text);
+  event.preventDefault();
+}
+
+onMounted(() => document.addEventListener("copy", handleCopy));
+onBeforeUnmount(() => document.removeEventListener("copy", handleCopy));
 
 watch(
   () => props.messages.length,
@@ -202,7 +266,11 @@ defineExpose({ preserveScroll });
       </div>
 
       <div v-else class="message-row" :class="roleClass(msg.role)">
-        <div class="message-content" :class="roleClass(msg.role)">
+        <div
+          class="message-content"
+          :class="roleClass(msg.role)"
+          :data-user-message-index="msg.role === 'user' ? index : undefined"
+        >
           <div v-if="showMessageIds" class="message-debug-id">
             ID {{ messageIdLabel(msg) }}
           </div>
