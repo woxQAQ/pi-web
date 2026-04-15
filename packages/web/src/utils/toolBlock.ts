@@ -111,7 +111,11 @@ function formatToolTitle(
     }
     case "bash": {
       const command = stringValue(args, "command");
-      return command ? compactInline(command, 96) : "Run command";
+      if (!command) return "Run command";
+      const firstLine = command.replace(/\r/g, "").split("\n")[0]!;
+      const totalLines = command.replace(/\r/g, "").split("\n").length;
+      const suffix = totalLines > 1 ? ` (+${totalLines - 1} more line${totalLines - 1 > 1 ? "s" : ""})` : "";
+      return firstLine + suffix;
     }
     case "edit": {
       const path = stringValue(args, "path");
