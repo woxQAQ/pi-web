@@ -158,9 +158,12 @@ defineExpose({ handleKeydown });
 }
 
 .workspace-name,
-.workspace-path,
+.workspace-path {
+  font-family: var(--pi-font-mono);
+}
+
 .workspace-empty-text {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-sans);
 }
 
 .workspace-name {

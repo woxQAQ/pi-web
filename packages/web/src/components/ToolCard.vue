@@ -220,7 +220,7 @@ const hasImageResult = computed(() => resultImages.value.length > 0);
 .tool-card[data-tool="bash"] .tool-card-preview,
 .tool-card[data-tool="bash"] .tool-card-section-label,
 .tool-card[data-tool="bash"] .tool-card-section-text {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
 }
 
 .tool-card-meta {

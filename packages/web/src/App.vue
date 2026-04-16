@@ -472,6 +472,10 @@ onBeforeUnmount(() => {
   --error-bg: rgba(127, 29, 29, 0.28);
   --error-border: rgba(248, 113, 113, 0.42);
   --error-text: #fecaca;
+  --pi-font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
+    sans-serif;
+  --pi-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -480,7 +484,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: var(--pi-font-sans);
   color-scheme: dark;
 }
 

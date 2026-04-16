@@ -152,7 +152,9 @@ watch(() => props.request, initFromRequest, { immediate: true });
             @keydown.ctrl.enter="handleEditorSubmit"
             @keydown.meta.enter="handleEditorSubmit"
           ></textarea>
-          <div class="dialog-hint">Ctrl+Enter to submit</div>
+          <div class="dialog-hint">
+            <kbd class="dialog-kbd">Ctrl+Enter</kbd> to submit
+          </div>
           <div class="dialog-actions">
             <button class="btn btn-cancel" @click="handleCancel">Cancel</button>
             <button class="btn btn-primary" @click="handleEditorSubmit">
@@ -307,16 +309,28 @@ watch(() => props.request, initFromRequest, { immediate: true });
 }
 
 .dialog-textarea {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   resize: vertical;
   margin-bottom: 6px;
 }
 
 .dialog-hint {
   margin-bottom: 14px;
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-sans);
   font-size: 0.68rem;
   color: var(--text-subtle);
+}
+
+.dialog-kbd {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.36em;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-2) 78%, transparent);
+  font-family: var(--pi-font-mono);
+  font-size: 0.95em;
+  line-height: 1.5;
 }
 
 .dialog-actions {

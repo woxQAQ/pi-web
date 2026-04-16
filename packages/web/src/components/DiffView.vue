@@ -52,7 +52,7 @@ function classifyLine(
 .diff-line pre {
   margin: 0;
   padding: 0 12px;
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.72rem;
   line-height: 1.65;
   white-space: pre;

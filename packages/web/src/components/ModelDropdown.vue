@@ -280,7 +280,7 @@ onBeforeUnmount(() => {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.66rem;
 }
 
@@ -404,7 +404,7 @@ onBeforeUnmount(() => {
 }
 
 .model-option-meta {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.66rem;
   color: var(--text-subtle);
 }

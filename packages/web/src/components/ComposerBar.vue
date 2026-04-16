@@ -910,9 +910,12 @@ resizeTextarea();
 }
 
 .attachment-chip-name,
-.attachment-chip-meta,
+.attachment-chip-meta {
+  font-family: var(--pi-font-mono);
+}
+
 .attachment-summary {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-sans);
 }
 
 .attachment-chip-name {
@@ -1116,7 +1119,7 @@ resizeTextarea();
   top: 50%;
   left: 10px;
   transform: translateY(-50%);
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-sans);
   font-size: 0.62rem;
   color: var(--text-subtle);
   pointer-events: none;
@@ -1130,7 +1133,7 @@ resizeTextarea();
   border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
   background: color-mix(in srgb, var(--panel) 70%, transparent);
   color: var(--text);
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.66rem;
   outline: none;
   cursor: pointer;
@@ -1191,7 +1194,7 @@ resizeTextarea();
 }
 
 .toggle-chip-label {
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-sans);
   font-size: 0.66rem;
   white-space: nowrap;
 }

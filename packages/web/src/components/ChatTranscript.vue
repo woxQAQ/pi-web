@@ -706,9 +706,7 @@ defineExpose({ preserveScroll });
   border: 1px solid var(--border);
   border-radius: 999px;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
-  font-family:
-    ui-monospace, SFMono-Regular, SFMono-Regular, Consolas, "Liberation Mono",
-    Menlo, monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.66rem;
   line-height: 1;
   color: var(--text-subtle);

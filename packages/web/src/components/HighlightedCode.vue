@@ -58,7 +58,7 @@ watch(
 .highlighted-code,
 .highlighted-code-fallback {
   margin: 0;
-  font-family: "SF Mono", "Monaco", "Menlo", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.72rem;
   line-height: 1.6;
   color: var(--text-muted);

@@ -160,8 +160,9 @@ const barColor = computed(() => {
 }
 
 .stat-label {
-  font-family: "SF Mono", "Monaco", "Menlo", "Consolas", monospace;
+  font-family: var(--pi-font-sans);
   font-size: 0.64rem;
+  font-variant-numeric: tabular-nums;
   color: var(--text-muted);
   white-space: nowrap;
 }

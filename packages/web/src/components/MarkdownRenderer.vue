@@ -134,7 +134,7 @@ const renderedHtml = computed(() => {
 }
 
 .markdown-body code {
-  font-family: "SF Mono", "Monaco", "Menlo", "Consolas", monospace;
+  font-family: var(--pi-font-mono);
   font-size: 0.85em;
   padding: 0.15em 0.4em;
   border-radius: 4px;
