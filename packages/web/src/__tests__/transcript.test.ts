@@ -191,6 +191,73 @@ describe("normalizeTranscript", () => {
     ]);
   });
 
+  it("preserves image tool results when merging them into tool calls", () => {
+    const normalized = normalizeTranscript([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            name: "read",
+            arguments: '{"path":"assets/logo.png"}',
+          },
+        ],
+      },
+      {
+        role: "tool",
+        content: [
+          {
+            type: "image",
+            mimeType: "image/png",
+            data: "aGVsbG8=",
+          },
+        ],
+        isError: false,
+      },
+    ]);
+
+    expect(contentBlocks(normalized[0])).toEqual([
+      {
+        kind: "tool",
+        toolName: "read",
+        toolArgs: { path: "assets/logo.png" },
+        argumentsText: '{"path":"assets/logo.png"}',
+        resultText: "",
+        resultBlocks: [
+          {
+            kind: "image",
+            src: "data:image/png;base64,aGVsbG8=",
+            alt: "Image attachment",
+            mimeType: "image/png",
+          },
+        ],
+        toolStatus: "success",
+      },
+    ]);
+  });
+
+  it("exposes standalone tool result images in transcript blocks", () => {
+    const message = {
+      role: "tool",
+      content: [
+        {
+          type: "image",
+          mimeType: "image/webp",
+          data: "d29ybGQ=",
+        },
+      ],
+    } satisfies TranscriptEntryLike;
+
+    expect(contentBlocks(message)).toEqual([
+      {
+        kind: "image",
+        src: "data:image/webp;base64,d29ybGQ=",
+        alt: "Image attachment",
+        mimeType: "image/webp",
+      },
+    ]);
+  });
+
   it("drops empty thinking blocks from assistant content", () => {
     const message = {
       role: "assistant",

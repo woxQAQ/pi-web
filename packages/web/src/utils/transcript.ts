@@ -14,12 +14,15 @@ export interface TextContentBlock {
   text: string;
 }
 
+export type ToolResultBlock = TextContentBlock | ImageContentBlock;
+
 export interface ToolContentBlock {
   kind: "tool";
   toolName: string;
   toolArgs: unknown;
   argumentsText: string;
   resultText?: string;
+  resultBlocks?: ToolResultBlock[];
   resultDetails?: unknown;
   toolStatus: ToolBlockStatus;
 }
@@ -50,6 +53,7 @@ interface UnknownBlock {
   arguments?: unknown;
   details?: unknown;
   isError?: boolean;
+  content?: unknown;
   data?: string;
   mimeType?: string;
   url?: string;
@@ -89,11 +93,8 @@ export function messageContent(
         const typedBlock = block as UnknownBlock;
         if (typedBlock.type === "text" && typeof typedBlock.text === "string")
           return typedBlock.text;
-        if (
-          typedBlock.type === "toolResult" &&
-          typeof typedBlock.text === "string"
-        ) {
-          return typedBlock.text;
+        if (typedBlock.type === "toolResult") {
+          return toolResultText(typedBlock);
         }
         return "";
       })
@@ -152,6 +153,10 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
         typedNextBlock?.type === "toolResult"
           ? toolResultText(typedNextBlock)
           : undefined;
+      const resultBlocks =
+        typedNextBlock?.type === "toolResult"
+          ? toolResultBlocks(typedNextBlock)
+          : undefined;
       const resultDetails =
         typedNextBlock?.type === "toolResult"
           ? typedNextBlock.details
@@ -168,8 +173,13 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
         toolArgs: parseToolArguments(typedBlock.arguments),
         argumentsText: toolArgumentsText(typedBlock.arguments),
         resultText,
+        resultBlocks,
         resultDetails,
-        toolStatus: toolStatusFromResult(resultText, resultIsError),
+        toolStatus: toolStatusFromResult(
+          resultText,
+          resultBlocks,
+          resultIsError,
+        ),
       });
 
       if (typedNextBlock?.type === "toolResult") {
@@ -179,7 +189,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
     }
 
     if (type === "toolResult") {
-      blocks.push({ kind: "text", text: toolResultText(typedBlock) });
+      blocks.push(...toolResultBlocks(typedBlock));
       continue;
     }
 
@@ -261,6 +271,7 @@ function mergeToolResultIntoContent(
   cloned.splice(targetIndex + 1, 0, {
     type: "toolResult",
     text: messageContent(toolResultMessage),
+    content: cloneContent(toolResultMessage.content),
     details: toolResultMessage.details,
     isError:
       typeof toolResultMessage.isError === "boolean"
@@ -310,8 +321,60 @@ function cloneBlock(block: unknown): unknown {
 }
 
 function toolResultText(block: UnknownBlock): string {
+  if (Array.isArray(block.content)) {
+    return block.content
+      .map(item => {
+        if (typeof item === "string") return item;
+        if (typeof item !== "object" || item === null) return "";
+        const typedItem = item as UnknownBlock;
+        if (typedItem.type === "text" && typeof typedItem.text === "string") {
+          return typedItem.text;
+        }
+        return "";
+      })
+      .filter(Boolean)
+      .join("\n");
+  }
+
   if (typeof block.text === "string") return block.text;
   return JSON.stringify(block, null, 2);
+}
+
+function toolResultBlocks(block: UnknownBlock): ToolResultBlock[] {
+  if (Array.isArray(block.content)) {
+    const blocks: ToolResultBlock[] = [];
+    for (const item of block.content) {
+      if (typeof item === "string") {
+        blocks.push({ kind: "text", text: item });
+        continue;
+      }
+      if (typeof item !== "object" || item === null) continue;
+      const typedItem = item as UnknownBlock;
+      if (typedItem.type === "text" && typeof typedItem.text === "string") {
+        blocks.push({ kind: "text", text: typedItem.text });
+        continue;
+      }
+      if (typedItem.type === "image" || typedItem.type === "image_url") {
+        const src = imageBlockSource(typedItem);
+        if (src) {
+          blocks.push({
+            kind: "image",
+            src,
+            alt: typedItem.text || "Image attachment",
+            mimeType:
+              typeof typedItem.mimeType === "string"
+                ? typedItem.mimeType
+                : undefined,
+          });
+        }
+      }
+    }
+
+    if (blocks.length > 0) return blocks;
+  }
+
+  const text = toolResultText(block);
+  return text ? [{ kind: "text", text }] : [];
 }
 
 function toolResultIsError(block: UnknownBlock): boolean | undefined {
@@ -336,9 +399,13 @@ function toolArgumentsText(args: unknown): string {
 
 function toolStatusFromResult(
   resultText: string | undefined,
+  resultBlocks: ToolResultBlock[] | undefined,
   isError: boolean | undefined,
 ): ToolBlockStatus {
-  if (!resultText) return "pending";
+  const hasText =
+    typeof resultText === "string" && resultText.trim().length > 0;
+  const hasBlocks = Array.isArray(resultBlocks) && resultBlocks.length > 0;
+  if (!hasText && !hasBlocks) return "pending";
   return isError ? "error" : "success";
 }
 

@@ -3,13 +3,13 @@ import { ChevronDown, ChevronRight, Sparkle } from "lucide-vue-next";
 import { onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue";
 import type { TranscriptEntry } from "../composables/useBridgeClient";
 import { userMessageCopyText } from "../utils/messageCopy";
+import type { ImageContentBlock } from "../utils/transcript";
 import {
   contentBlocks,
   isAbortedMessage,
   isErrorMessage,
   errorMessageText,
   isToolResultMessage,
-  messageContent,
 } from "../utils/transcript";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 import ToolCard from "./ToolCard.vue";
@@ -95,6 +95,27 @@ function previewText(text: string, maxLines: number = 8): string {
   if (lines.length <= maxLines) return normalized;
   const remaining = lines.length - maxLines;
   return `${lines.slice(0, maxLines).join("\n")}\n... ${remaining} more line${remaining === 1 ? "" : "s"}`;
+}
+
+function toolResultText(msg: TranscriptEntry): string {
+  return contentBlocks(msg)
+    .flatMap(block => (block.kind === "text" ? [block.text] : []))
+    .join("\n");
+}
+
+function toolResultPreview(msg: TranscriptEntry): string {
+  return previewText(toolResultText(msg), 6);
+}
+
+function toolResultCanExpand(msg: TranscriptEntry): boolean {
+  const text = toolResultText(msg).replace(/\r/g, "").trim();
+  return Boolean(text) && toolResultPreview(msg) !== text;
+}
+
+function toolResultImages(msg: TranscriptEntry): ImageContentBlock[] {
+  return contentBlocks(msg).filter(
+    (block): block is ImageContentBlock => block.kind === "image",
+  );
 }
 
 function messageIdLabel(msg: TranscriptEntry): string {
@@ -226,6 +247,7 @@ defineExpose({ preserveScroll });
                 </span>
               </div>
               <button
+                v-if="toolResultCanExpand(msg)"
                 type="button"
                 class="tool-result-card-toggle"
                 @click="toggleToolBlock(messageStableKey(msg, index), -1)"
@@ -242,13 +264,35 @@ defineExpose({ preserveScroll });
                 }}
               </button>
             </div>
-            <pre class="tool-result-card-preview">{{
-              previewText(messageContent(msg), 6)
-            }}</pre>
             <pre
-              v-if="isToolBlockExpanded(messageStableKey(msg, index), -1)"
+              v-if="toolResultPreview(msg)"
+              class="tool-result-card-preview"
+              >{{ toolResultPreview(msg) }}</pre
+            >
+            <div
+              v-if="toolResultImages(msg).length > 0"
+              class="tool-result-card-images"
+            >
+              <figure
+                v-for="(image, imageIndex) in toolResultImages(msg)"
+                :key="`${image.src}-${imageIndex}`"
+                class="message-image-block"
+              >
+                <img
+                  class="message-image"
+                  :src="image.src"
+                  :alt="image.alt"
+                  loading="lazy"
+                />
+              </figure>
+            </div>
+            <pre
+              v-if="
+                isToolBlockExpanded(messageStableKey(msg, index), -1) &&
+                toolResultText(msg).trim()
+              "
               class="tool-result-card-details"
-              >{{ messageContent(msg) }}</pre
+              >{{ toolResultText(msg) }}</pre
             >
           </div>
         </div>
@@ -629,6 +673,12 @@ defineExpose({ preserveScroll });
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-muted);
+}
+
+.tool-result-card-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .tool-result-card-details {

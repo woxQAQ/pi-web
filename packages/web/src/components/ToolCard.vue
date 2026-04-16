@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { buildToolCardModel } from "../utils/toolBlock";
-import type { ToolContentBlock } from "../utils/transcript";
+import type { ImageContentBlock, ToolContentBlock } from "../utils/transcript";
 import DiffView from "./DiffView.vue";
 import HighlightedCode from "./HighlightedCode.vue";
 
@@ -37,6 +37,13 @@ const editDiff = computed(() => {
     ? ((details as Record<string, unknown>).diff as string)
     : undefined;
 });
+
+const resultImages = computed(() =>
+  (props.block.resultBlocks ?? []).filter(
+    (block): block is ImageContentBlock => block.kind === "image",
+  ),
+);
+const hasImageResult = computed(() => resultImages.value.length > 0);
 </script>
 
 <template>
@@ -73,9 +80,29 @@ const editDiff = computed(() => {
       </button>
     </header>
 
+    <div v-if="resultImages.length > 0" class="tool-card-image-strip">
+      <figure
+        v-for="(image, index) in resultImages"
+        :key="`${image.src}-${index}`"
+        class="tool-card-image-block"
+      >
+        <img
+          class="tool-card-image"
+          :src="image.src"
+          :alt="image.alt"
+          loading="lazy"
+        />
+      </figure>
+    </div>
+
     <DiffView v-if="showPreview && editDiff" :diff="editDiff" />
     <div
-      v-else-if="showPreview && model.preview && block.toolName === 'read'"
+      v-else-if="
+        showPreview &&
+        model.preview &&
+        block.toolName === 'read' &&
+        !hasImageResult
+      "
       class="tool-card-code-panel"
     >
       <HighlightedCode :code="model.preview" :path="readPath" />
@@ -104,7 +131,11 @@ const editDiff = computed(() => {
       >
         <div class="tool-card-section-label">{{ section.label }}</div>
         <div
-          v-if="block.toolName === 'read' && section.label === 'Contents'"
+          v-if="
+            block.toolName === 'read' &&
+            section.label === 'Contents' &&
+            !hasImageResult
+          "
           class="tool-card-code-panel"
         >
           <HighlightedCode :code="section.text" :path="readPath" />
@@ -236,6 +267,27 @@ const editDiff = computed(() => {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--text-muted);
+}
+
+.tool-card-image-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.tool-card-image-block {
+  margin: 0;
+}
+
+.tool-card-image {
+  display: block;
+  max-width: min(100%, 420px);
+  max-height: 280px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--tool-card-bg-strong);
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  object-fit: contain;
 }
 
 .tool-card-code-panel {
