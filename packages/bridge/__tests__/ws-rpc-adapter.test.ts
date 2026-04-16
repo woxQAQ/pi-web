@@ -589,84 +589,6 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.data.commands[0]).toHaveProperty("name", "test");
     });
 
-    it("should handle get_session_stats with token breakdown", async () => {
-      (
-        context.ctx.sessionManager.getBranch as ReturnType<typeof vi.fn>
-      ).mockReturnValue([
-        {
-          type: "model_change",
-          provider: "openai",
-          modelId: "gpt-4",
-        },
-        {
-          type: "message",
-          message: {
-            role: "assistant",
-            usage: {
-              input: 97000,
-              output: 27000,
-              cacheRead: 2800000,
-              cacheWrite: 64000,
-              cost: { total: 1.354 },
-            },
-          },
-        },
-      ]);
-      (
-        context.ctx.sessionManager.getEntries as ReturnType<typeof vi.fn>
-      ).mockReturnValue([
-        {
-          type: "message",
-          message: {
-            role: "assistant",
-            usage: {
-              input: 97000,
-              output: 27000,
-              cacheRead: 2800000,
-              cacheWrite: 64000,
-              cost: { total: 1.354 },
-            },
-          },
-        },
-      ]);
-      context.ctx.modelRegistry.getAvailable = vi.fn().mockResolvedValue([
-        { id: "gpt-4", provider: "openai", name: "GPT-4", contextWindow: 8000 },
-      ]);
-      context.ctx.getContextUsage = vi.fn().mockReturnValue({
-        tokens: 1000,
-        contextWindow: 8000,
-        percent: 12.5,
-      });
-
-      const command: RpcCommand = { id: "cmd-1", type: "get_session_stats" };
-      (
-        ws as unknown as { trigger: (event: string, data: Buffer) => void }
-      ).trigger(
-        "message",
-        Buffer.from(JSON.stringify({ type: "command", payload: command })),
-      );
-
-      await new Promise(r => setTimeout(r, 10));
-
-      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const lastCall = sendCalls[sendCalls.length - 1][0] as string;
-      const response = JSON.parse(lastCall);
-
-      expect(response.payload.command).toBe("get_session_stats");
-      expect(response.payload.success).toBe(true);
-      expect(response.payload.data).toMatchObject({
-        tokens: 1000,
-        contextWindow: 8000,
-        percent: 12.5,
-        messageCount: 1,
-        cost: 1.354,
-        inputTokens: 97000,
-        outputTokens: 27000,
-        cacheReadTokens: 2800000,
-        cacheWriteTokens: 64000,
-      });
-    });
-
     it("should handle set_model command with valid model", async () => {
       const command: RpcCommand = {
         id: "cmd-1",
@@ -959,7 +881,33 @@ describe("WsRpcAdapter", () => {
       ]);
     });
 
-    it("routes live transcript updates directly to the client", () => {
+    it("pushes initial session stats to the client", async () => {
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const statsEvent = sendCalls.find(
+        call => call.type === "event" && call.payload.type === "session_stats",
+      );
+
+      expect(statsEvent?.payload).toMatchObject({
+        type: "session_stats",
+        stats: {
+          tokens: 1000,
+          contextWindow: 8000,
+          percent: 12.5,
+          messageCount: 1,
+          cost: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      });
+    });
+
+    it("routes live transcript updates and pushed session stats directly to the client", async () => {
       (ws.send as ReturnType<typeof vi.fn>).mockClear();
 
       const messageStartHandler = (
@@ -980,11 +928,13 @@ describe("WsRpcAdapter", () => {
         },
       });
 
+      await new Promise(r => setTimeout(r, 10));
+
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
       );
 
-      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls).toHaveLength(3);
       expect(sendCalls[0].type).toBe("event");
       expect(sendCalls[0].payload).toMatchObject({
         type: "transcript_upsert",
@@ -1001,6 +951,47 @@ describe("WsRpcAdapter", () => {
           id: "assistant-1",
           role: "assistant",
           content: "Hi there",
+        },
+      });
+      expect(sendCalls[2].payload).toMatchObject({
+        type: "session_stats",
+        stats: {
+          tokens: 1000,
+          contextWindow: 8000,
+          percent: 12.5,
+          messageCount: 1,
+          cost: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      });
+    });
+
+    it("pushes session stats after agent_end", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const agentEndHandler = (
+        context.pi.on as ReturnType<typeof vi.fn>
+      ).mock.calls.find(call => call[0] === "agent_end")?.[1];
+
+      agentEndHandler?.({ type: "agent_end" });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[0].payload).toMatchObject({ type: "agent_end" });
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "session_stats",
+        stats: {
+          tokens: 1000,
+          contextWindow: 8000,
+          percent: 12.5,
         },
       });
     });
@@ -1727,12 +1718,39 @@ describe("WsRpcAdapter", () => {
       // createAgentSession should NOT be called eagerly
       expect(createAgentSessionMock).not.toHaveBeenCalled();
 
-      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
-      expect(lastCall.payload.success).toBe(true);
-      expect(lastCall.payload.data.cancelled).toBe(false);
-      expect(lastCall.payload.data.sessionId).toBeTruthy();
-      expect(lastCall.payload.data.messages).toEqual([]);
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const responseCall = sendCalls.find(
+        call =>
+          call.type === "response" &&
+          call.payload.command === "new_session" &&
+          call.payload.success,
+      );
+      expect(responseCall?.payload.data.cancelled).toBe(false);
+      expect(responseCall?.payload.data.sessionId).toBeTruthy();
+      expect(responseCall?.payload.data.messages).toEqual([]);
+
+      const statsEvent = sendCalls.find(
+        call =>
+          call.type === "event" &&
+          call.payload.type === "session_stats" &&
+          call.payload.sessionPath === responseCall?.payload.data.sessionPath,
+      );
+      expect(statsEvent?.payload).toMatchObject({
+        type: "session_stats",
+        sessionPath: responseCall?.payload.data.sessionPath,
+        stats: {
+          tokens: null,
+          contextWindow: 0,
+          percent: null,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          cost: 0,
+        },
+      });
 
       // Clean up temp dir
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -1818,29 +1836,50 @@ describe("WsRpcAdapter", () => {
 
       await new Promise(r => setTimeout(r, 10));
 
-      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
-      const lastCall = JSON.parse(sendCalls[sendCalls.length - 1][0] as string);
-      expect(lastCall.payload.success).toBe(true);
-      expect(lastCall.payload.data.messages).toHaveLength(2);
-      expect(lastCall.payload.data.messages[0]).toMatchObject({
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const responseCall = sendCalls.find(
+        call =>
+          call.type === "response" &&
+          call.payload.command === "switch_session" &&
+          call.payload.success,
+      );
+      expect(responseCall?.payload.data.messages).toHaveLength(2);
+      expect(responseCall?.payload.data.messages[0]).toMatchObject({
         role: "user",
         content: "Hello",
       });
-      expect(lastCall.payload.data.sessionId).toBe(
+      expect(responseCall?.payload.data.sessionId).toBe(
         sessionManager.getSessionId(),
       );
-      expect(lastCall.payload.data.sessionName).toBe("Hello");
-      expect(lastCall.payload.data.treeEntries).toHaveLength(2);
-      expect(lastCall.payload.data.treeEntries[0]).toMatchObject({
+      expect(responseCall?.payload.data.sessionName).toBe("Hello");
+      expect(responseCall?.payload.data.treeEntries).toHaveLength(2);
+      expect(responseCall?.payload.data.treeEntries[0]).toMatchObject({
         label: "user: Hello",
         type: "message",
         depth: 0,
       });
-      expect(lastCall.payload.data.treeEntries[1]).toMatchObject({
+      expect(responseCall?.payload.data.treeEntries[1]).toMatchObject({
         label: "assistant: Hi",
         type: "message",
         depth: 0,
         isActive: true,
+      });
+
+      const statsEvent = sendCalls.find(
+        call =>
+          call.type === "event" &&
+          call.payload.type === "session_stats" &&
+          call.payload.sessionPath === sessionFile,
+      );
+      expect(statsEvent?.payload).toMatchObject({
+        type: "session_stats",
+        sessionPath: sessionFile,
+        stats: {
+          messageCount: 4,
+          outputTokens: 0,
+        },
       });
 
       fs.rmSync(tmpDir, { recursive: true, force: true });

@@ -668,7 +668,6 @@ describe("Bridge Integration", () => {
         const results = await Promise.all([
           sendCommand({ type: "get_state" }),
           sendCommand({ type: "get_commands" }),
-          sendCommand({ type: "get_session_stats" }),
         ]);
 
         // Verify all succeeded

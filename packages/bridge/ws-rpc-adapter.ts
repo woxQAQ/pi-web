@@ -22,6 +22,8 @@ import type {
   RpcImageContent,
   RpcResponse,
   RpcSessionState,
+  RpcSessionStats,
+  RpcSessionStatsEvent,
   RpcSlashCommand,
   RpcTranscriptMessage,
   RpcTranscriptSnapshotEvent,
@@ -979,6 +981,8 @@ export class WsRpcAdapter {
   private pendingSessionManager: SessionManager | null = null;
   private selectedSessionUnsubscribe: (() => void) | undefined;
   private workspaceEntriesCache: RpcWorkspaceEntry[] | null = null;
+  private sessionStatsPushInFlight = false;
+  private pendingSessionStatsPath: string | null | undefined = undefined;
   private transcriptSync: TranscriptSyncState = {
     sessionPath: null,
     nextEphemeralId: 0,
@@ -1004,6 +1008,7 @@ export class WsRpcAdapter {
     this.setupWebSocket();
     this.subscribeToEvents();
     this.sendInitialTranscriptSnapshot();
+    this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
   }
 
   /**
@@ -1044,6 +1049,7 @@ export class WsRpcAdapter {
     this.context.pi.on("agent_end", (event: object) => {
       if (!this.shouldHandleLiveSessionEvents()) return;
       this.sendEvent({ type: "agent_end", ...(event as Record<string, unknown>) });
+      this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
     });
 
     this.context.pi.on("message_start", (event: object) => {
@@ -1076,6 +1082,7 @@ export class WsRpcAdapter {
     this.context.pi.on("model_select", (event: object) => {
       if (!this.shouldHandleLiveSessionEvents()) return;
       this.sendEvent({ type: "model_select", ...(event as Record<string, unknown>) });
+      this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
     });
   }
 
@@ -1278,6 +1285,9 @@ export class WsRpcAdapter {
       message: transcriptMessage,
     };
     this.sendEvent(payload as unknown as Record<string, unknown>);
+    if (eventType !== "message_start") {
+      this.queueSessionStatsEvent(sessionPath);
+    }
   }
 
   private handleSelectedSessionEvent(event: AgentSessionEvent): void {
@@ -1299,6 +1309,7 @@ export class WsRpcAdapter {
       case "agent_end":
       case "model_select":
         this.sendEvent(event as unknown as Record<string, unknown>);
+        this.queueSessionStatsEvent(sessionPath);
         return;
       default:
         return;
@@ -1446,6 +1457,196 @@ export class WsRpcAdapter {
     };
   }
 
+  private toRpcSessionStats(stats: {
+    contextUsage?: {
+      tokens: number | null;
+      contextWindow: number;
+      percent: number | null;
+    };
+    totalMessages: number;
+    cost: number;
+    tokens: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite: number;
+    };
+  }): RpcSessionStats {
+    return {
+      tokens: stats.contextUsage?.tokens ?? null,
+      contextWindow: stats.contextUsage?.contextWindow ?? 0,
+      percent: stats.contextUsage?.percent ?? null,
+      messageCount: stats.totalMessages,
+      cost: stats.cost,
+      inputTokens: stats.tokens.input,
+      outputTokens: stats.tokens.output,
+      cacheReadTokens: stats.tokens.cacheRead,
+      cacheWriteTokens: stats.tokens.cacheWrite,
+    };
+  }
+
+  private async lookupContextWindow(
+    provider: string | undefined,
+    modelId: string | undefined,
+  ): Promise<number> {
+    if (!provider || !modelId) return 0;
+
+    try {
+      const models = await this.context.ctx.modelRegistry.getAvailable();
+      const matched = models.find(
+        (model: unknown) =>
+          (model as { provider: string; id: string }).provider === provider &&
+          (model as { provider: string; id: string }).id === modelId,
+      );
+      return (matched as { contextWindow?: number } | undefined)?.contextWindow ?? 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  private async buildSessionStats(
+    targetPath?: string | null,
+  ): Promise<RpcSessionStats> {
+    const { ctx } = this.context;
+    const selectedSessionPath = this.selectedSessionPath;
+    const liveSessionPath = ctx.sessionManager.getSessionFile();
+    const resolvedTargetPath =
+      targetPath === undefined
+        ? selectedSessionPath ?? liveSessionPath ?? null
+        : targetPath;
+
+    if (
+      this.selectedSession &&
+      (!resolvedTargetPath ||
+        resolvedTargetPath === this.selectedSession.sessionFile ||
+        resolvedTargetPath === selectedSessionPath)
+    ) {
+      return this.toRpcSessionStats(this.selectedSession.getSessionStats());
+    }
+
+    if (resolvedTargetPath && resolvedTargetPath !== liveSessionPath) {
+      try {
+        const storedSessionManager =
+          this.pendingSessionManager?.getSessionFile() === resolvedTargetPath
+            ? this.pendingSessionManager
+            : fs.existsSync(resolvedTargetPath)
+              ? openSessionManager(resolvedTargetPath)
+              : null;
+
+        if (storedSessionManager) {
+          const branch = storedSessionManager.getBranch();
+          const summary = summarizeTokenUsage(
+            branch,
+            storedSessionManager.getEntries(),
+          );
+
+          let tokens: number | null = null;
+          let contextWindow = 0;
+          let percent: number | null = null;
+          if (summary.lastAssistantUsage) {
+            const usage = summary.lastAssistantUsage;
+            tokens =
+              (usage.input ?? 0) +
+              (usage.cacheRead ?? 0) +
+              (usage.cacheWrite ?? 0);
+          }
+          if (tokens != null) {
+            contextWindow = await this.lookupContextWindow(
+              summary.lastModel?.provider,
+              summary.lastModel?.modelId,
+            );
+            if (contextWindow > 0) {
+              percent = Math.round((tokens / contextWindow) * 100 * 10) / 10;
+            }
+          }
+
+          return {
+            tokens,
+            contextWindow,
+            percent,
+            messageCount: summary.messageCount,
+            cost: summary.totalCost,
+            inputTokens: summary.inputTokens,
+            outputTokens: summary.outputTokens,
+            cacheReadTokens: summary.cacheReadTokens,
+            cacheWriteTokens: summary.cacheWriteTokens,
+          };
+        }
+      } catch {
+        // Fall through to live session stats.
+      }
+    }
+
+    const usage = ctx.getContextUsage();
+    const branch = ctx.sessionManager.getBranch();
+    const summary = summarizeTokenUsage(branch, ctx.sessionManager.getEntries());
+
+    let tokens: number | null = usage?.tokens ?? null;
+    let contextWindow = usage?.contextWindow ?? 0;
+    let percent: number | null = usage?.percent ?? null;
+
+    if (tokens == null && summary.lastAssistantUsage) {
+      tokens =
+        (summary.lastAssistantUsage.input ?? 0) +
+        (summary.lastAssistantUsage.cacheRead ?? 0) +
+        (summary.lastAssistantUsage.cacheWrite ?? 0);
+    }
+    if (contextWindow === 0 && tokens != null) {
+      contextWindow = await this.lookupContextWindow(
+        summary.lastModel?.provider,
+        summary.lastModel?.modelId,
+      );
+    }
+    if (percent == null && tokens != null && contextWindow > 0) {
+      percent = Math.round((tokens / contextWindow) * 100 * 10) / 10;
+    }
+
+    return {
+      tokens,
+      contextWindow,
+      percent,
+      messageCount: summary.messageCount,
+      cost: summary.totalCost,
+      inputTokens: summary.inputTokens,
+      outputTokens: summary.outputTokens,
+      cacheReadTokens: summary.cacheReadTokens,
+      cacheWriteTokens: summary.cacheWriteTokens,
+    };
+  }
+
+  private queueSessionStatsEvent(sessionPath: string | null): void {
+    this.pendingSessionStatsPath = sessionPath;
+    if (this.sessionStatsPushInFlight || this.disposed) return;
+    void this.flushSessionStatsEventQueue();
+  }
+
+  private async flushSessionStatsEventQueue(): Promise<void> {
+    const sessionPath = this.pendingSessionStatsPath;
+    if (sessionPath === undefined || this.disposed) return;
+
+    this.pendingSessionStatsPath = undefined;
+    this.sessionStatsPushInFlight = true;
+
+    try {
+      const stats = await this.buildSessionStats(sessionPath);
+      if (this.disposed) return;
+
+      const payload: RpcSessionStatsEvent = {
+        type: "session_stats",
+        sessionPath: sessionPath ?? undefined,
+        stats,
+      };
+      this.sendEvent(payload as unknown as Record<string, unknown>);
+    } catch {
+      // Ignore transient push failures. Explicit stats RPC reads still work.
+    } finally {
+      this.sessionStatsPushInFlight = false;
+      if (this.pendingSessionStatsPath !== undefined && !this.disposed) {
+        void this.flushSessionStatsEventQueue();
+      }
+    }
+  }
+
   private buildSwitchSessionResponse(
     correlationId: string,
     sessionManager: SessionManager,
@@ -1523,6 +1724,13 @@ export class WsRpcAdapter {
     try {
       const response = await this.dispatchCommand(command, correlationId);
       this.sendResponse({ type: "response", payload: response });
+
+      if (
+        response.success &&
+        (command.type === "switch_session" || command.type === "new_session")
+      ) {
+        this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
+      }
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
       console.error(
@@ -1954,165 +2162,6 @@ export class WsRpcAdapter {
       // =================================================================
       // Session (use ctx methods)
       // =================================================================
-
-      case "get_session_stats": {
-        const requestedPath = command.sessionPath as string | undefined;
-        const selectedSessionPath = this.selectedSessionPath;
-        // Always use the actual live Pi session file, not the web-selected one.
-        // selectedSessionPath is for detached prompt routing, not for stats lookup.
-        const liveSessionPath = ctx.sessionManager.getSessionFile();
-        const targetPath =
-          requestedPath ?? selectedSessionPath ?? liveSessionPath;
-
-        if (
-          this.selectedSession &&
-          (!targetPath || targetPath === this.selectedSession.sessionFile)
-        ) {
-          const stats = this.selectedSession.getSessionStats();
-          return {
-            id: correlationId,
-            type: "response",
-            command: "get_session_stats",
-            success: true,
-            data: {
-              tokens: stats.contextUsage?.tokens ?? null,
-              contextWindow: stats.contextUsage?.contextWindow ?? 0,
-              percent: stats.contextUsage?.percent ?? null,
-              messageCount: stats.totalMessages,
-              cost: stats.cost,
-              inputTokens: stats.tokens.input,
-              outputTokens: stats.tokens.output,
-              cacheReadTokens: stats.tokens.cacheRead,
-              cacheWriteTokens: stats.tokens.cacheWrite,
-            },
-          };
-        }
-
-        // If targeting a stored session different from the live session, read from disk.
-        if (
-          targetPath &&
-          targetPath !== liveSessionPath &&
-          fs.existsSync(targetPath)
-        ) {
-          try {
-            const diskSession = openSessionManager(targetPath);
-            const branch = diskSession.getBranch();
-            const summary = summarizeTokenUsage(branch, diskSession.getEntries());
-
-            let tokens: number | null = null;
-            let contextWindow = 0;
-            let percent: number | null = null;
-            if (summary.lastAssistantUsage) {
-              const u = summary.lastAssistantUsage;
-              tokens =
-                (u.input ?? 0) + (u.cacheRead ?? 0) + (u.cacheWrite ?? 0);
-            }
-            if (
-              summary.lastModel?.provider &&
-              summary.lastModel?.modelId &&
-              tokens != null
-            ) {
-              const models = await ctx.modelRegistry.getAvailable();
-              const matched = models.find(
-                (m: unknown) =>
-                  (m as { provider: string; id: string }).provider ===
-                    summary.lastModel!.provider &&
-                  (m as { provider: string; id: string }).id ===
-                    summary.lastModel!.modelId,
-              );
-              if (matched) {
-                contextWindow =
-                  (matched as { contextWindow?: number }).contextWindow ?? 0;
-                if (contextWindow > 0) {
-                  percent =
-                    Math.round((tokens / contextWindow) * 100 * 10) / 10;
-                }
-              }
-            }
-
-            return {
-              id: correlationId,
-              type: "response",
-              command: "get_session_stats",
-              success: true,
-              data: {
-                tokens,
-                contextWindow,
-                percent,
-                messageCount: summary.messageCount,
-                cost: summary.totalCost,
-                inputTokens: summary.inputTokens,
-                outputTokens: summary.outputTokens,
-                cacheReadTokens: summary.cacheReadTokens,
-                cacheWriteTokens: summary.cacheWriteTokens,
-              },
-            };
-          } catch {
-            // Fall through to live session stats
-          }
-        }
-
-        // Live session: use context API, with fallback to branch reconstruction
-        const usage = ctx.getContextUsage();
-        const branch = ctx.sessionManager.getBranch();
-        const summary = summarizeTokenUsage(branch, ctx.sessionManager.getEntries());
-
-        let tokens: number | null = usage?.tokens ?? null;
-        let contextWindow: number = usage?.contextWindow ?? 0;
-        let percent: number | null = usage?.percent ?? null;
-
-        // Fallback: reconstruct from branch entries when getContextUsage() is empty
-        if (tokens == null && summary.lastAssistantUsage) {
-          tokens =
-            (summary.lastAssistantUsage.input ?? 0) +
-            (summary.lastAssistantUsage.cacheRead ?? 0) +
-            (summary.lastAssistantUsage.cacheWrite ?? 0);
-        }
-        if (
-          contextWindow === 0 &&
-          summary.lastModel?.provider &&
-          summary.lastModel?.modelId &&
-          tokens != null
-        ) {
-          try {
-            const models = await ctx.modelRegistry.getAvailable();
-            const matched = models.find(
-              (m: unknown) =>
-                (m as { provider: string; id: string }).provider ===
-                  summary.lastModel!.provider &&
-                (m as { provider: string; id: string }).id ===
-                  summary.lastModel!.modelId,
-            );
-            if (matched) {
-              contextWindow =
-                (matched as { contextWindow?: number }).contextWindow ?? 0;
-            }
-          } catch {
-            // Model registry unavailable; skip context window lookup
-          }
-        }
-        if (percent == null && tokens != null && contextWindow > 0) {
-          percent = Math.round((tokens / contextWindow) * 100 * 10) / 10;
-        }
-
-        return {
-          id: correlationId,
-          type: "response",
-          command: "get_session_stats",
-          success: true,
-          data: {
-            tokens,
-            contextWindow,
-            percent,
-            messageCount: summary.messageCount,
-            cost: summary.totalCost,
-            inputTokens: summary.inputTokens,
-            outputTokens: summary.outputTokens,
-            cacheReadTokens: summary.cacheReadTokens,
-            cacheWriteTokens: summary.cacheWriteTokens,
-          },
-        };
-      }
 
       case "export_html": {
         return {

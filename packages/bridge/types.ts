@@ -75,7 +75,6 @@ export interface RpcCommandMap {
   abort_bash: unknown;
 
   /** Session */
-  get_session_stats: { sessionPath?: string };
   export_html: { outputPath?: string };
   switch_session: { sessionPath: string };
   navigate_tree: {
@@ -192,6 +191,12 @@ export interface RpcTranscriptUpsertEvent {
   message: RpcTranscriptMessage;
 }
 
+export interface RpcSessionStatsEvent {
+  type: "session_stats";
+  sessionPath?: string;
+  stats: RpcSessionStats;
+}
+
 // ============================================================================
 // RPC Responses (server → client)
 // ============================================================================
@@ -224,7 +229,6 @@ export interface RpcResponseMap {
   abort_retry: void;
   bash: unknown;
   abort_bash: void;
-  get_session_stats: RpcSessionStats;
   export_html: { path: string };
   switch_session: {
     messages: unknown[];

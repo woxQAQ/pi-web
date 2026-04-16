@@ -12,6 +12,7 @@ import type {
   RpcTranscriptMessage,
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
+  RpcSessionStatsEvent,
   ClientMessage,
   ServerMessage,
 } from "../shared-types";
@@ -493,10 +494,6 @@ function handleResponse(payload: RpcResponse) {
           sendCommand({
             type: "get_state",
           }).catch(() => {});
-          sendCommand({
-            type: "get_session_stats",
-            sessionPath: data.sessionPath,
-          }).catch(() => {});
         }
         break;
       }
@@ -548,7 +545,6 @@ function handleResponse(payload: RpcResponse) {
           treeEntries.value = [];
           sessionState.value = null;
         }
-        sessionStats.value = null;
         sendCommand({ type: "list_sessions" }).catch(() => {});
         break;
       }
@@ -587,11 +583,6 @@ function handleResponse(payload: RpcResponse) {
       }
       case "set_thinking_level":
         break;
-      case "get_session_stats": {
-        const data = normalizeSessionStats(payload.data);
-        if (data) sessionStats.value = data;
-        break;
-      }
     }
   }
 }
@@ -614,6 +605,18 @@ function handleEvent(payload: Record<string, unknown>) {
       }
       break;
     }
+    case "session_stats": {
+      const data = payload as RpcSessionStatsEvent;
+      if (
+        !activeTreeSessionPath.value ||
+        !data.sessionPath ||
+        activeTreeSessionPath.value === data.sessionPath
+      ) {
+        const stats = normalizeSessionStats(data.stats);
+        if (stats) sessionStats.value = stats;
+      }
+      break;
+    }
     case "agent_start": {
       isStreaming.value = true;
       break;
@@ -622,7 +625,6 @@ function handleEvent(payload: Record<string, unknown>) {
       isStreaming.value = false;
       // Refresh state after agent completes
       sendCommand({ type: "get_state" }).catch(() => {});
-      sendCommand({ type: "get_session_stats" }).catch(() => {});
       break;
     }
     case "model_select": {
@@ -699,7 +701,6 @@ async function fetchInitialState() {
       sendCommand({ type: "list_sessions" }),
       sendCommand({ type: "get_commands" }),
       sendCommand({ type: "get_available_models" }),
-      sendCommand({ type: "get_session_stats" }),
     ]);
   } catch {
     // Individual errors already handled by reject; swallow aggregate

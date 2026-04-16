@@ -19,6 +19,7 @@ export type {
   RpcTranscriptMessage,
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
+  RpcSessionStatsEvent,
   ClientMessage,
   ServerMessage,
 } from "../../bridge/types";

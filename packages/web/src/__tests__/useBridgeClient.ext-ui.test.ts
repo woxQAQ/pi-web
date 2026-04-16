@@ -138,6 +138,7 @@ describe("extension_ui_request handling", () => {
     const client = await importComposable();
     const ws = getLastMockWs();
     simulateOpen(ws);
+    ws.send.mockClear();
 
     simulateMessage(ws, {
       type: "response",
@@ -175,6 +176,10 @@ describe("extension_ui_request handling", () => {
     ]);
     expect(client.liveSessionPath.value).toBe("/tmp/session-2.jsonl");
     expect(client.isHistoricalView.value).toBe(false);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(ws.send).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"get_state"'),
+    );
   });
 
   it("ignores stale live tree responses after switch_session", async () => {
@@ -364,18 +369,16 @@ describe("extension_ui_request handling", () => {
     ]);
   });
 
-  it("stores expanded session stats from responses", async () => {
+  it("stores expanded session stats from pushed events", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();
     simulateOpen(ws);
 
     simulateMessage(ws, {
-      type: "response",
+      type: "event",
       payload: {
-        type: "response",
-        command: "get_session_stats",
-        success: true,
-        data: {
+        type: "session_stats",
+        stats: {
           tokens: 272000,
           contextWindow: 272000,
           percent: 32.1,
@@ -402,18 +405,16 @@ describe("extension_ui_request handling", () => {
     });
   });
 
-  it("normalizes invalid session stats values to zero", async () => {
+  it("normalizes invalid pushed session stats values to zero", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();
     simulateOpen(ws);
 
     simulateMessage(ws, {
-      type: "response",
+      type: "event",
       payload: {
-        type: "response",
-        command: "get_session_stats",
-        success: true,
-        data: {
+        type: "session_stats",
+        stats: {
           tokens: 272000,
           contextWindow: 272000,
           percent: 32.1,
@@ -1045,6 +1046,171 @@ describe("extension_ui_request handling", () => {
         content: "Hello",
       },
     ]);
+  });
+
+  it("accepts pushed empty session stats after new_session", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "session_stats",
+        sessionPath: "/tmp/old.jsonl",
+        stats: {
+          tokens: 2_000,
+          contextWindow: 8_000,
+          percent: 25,
+          messageCount: 4,
+          cost: 0.2,
+          inputTokens: 1_800,
+          outputTokens: 200,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "new_session",
+        success: true,
+        data: {
+          messages: [],
+          treeEntries: [],
+          sessionId: "session-2",
+          sessionName: "Session 2",
+          sessionPath: "/tmp/new.jsonl",
+          cancelled: false,
+        },
+      },
+    });
+
+    expect(client.sessionStats.value).toEqual({
+      tokens: 2_000,
+      contextWindow: 8_000,
+      percent: 25,
+      messageCount: 4,
+      cost: 0.2,
+      inputTokens: 1_800,
+      outputTokens: 200,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "session_stats",
+        sessionPath: "/tmp/new.jsonl",
+        stats: {
+          tokens: null,
+          contextWindow: 0,
+          percent: null,
+          messageCount: 0,
+          cost: 0,
+          inputTokens: 0,
+          outputTokens: 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      },
+    });
+
+    expect(client.sessionStats.value).toEqual({
+      tokens: null,
+      contextWindow: 0,
+      percent: null,
+      messageCount: 0,
+      cost: 0,
+      inputTokens: 0,
+      outputTokens: 0,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+  });
+
+  it("updates session stats from pushed events while streaming", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "get_state",
+        success: true,
+        data: {
+          sessionId: "session-1",
+          sessionFile: "/tmp/live.jsonl",
+          sessionName: "Session 1",
+          thinkingLevel: "normal",
+          isStreaming: false,
+          isCompacting: false,
+          steeringMode: "all",
+          followUpMode: "all",
+          autoCompactionEnabled: false,
+          messageCount: 0,
+          pendingMessageCount: 0,
+        },
+      },
+    });
+
+    ws.send.mockClear();
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: { type: "agent_start" },
+    });
+
+    expect(client.isStreaming.value).toBe(true);
+    expect(ws.send).not.toHaveBeenCalled();
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "session_stats",
+        sessionPath: "/tmp/live.jsonl",
+        stats: {
+          tokens: 1_000,
+          contextWindow: 8_000,
+          percent: 12.5,
+          messageCount: 1,
+          cost: 0.01,
+          inputTokens: 900,
+          outputTokens: 100,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+        },
+      },
+    });
+
+    expect(client.sessionStats.value).toEqual({
+      tokens: 1_000,
+      contextWindow: 8_000,
+      percent: 12.5,
+      messageCount: 1,
+      cost: 0.01,
+      inputTokens: 900,
+      outputTokens: 100,
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: { type: "agent_end" },
+    });
+
+    expect(client.isStreaming.value).toBe(false);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(ws.send).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"get_state"'),
+    );
   });
 
   it("abortGeneration sends abort only while streaming", async () => {
