@@ -118,14 +118,13 @@ describe("extension_ui_request handling", () => {
 
     expect(sentCommandTypes).toEqual(
       expect.arrayContaining([
+        "get_messages",
         "get_state",
         "list_sessions",
         "get_commands",
         "get_available_models",
       ]),
     );
-
-    expect(sentCommandTypes).not.toContain("get_messages");
 
     // Tree data is loaded lazily when the panel is opened.
     const treeRequests = sentCommandTypes.filter(
@@ -147,7 +146,11 @@ describe("extension_ui_request handling", () => {
         command: "switch_session",
         success: true,
         data: {
-          messages: [],
+          transcript: {
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          },
           treeEntries: [
             {
               id: "node-1",
@@ -216,7 +219,11 @@ describe("extension_ui_request handling", () => {
         command: "switch_session",
         success: true,
         data: {
-          messages: [],
+          transcript: {
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          },
           treeEntries: [
             {
               id: "session-node",
@@ -921,6 +928,8 @@ describe("extension_ui_request handling", () => {
             content: "Hello",
           },
         ],
+        hasOlder: false,
+        hasNewer: false,
       },
     });
 
@@ -997,6 +1006,8 @@ describe("extension_ui_request handling", () => {
             content: "Old",
           },
         ],
+        hasOlder: false,
+        hasNewer: false,
       },
     });
     simulateMessage(ws, {
@@ -1005,6 +1016,8 @@ describe("extension_ui_request handling", () => {
         type: "transcript_snapshot",
         sessionPath: "/tmp/new.jsonl",
         messages: [],
+        hasOlder: false,
+        hasNewer: false,
       },
     });
     simulateMessage(ws, {
@@ -1028,12 +1041,30 @@ describe("extension_ui_request handling", () => {
         command: "new_session",
         success: true,
         data: {
-          messages: [],
+          transcript: {
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          },
           treeEntries: [],
           sessionId: "session-2",
           sessionName: "Session 2",
           sessionPath: "/tmp/new.jsonl",
           cancelled: false,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "transcript_upsert",
+        sessionPath: "/tmp/new.jsonl",
+        message: {
+          transcriptKey: "live:1",
+          id: "user-1",
+          role: "user",
+          content: "Hello",
         },
       },
     });
@@ -1079,7 +1110,11 @@ describe("extension_ui_request handling", () => {
         command: "new_session",
         success: true,
         data: {
-          messages: [],
+          transcript: {
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          },
           treeEntries: [],
           sessionId: "session-2",
           sessionName: "Session 2",

@@ -20,6 +20,9 @@ defineProps<{
   compatWarningVisible: boolean;
   statusEntries: Record<string, string>;
   transcript: readonly TranscriptEntry[];
+  transcriptHasOlder: boolean;
+  transcriptInitialLoading: boolean;
+  transcriptPageLoading: boolean;
   isStreaming: boolean;
   isDebugMode: boolean;
   connectionStatus: ConnectionStatus;
@@ -51,6 +54,7 @@ const emit = defineEmits<{
     },
   ];
   abort: [];
+  loadOlderTranscript: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
   toggleAutoCompaction: [enabled: boolean];
@@ -91,9 +95,13 @@ defineExpose({ preserveTranscriptScroll });
     <ChatTranscript
       ref="chatTranscriptRef"
       :messages="transcript"
+      :has-older="transcriptHasOlder"
+      :initial-loading="transcriptInitialLoading"
+      :page-loading="transcriptPageLoading"
       :is-streaming="isStreaming"
       :show-message-ids="isDebugMode"
       :allow-revision="allowRevision"
+      @load-older="emit('loadOlderTranscript')"
       @revise="emit('reviseMessage', $event)"
     />
     <SessionStatsBar :stats="sessionStats" />

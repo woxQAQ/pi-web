@@ -642,6 +642,8 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.command).toBe("get_messages");
       expect(response.payload.success).toBe(true);
       expect(response.payload.data.messages).toHaveLength(1);
+      expect(response.payload.data.direction).toBe("latest");
+      expect(response.payload.data.hasOlder).toBe(false);
     });
 
     it("should handle get_commands command", async () => {
@@ -956,6 +958,8 @@ describe("WsRpcAdapter", () => {
           timestamp: undefined,
         },
       ]);
+      expect(firstCall.payload.hasOlder).toBe(false);
+      expect(firstCall.payload.hasNewer).toBe(false);
     });
 
     it("pushes initial session stats to the client", async () => {
@@ -1806,7 +1810,8 @@ describe("WsRpcAdapter", () => {
       );
       expect(responseCall?.payload.data.cancelled).toBe(false);
       expect(responseCall?.payload.data.sessionId).toBeTruthy();
-      expect(responseCall?.payload.data.messages).toEqual([]);
+      expect(responseCall?.payload.data.transcript.messages).toEqual([]);
+      expect(responseCall?.payload.data.transcript.hasOlder).toBe(false);
 
       const statsEvent = sendCalls.find(
         call =>
@@ -2000,6 +2005,7 @@ describe("WsRpcAdapter", () => {
         id: "cmd-1",
         type: "switch_session",
         sessionPath: sessionFile,
+        limit: 1,
       };
       (
         ws as unknown as { trigger: (event: string, data: Buffer) => void }
@@ -2019,11 +2025,12 @@ describe("WsRpcAdapter", () => {
           call.payload.command === "switch_session" &&
           call.payload.success,
       );
-      expect(responseCall?.payload.data.messages).toHaveLength(2);
-      expect(responseCall?.payload.data.messages[0]).toMatchObject({
-        role: "user",
-        content: "Hello",
+      expect(responseCall?.payload.data.transcript.messages).toHaveLength(1);
+      expect(responseCall?.payload.data.transcript.messages[0]).toMatchObject({
+        role: "assistant",
+        content: [{ type: "text", text: "Hi" }],
       });
+      expect(responseCall?.payload.data.transcript.hasOlder).toBe(true);
       expect(responseCall?.payload.data.sessionId).toBe(
         sessionManager.getSessionId(),
       );

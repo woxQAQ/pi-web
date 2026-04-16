@@ -44,7 +44,7 @@ export interface RpcCommandMap {
     images?: RpcImageContent[];
   };
   abort: unknown;
-  new_session: { parentSession?: string };
+  new_session: { parentSession?: string; limit?: number };
 
   /** State */
   get_state: unknown;
@@ -76,7 +76,7 @@ export interface RpcCommandMap {
 
   /** Session */
   export_html: { outputPath?: string };
-  switch_session: { sessionPath: string };
+  switch_session: { sessionPath: string; limit?: number };
   navigate_tree: {
     entryId: string;
     summarize?: boolean;
@@ -90,7 +90,12 @@ export interface RpcCommandMap {
   set_session_name: { name: string };
 
   /** Messages / Commands */
-  get_messages: unknown;
+  get_messages: {
+    sessionPath?: string;
+    direction?: "latest" | "older";
+    cursor?: string;
+    limit?: number;
+  };
   get_commands: unknown;
 
   /** Discovery */
@@ -179,10 +184,17 @@ export interface RpcTranscriptMessage {
   [key: string]: unknown;
 }
 
-export interface RpcTranscriptSnapshotEvent {
-  type: "transcript_snapshot";
+export interface RpcTranscriptPage {
   sessionPath?: string;
   messages: RpcTranscriptMessage[];
+  oldestCursor?: string;
+  newestCursor?: string;
+  hasOlder: boolean;
+  hasNewer: boolean;
+}
+
+export interface RpcTranscriptSnapshotEvent extends RpcTranscriptPage {
+  type: "transcript_snapshot";
 }
 
 export interface RpcTranscriptUpsertEvent {
@@ -208,7 +220,7 @@ export interface RpcResponseMap {
   follow_up: void;
   abort: void;
   new_session: {
-    messages: unknown[];
+    transcript: RpcTranscriptPage;
     treeEntries: RpcTreeEntry[];
     sessionId: string;
     sessionName: string;
@@ -231,7 +243,7 @@ export interface RpcResponseMap {
   abort_bash: void;
   export_html: { path: string };
   switch_session: {
-    messages: unknown[];
+    transcript: RpcTranscriptPage;
     treeEntries: RpcTreeEntry[];
     sessionId: string;
     sessionName: string;
@@ -243,7 +255,7 @@ export interface RpcResponseMap {
   get_fork_messages: { messages: Array<{ entryId: string; text: string }> };
   get_last_assistant_text: { text: string | null };
   set_session_name: void;
-  get_messages: { messages: unknown[] };
+  get_messages: RpcTranscriptPage & { direction: "latest" | "older" };
   get_commands: { commands: RpcSlashCommand[] };
   list_sessions: {
     sessions: Array<{ id: string; name: string; path: string }>;

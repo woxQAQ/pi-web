@@ -17,6 +17,7 @@ export type {
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
   RpcTranscriptMessage,
+  RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
   RpcSessionStatsEvent,

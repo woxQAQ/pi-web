@@ -17,6 +17,9 @@ type ThemeMode = "dark" | "light";
 const {
   connectionStatus,
   transcript,
+  transcriptHasOlder,
+  transcriptInitialLoading,
+  transcriptPageLoading,
   sessionState,
   sessionStats,
   sessions,
@@ -34,6 +37,7 @@ const {
   lastDisconnectReason,
   connectionError,
   sendPrompt,
+  loadOlderTranscriptPage,
   abortGeneration,
   sendCommand,
   fetchWorkspaceEntries,
@@ -385,6 +389,9 @@ onBeforeUnmount(() => {
         :compat-warning-visible="compatWarningVisible"
         :status-entries="statusEntries"
         :transcript="transcript"
+        :transcript-has-older="transcriptHasOlder"
+        :transcript-initial-loading="transcriptInitialLoading"
+        :transcript-page-loading="transcriptPageLoading"
         :is-streaming="isStreaming"
         :is-debug-mode="debugModeAvailable && debugMode"
         :connection-status="connectionStatus"
@@ -401,6 +408,7 @@ onBeforeUnmount(() => {
         :pending-revision="pendingRevision"
         :allow-revision="connectionStatus === 'connected' && !isHistoricalView"
         @submit="handlePrompt($event)"
+        @load-older-transcript="loadOlderTranscriptPage"
         @abort="handleAbort"
         @revise-message="handleReviseMessage"
         @cancel-revision="handleCancelRevision"

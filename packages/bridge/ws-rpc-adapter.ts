@@ -26,6 +26,7 @@ import type {
   RpcSessionStatsEvent,
   RpcSlashCommand,
   RpcTranscriptMessage,
+  RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
   RpcTreeEntry,
@@ -587,6 +588,71 @@ function flattenMessagesForTranscript(
   return messages;
 }
 
+function normalizeTranscriptPageLimit(limit: unknown): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) return 40;
+  return Math.min(100, Math.max(1, Math.trunc(limit)));
+}
+
+function encodeTranscriptCursor(index: number): string {
+  return `i:${index}`;
+}
+
+function decodeTranscriptCursor(cursor: unknown): number | null {
+  if (typeof cursor !== "string") return null;
+  const matched = /^i:(\d+)$/.exec(cursor);
+  if (!matched) return null;
+  const index = Number.parseInt(matched[1], 10);
+  return Number.isInteger(index) ? index : null;
+}
+
+function buildTranscriptPage(
+  messages: readonly RpcTranscriptMessage[],
+  sessionPath: string | null,
+  options?: {
+    direction?: "latest" | "older";
+    cursor?: string;
+    limit?: number;
+  },
+): RpcTranscriptPage {
+  const limit = normalizeTranscriptPageLimit(options?.limit);
+  const total = messages.length;
+
+  if (total === 0) {
+    return {
+      sessionPath: sessionPath ?? undefined,
+      messages: [],
+      hasOlder: false,
+      hasNewer: false,
+    };
+  }
+
+  const direction = options?.direction ?? "latest";
+  let start = Math.max(0, total - limit);
+  let end = total;
+
+  if (direction === "older") {
+    const cursorIndex = decodeTranscriptCursor(options?.cursor);
+    const upperBound =
+      cursorIndex == null ? Math.max(0, total - 1) : Math.min(total - 1, cursorIndex);
+    end = Math.max(0, upperBound);
+    start = Math.max(0, end - limit);
+  }
+
+  const pageMessages = messages.slice(start, end);
+  const hasOlder = start > 0;
+  const hasNewer = end < total;
+
+  return {
+    sessionPath: sessionPath ?? undefined,
+    messages: pageMessages,
+    oldestCursor: pageMessages.length > 0 ? encodeTranscriptCursor(start) : undefined,
+    newestCursor:
+      pageMessages.length > 0 ? encodeTranscriptCursor(end - 1) : undefined,
+    hasOlder,
+    hasNewer,
+  };
+}
+
 function extractEventMessage(event: object): Record<string, unknown> | null {
   if (!event || typeof event !== "object") return null;
 
@@ -1144,6 +1210,18 @@ export class WsRpcAdapter {
     );
   }
 
+  private buildCurrentTranscriptPage(options?: {
+    direction?: "latest" | "older";
+    cursor?: string;
+    limit?: number;
+  }): RpcTranscriptPage {
+    return buildTranscriptPage(
+      this.buildCurrentTranscriptMessages(),
+      this.currentTranscriptSessionPath(),
+      options,
+    );
+  }
+
   private resetTranscriptSync(
     messages: readonly RpcTranscriptMessage[],
     sessionPath: string | null,
@@ -1165,24 +1243,17 @@ export class WsRpcAdapter {
     }
   }
 
-  private sendTranscriptSnapshot(
-    messages: readonly RpcTranscriptMessage[],
-    sessionPath: string | null,
-  ): void {
-    this.resetTranscriptSync(messages, sessionPath);
+  private sendTranscriptSnapshot(page: RpcTranscriptPage): void {
+    this.resetTranscriptSync(page.messages, page.sessionPath ?? null);
     const payload: RpcTranscriptSnapshotEvent = {
       type: "transcript_snapshot",
-      sessionPath: sessionPath ?? undefined,
-      messages: [...messages],
+      ...page,
     };
     this.sendEvent(payload as unknown as Record<string, unknown>);
   }
 
   private sendInitialTranscriptSnapshot(): void {
-    this.sendTranscriptSnapshot(
-      this.buildCurrentTranscriptMessages(),
-      this.currentTranscriptSessionPath(),
-    );
+    this.sendTranscriptSnapshot(this.buildCurrentTranscriptPage());
   }
 
   private nextTranscriptKey(): string {
@@ -1326,10 +1397,12 @@ export class WsRpcAdapter {
           // AgentSession persists message_end entries before agent_end fires, so
           // this snapshot includes the real session entry IDs for the finished turn.
           this.sendTranscriptSnapshot(
-            flattenMessagesForTranscript(
-              this.selectedSession.sessionManager.getBranch(),
+            buildTranscriptPage(
+              flattenMessagesForTranscript(
+                this.selectedSession.sessionManager.getBranch(),
+              ),
+              this.selectedSession.sessionFile ?? null,
             ),
-            this.selectedSession.sessionFile ?? null,
           );
         }
         this.sendEvent(event as unknown as Record<string, unknown>);
@@ -1420,10 +1493,12 @@ export class WsRpcAdapter {
 
     if (!options?.skipInitialSnapshot) {
       this.sendTranscriptSnapshot(
-        flattenMessagesForTranscript(
-          created.session.sessionManager.getBranch(),
+        buildTranscriptPage(
+          flattenMessagesForTranscript(
+            created.session.sessionManager.getBranch(),
+          ),
+          created.session.sessionFile ?? null,
         ),
-        created.session.sessionFile ?? null,
       );
     }
 
@@ -1690,9 +1765,14 @@ export class WsRpcAdapter {
     correlationId: string,
     sessionManager: SessionManager,
     sessionPath: string,
+    transcriptLimit?: number,
   ): RpcResponse {
-    const messages = flattenMessagesForTranscript(sessionManager.getBranch());
-    this.resetTranscriptSync(messages, sessionPath);
+    const transcript = buildTranscriptPage(
+      flattenMessagesForTranscript(sessionManager.getBranch()),
+      sessionPath,
+      { limit: transcriptLimit },
+    );
+    this.resetTranscriptSync(transcript.messages, sessionPath);
 
     return {
       id: correlationId,
@@ -1700,7 +1780,7 @@ export class WsRpcAdapter {
       command: "switch_session",
       success: true,
       data: {
-        messages,
+        transcript,
         treeEntries: buildTreeEntriesFromSession(sessionManager),
         sessionId: sessionManager.getSessionId(),
         sessionName: sessionDisplayName(sessionManager, sessionPath),
@@ -1861,15 +1941,18 @@ export class WsRpcAdapter {
         if (autoCreated && autoCreatedSm) {
           const sm = autoCreatedSm;
           const sessionFile = sm.getSessionFile();
-          const messages = flattenMessagesForTranscript(sm.getBranch());
-          this.resetTranscriptSync(messages, sessionFile ?? null);
+          const transcript = buildTranscriptPage(
+            flattenMessagesForTranscript(sm.getBranch()),
+            sessionFile ?? null,
+          );
+          this.resetTranscriptSync(transcript.messages, sessionFile ?? null);
           return {
             id: correlationId,
             type: "response",
             command: "new_session",
             success: true,
             data: {
-              messages,
+              transcript,
               treeEntries: buildTreeEntriesFromSession(sm),
               sessionId: sm.getSessionId(),
               sessionName: sessionDisplayName(sm, sessionFile),
@@ -2240,6 +2323,7 @@ export class WsRpcAdapter {
             correlationId,
             sessionManager,
             sessionPath,
+            command.limit,
           );
         } catch (err) {
           return {
@@ -2360,17 +2444,19 @@ export class WsRpcAdapter {
         }
         this.pendingSessionManager = sessionManager;
 
-        const messages = flattenMessagesForTranscript(
-          sessionManager.getBranch(),
+        const transcript = buildTranscriptPage(
+          flattenMessagesForTranscript(sessionManager.getBranch()),
+          sessionFile ?? null,
+          { limit: command.limit },
         );
-        this.resetTranscriptSync(messages, sessionFile ?? null);
+        this.resetTranscriptSync(transcript.messages, sessionFile ?? null);
         return {
           id: correlationId,
           type: "response",
           command: "new_session",
           success: true,
           data: {
-            messages,
+            transcript,
             treeEntries: buildTreeEntriesFromSession(sessionManager),
             sessionId: sessionManager.getSessionId(),
             sessionName: sessionDisplayName(sessionManager, sessionFile),
@@ -2385,20 +2471,33 @@ export class WsRpcAdapter {
       // =================================================================
 
       case "get_messages": {
+        const direction = command.direction === "older" ? "older" : "latest";
+        const options = {
+          direction,
+          cursor: command.cursor,
+          limit: command.limit,
+        } as const;
+
         if (this.selectedSession) {
-          const messages = flattenMessagesForTranscript(
-            this.selectedSession.sessionManager.getBranch(),
-          );
-          this.resetTranscriptSync(
-            messages,
+          const page = buildTranscriptPage(
+            flattenMessagesForTranscript(
+              this.selectedSession.sessionManager.getBranch(),
+            ),
             this.selectedSession.sessionFile ?? null,
+            options,
           );
+          if (direction === "latest") {
+            this.resetTranscriptSync(
+              page.messages,
+              this.selectedSession.sessionFile ?? null,
+            );
+          }
           return {
             id: correlationId,
             type: "response",
             command: "get_messages",
             success: true,
-            data: { messages },
+            data: { ...page, direction },
           };
         }
 
@@ -2407,32 +2506,40 @@ export class WsRpcAdapter {
           fs.existsSync(this.selectedSessionPath)
         ) {
           const sessionManager = openSessionManager(this.selectedSessionPath);
-          const messages = flattenMessagesForTranscript(
-            sessionManager.getBranch(),
+          const page = buildTranscriptPage(
+            flattenMessagesForTranscript(sessionManager.getBranch()),
+            this.selectedSessionPath,
+            options,
           );
-          this.resetTranscriptSync(messages, this.selectedSessionPath);
+          if (direction === "latest") {
+            this.resetTranscriptSync(page.messages, this.selectedSessionPath);
+          }
           return {
             id: correlationId,
             type: "response",
             command: "get_messages",
             success: true,
-            data: { messages },
+            data: { ...page, direction },
           };
         }
 
-        const messages = flattenMessagesForTranscript(
-          ctx.sessionManager.getBranch(),
-        );
-        this.resetTranscriptSync(
-          messages,
+        const page = buildTranscriptPage(
+          flattenMessagesForTranscript(ctx.sessionManager.getBranch()),
           ctx.sessionManager.getSessionFile() ?? null,
+          options,
         );
+        if (direction === "latest") {
+          this.resetTranscriptSync(
+            page.messages,
+            ctx.sessionManager.getSessionFile() ?? null,
+          );
+        }
         return {
           id: correlationId,
           type: "response",
           command: "get_messages",
           success: true,
-          data: { messages },
+          data: { ...page, direction },
         };
       }
 
@@ -2492,8 +2599,10 @@ export class WsRpcAdapter {
         });
 
         this.sendTranscriptSnapshot(
-          flattenMessagesForTranscript(session.sessionManager.getBranch()),
-          session.sessionFile ?? null,
+          buildTranscriptPage(
+            flattenMessagesForTranscript(session.sessionManager.getBranch()),
+            session.sessionFile ?? null,
+          ),
         );
         this.queueSessionStatsEvent(session.sessionFile ?? null);
 

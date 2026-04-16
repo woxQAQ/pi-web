@@ -17,12 +17,16 @@ import ToolCard from "./ToolCard.vue";
 
 const props = defineProps<{
   messages: readonly TranscriptEntry[];
+  hasOlder: boolean;
+  initialLoading: boolean;
+  pageLoading: boolean;
   isStreaming: boolean;
   showMessageIds: boolean;
   allowRevision: boolean;
 }>();
 
 const emit = defineEmits<{
+  loadOlder: [];
   revise: [
     payload: {
       entryId: string;
@@ -39,6 +43,12 @@ const userCopySelector = "[data-user-message-index]";
 let wasDisconnected = false;
 let savedScrollTop = 0;
 let savedScrollHeight = 0;
+let topLoadArmed = true;
+let pendingHistoryAnchor:
+  | { scrollTop: number; scrollHeight: number }
+  | null = null;
+
+const TOP_LOAD_THRESHOLD = 120;
 
 function preserveScroll() {
   if (!container.value) return;
@@ -231,20 +241,62 @@ function handleCopy(event: ClipboardEvent) {
   event.preventDefault();
 }
 
-onMounted(() => document.addEventListener("copy", handleCopy));
-onBeforeUnmount(() => document.removeEventListener("copy", handleCopy));
+function requestOlderTranscript() {
+  if (!container.value) return;
+  if (!props.hasOlder || props.initialLoading || props.pageLoading) return;
+  pendingHistoryAnchor = {
+    scrollTop: container.value.scrollTop,
+    scrollHeight: container.value.scrollHeight,
+  };
+  emit("loadOlder");
+}
+
+function maybeLoadOlderTranscript() {
+  if (!container.value) return;
+  if (!props.hasOlder || props.initialLoading || props.pageLoading) return;
+
+  if (container.value.scrollTop > TOP_LOAD_THRESHOLD) {
+    topLoadArmed = true;
+    return;
+  }
+
+  if (!topLoadArmed) return;
+  topLoadArmed = false;
+  requestOlderTranscript();
+}
+
+function handleScroll() {
+  maybeLoadOlderTranscript();
+}
+
+onMounted(() => {
+  document.addEventListener("copy", handleCopy);
+  container.value?.addEventListener("scroll", handleScroll, { passive: true });
+});
+onBeforeUnmount(() => {
+  document.removeEventListener("copy", handleCopy);
+  container.value?.removeEventListener("scroll", handleScroll);
+});
 
 watch(
   () => props.messages.length,
   async () => {
+    await nextTick();
+
+    if (pendingHistoryAnchor && container.value) {
+      const delta = container.value.scrollHeight - pendingHistoryAnchor.scrollHeight;
+      container.value.scrollTop = pendingHistoryAnchor.scrollTop + delta;
+      pendingHistoryAnchor = null;
+      return;
+    }
+
     if (!wasDisconnected) {
-      await nextTick();
       if (container.value) {
         container.value.scrollTop = container.value.scrollHeight;
       }
       return;
     }
-    await nextTick();
+
     restoreScroll();
   },
 );
@@ -261,12 +313,27 @@ watch(
   },
 );
 
+watch(
+  () => [props.hasOlder, props.initialLoading, props.pageLoading] as const,
+  ([hasOlder, initialLoading, pageLoading]) => {
+    if (!hasOlder || initialLoading || pageLoading) return;
+    if (!container.value) return;
+    if (container.value.scrollTop > TOP_LOAD_THRESHOLD) {
+      topLoadArmed = true;
+    }
+  },
+);
+
 defineExpose({ preserveScroll });
 </script>
 
 <template>
   <div ref="container" class="chat-transcript">
-    <div v-if="messages.length === 0" class="empty-state">
+    <div v-if="initialLoading" class="empty-state loading-state">
+      <p class="empty-title">Loading conversation</p>
+      <p class="empty-subtitle">Fetching the latest transcript window.</p>
+    </div>
+    <div v-else-if="messages.length === 0" class="empty-state">
       <p class="empty-title">Start a conversation</p>
       <p class="empty-subtitle">
         Use / to open commands, then keep the session moving.
@@ -277,6 +344,17 @@ defineExpose({ preserveScroll });
         <span class="hint-chip">Drop or paste images</span>
       </div>
     </div>
+    <div v-if="!initialLoading && hasOlder" class="history-loader">
+      <button
+        type="button"
+        class="history-loader-button"
+        :disabled="pageLoading"
+        @click="requestOlderTranscript()"
+      >
+        {{ pageLoading ? "Loading earlier messages..." : "Load earlier messages" }}
+      </button>
+    </div>
+
     <template
       v-for="(msg, index) in messages"
       :key="messageStableKey(msg, index)"
@@ -468,6 +546,10 @@ defineExpose({ preserveScroll });
   color: var(--text-muted);
 }
 
+.loading-state {
+  min-height: 240px;
+}
+
 .empty-title {
   margin: 0;
   font-size: 1.1rem;
@@ -500,6 +582,32 @@ defineExpose({ preserveScroll });
   background: var(--panel);
   font-size: 0.68rem;
   color: var(--text-subtle);
+}
+
+.history-loader {
+  display: flex;
+  justify-content: center;
+  width: 100%;
+}
+
+.history-loader-button {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  color: var(--text-subtle);
+  padding: 8px 14px;
+  font-size: 0.74rem;
+  cursor: pointer;
+}
+
+.history-loader-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.history-loader-button:disabled {
+  opacity: 0.7;
+  cursor: progress;
 }
 
 .message-row {

@@ -10,6 +10,7 @@ import type {
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
   RpcTranscriptMessage,
+  RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
   RpcSessionStatsEvent,
@@ -93,6 +94,11 @@ function normalizeSessionStats(value: unknown): RpcSessionStats | null {
 const connectionStatus = ref<ConnectionStatus>("disconnected");
 const rawTranscript = ref<TranscriptEntry[]>([]);
 const transcriptSessionPath = ref<string | null>(null);
+const transcriptHasOlder = ref(false);
+const transcriptOldestCursor = ref<string | null>(null);
+const transcriptNewestCursor = ref<string | null>(null);
+const transcriptInitialLoading = ref(true);
+const transcriptPageLoading = ref(false);
 const transcript = computed(() => normalizeTranscript(rawTranscript.value));
 const sessionState = ref<RpcSessionState | null>(null);
 const sessions = ref<SessionEntry[]>([]);
@@ -266,10 +272,42 @@ function replaceTranscript(
   transcriptSessionPath.value = sessionPath;
 }
 
+function applyTranscriptPage(
+  page: RpcTranscriptPage,
+  mode: "replace" | "prepend" = "replace",
+) {
+  const normalized = page.messages.map((entry, index) =>
+    normalizeTranscriptEntry(entry, `snapshot:${index}`),
+  );
+
+  if (mode === "prepend") {
+    const existingKeys = new Set(rawTranscript.value.map(entry => entry.transcriptKey));
+    const merged = normalized.filter(
+      entry => !existingKeys.has(entry.transcriptKey),
+    );
+    rawTranscript.value = [...merged, ...rawTranscript.value];
+  } else {
+    rawTranscript.value = normalized;
+  }
+
+  transcriptSessionPath.value = page.sessionPath ?? null;
+  transcriptHasOlder.value = page.hasOlder;
+  transcriptOldestCursor.value = page.oldestCursor ?? null;
+  transcriptNewestCursor.value = page.newestCursor ?? null;
+  transcriptInitialLoading.value = false;
+  transcriptPageLoading.value = false;
+}
+
 function shouldReplaceSessionTranscript(sessionPath: string | null): boolean {
   return (
     rawTranscript.value.length === 0 ||
     transcriptSessionPath.value !== sessionPath
+  );
+}
+
+function currentTranscriptContainsLiveOnlyEntries(): boolean {
+  return rawTranscript.value.some(entry =>
+    typeof entry.transcriptKey === "string" && entry.transcriptKey.startsWith("live:"),
   );
 }
 
@@ -281,6 +319,48 @@ function applySessionTranscript(
   replaceTranscript(entries, sessionPath);
 }
 
+function applySessionTranscriptPage(page: RpcTranscriptPage) {
+  if (
+    page.messages.length === 0 &&
+    !shouldReplaceSessionTranscript(page.sessionPath ?? null) &&
+    currentTranscriptContainsLiveOnlyEntries()
+  ) {
+    transcriptHasOlder.value = page.hasOlder;
+    transcriptOldestCursor.value = page.oldestCursor ?? null;
+    transcriptNewestCursor.value = page.newestCursor ?? null;
+    transcriptInitialLoading.value = false;
+    transcriptPageLoading.value = false;
+    return;
+  }
+
+  applyTranscriptPage(page, "replace");
+}
+
+async function loadOlderTranscriptPage() {
+  if (
+    transcriptPageLoading.value ||
+    !transcriptHasOlder.value ||
+    !transcriptOldestCursor.value
+  ) {
+    return;
+  }
+
+  transcriptPageLoading.value = true;
+  try {
+    const response = await sendCommand({
+      type: "get_messages",
+      direction: "older",
+      cursor: transcriptOldestCursor.value,
+      limit: 40,
+    });
+    if (!response.success) {
+      transcriptPageLoading.value = false;
+    }
+  } catch {
+    transcriptPageLoading.value = false;
+  }
+}
+
 function upsertTranscriptMessage(
   entry: TranscriptEntry | RpcTranscriptMessage,
   sessionPath: string | null = transcriptSessionPath.value,
@@ -289,7 +369,9 @@ function upsertTranscriptMessage(
     entry,
     `live:${rawTranscript.value.length}`,
   );
-  transcriptSessionPath.value = sessionPath;
+  if (shouldReplaceSessionTranscript(sessionPath)) {
+    transcriptSessionPath.value = sessionPath;
+  }
   const index = rawTranscript.value.findIndex(
     current => current.transcriptKey === normalized.transcriptKey,
   );
@@ -424,10 +506,13 @@ function handleResponse(payload: RpcResponse) {
     switch (payload.command) {
       case "get_messages": {
         const data = payload.data as
-          | { messages: TranscriptEntry[] }
+          | (RpcTranscriptPage & { direction: "latest" | "older" })
           | undefined;
         if (data) {
-          replaceTranscript(data.messages, transcriptSessionPath.value);
+          applyTranscriptPage(
+            data,
+            data.direction === "older" ? "prepend" : "replace",
+          );
         }
         break;
       }
@@ -468,15 +553,15 @@ function handleResponse(payload: RpcResponse) {
       case "switch_session": {
         const data = payload.data as
           | {
-              messages: TranscriptEntry[];
+              transcript: RpcTranscriptPage;
               treeEntries?: TreeEntry[];
               sessionId?: string;
               sessionName?: string;
               sessionPath?: string;
             }
           | undefined;
-        if (data && Array.isArray(data.messages)) {
-          applySessionTranscript(data.messages, data.sessionPath ?? null);
+        if (data?.transcript) {
+          applySessionTranscriptPage(data.transcript);
           if (data.sessionPath) {
             activeTreeSessionPath.value = data.sessionPath;
             liveSessionPath.value = data.sessionPath;
@@ -517,15 +602,15 @@ function handleResponse(payload: RpcResponse) {
       case "new_session": {
         const data = payload.data as
           | {
-              messages: TranscriptEntry[];
+              transcript: RpcTranscriptPage;
               treeEntries?: TreeEntry[];
               sessionId?: string;
               sessionName?: string;
               sessionPath?: string;
             }
           | undefined;
-        if (data && Array.isArray(data.messages)) {
-          applySessionTranscript(data.messages, data.sessionPath ?? null);
+        if (data?.transcript) {
+          applySessionTranscriptPage(data.transcript);
           if (data.sessionPath) {
             activeTreeSessionPath.value = data.sessionPath;
             liveSessionPath.value = data.sessionPath;
@@ -543,6 +628,10 @@ function handleResponse(payload: RpcResponse) {
           }
         } else {
           replaceTranscript([], null);
+          transcriptHasOlder.value = false;
+          transcriptOldestCursor.value = null;
+          transcriptNewestCursor.value = null;
+          transcriptInitialLoading.value = false;
           treeEntries.value = [];
           sessionState.value = null;
         }
@@ -604,7 +693,7 @@ function handleEvent(payload: Record<string, unknown>) {
     case "transcript_snapshot": {
       const data = payload as RpcTranscriptSnapshotEvent;
       if (Array.isArray(data.messages)) {
-        replaceTranscript(data.messages, data.sessionPath ?? null);
+        applyTranscriptPage(data, "replace");
       }
       break;
     }
@@ -705,14 +794,17 @@ function handleExtensionUIRequest(payload: RpcExtensionUIRequest) {
 // ---------------------------------------------------------------------------
 
 async function fetchInitialState() {
+  transcriptInitialLoading.value = true;
   try {
     await Promise.all([
+      sendCommand({ type: "get_messages", direction: "latest", limit: 40 }),
       sendCommand({ type: "get_state" }),
       sendCommand({ type: "list_sessions" }),
       sendCommand({ type: "get_commands" }),
       sendCommand({ type: "get_available_models" }),
     ]);
   } catch {
+    transcriptInitialLoading.value = false;
     // Individual errors already handled by reject; swallow aggregate
   }
 }
@@ -807,6 +899,9 @@ export function useBridgeClient() {
   return {
     connectionStatus: readonly(connectionStatus),
     transcript: readonly(transcript),
+    transcriptHasOlder: readonly(transcriptHasOlder),
+    transcriptInitialLoading: readonly(transcriptInitialLoading),
+    transcriptPageLoading: readonly(transcriptPageLoading),
     sessionState: readonly(sessionState),
     sessions: readonly(sessions),
     treeEntries: readonly(treeEntries),
@@ -836,6 +931,7 @@ export function useBridgeClient() {
     dismissNotification,
     sendCommand,
     sendPrompt,
+    loadOlderTranscriptPage,
     fetchWorkspaceEntries,
     abortGeneration,
     setThinkingLevel,
