@@ -1362,7 +1362,9 @@ export class WsRpcAdapter {
     this.pendingSessionManager = sessionManager;
   }
 
-  private async ensureSelectedSession(): Promise<AgentSession> {
+  private async ensureSelectedSession(options?: {
+    skipInitialSnapshot?: boolean;
+  }): Promise<AgentSession> {
     const sessionPath = this.selectedSessionPath;
     if (!sessionPath) {
       throw new Error("Selected session file not found");
@@ -1402,10 +1404,14 @@ export class WsRpcAdapter {
       this.handleSelectedSessionEvent(event);
     });
 
-    this.sendTranscriptSnapshot(
-      flattenMessagesForTranscript(created.session.sessionManager.getBranch()),
-      created.session.sessionFile ?? null,
-    );
+    if (!options?.skipInitialSnapshot) {
+      this.sendTranscriptSnapshot(
+        flattenMessagesForTranscript(
+          created.session.sessionManager.getBranch(),
+        ),
+        created.session.sessionFile ?? null,
+      );
+    }
 
     return created.session;
   }
@@ -2441,44 +2447,48 @@ export class WsRpcAdapter {
       // =================================================================
 
       case "navigate_tree": {
+        let session: AgentSession;
+
         if (this.selectedSessionPath) {
-          const result = await (
-            await this.ensureSelectedSession()
-          ).navigateTree(command.entryId, {
-            summarize: command.summarize,
-            customInstructions: command.customInstructions,
-            replaceInstructions: command.replaceInstructions,
-            label: command.label,
+          session = await this.ensureSelectedSession();
+        } else {
+          const liveSessionFile = ctx.sessionManager.getSessionFile();
+          if (!liveSessionFile || !fs.existsSync(liveSessionFile)) {
+            return {
+              id: correlationId,
+              type: "response" as const,
+              command: "navigate_tree" as const,
+              success: false as const,
+              error: "No session file available",
+            };
+          }
+
+          this.disposeSelectedSession();
+          this.selectedSessionPath = liveSessionFile;
+          session = await this.ensureSelectedSession({
+            skipInitialSnapshot: true,
           });
-          return {
-            id: correlationId,
-            type: "response" as const,
-            command: "navigate_tree" as const,
-            success: true as const,
-            data: result,
-          };
         }
 
-        // No selected session — branch the live session file locally.
-        const liveSessionFile = ctx.sessionManager.getSessionFile();
-        if (!liveSessionFile || !fs.existsSync(liveSessionFile)) {
-          return {
-            id: correlationId,
-            type: "response" as const,
-            command: "navigate_tree" as const,
-            success: false as const,
-            error: "No session file available",
-          };
-        }
+        const result = await session.navigateTree(command.entryId, {
+          summarize: command.summarize,
+          customInstructions: command.customInstructions,
+          replaceInstructions: command.replaceInstructions,
+          label: command.label,
+        });
 
-        const sm = openSessionManager(liveSessionFile);
-        sm.branch(command.entryId);
+        this.sendTranscriptSnapshot(
+          flattenMessagesForTranscript(session.sessionManager.getBranch()),
+          session.sessionFile ?? null,
+        );
+        this.queueSessionStatsEvent(session.sessionFile ?? null);
+
         return {
           id: correlationId,
           type: "response" as const,
           command: "navigate_tree" as const,
           success: true as const,
-          data: { cancelled: false },
+          data: result,
         };
       }
 

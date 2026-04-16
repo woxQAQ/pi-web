@@ -46,11 +46,25 @@ const props = defineProps<{
   selectedModel: RpcModelInfo | null;
   thinkingLevel: string | null;
   autoCompactionEnabled: boolean;
+  prefillText: string | null;
+  revision: {
+    entryId: string;
+    text: string;
+    preview: string;
+    hasImages: boolean;
+  } | null;
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { message: string; images: RpcImageContent[] }];
+  submit: [
+    payload: {
+      message: string;
+      images: RpcImageContent[];
+      revisionEntryId?: string;
+    },
+  ];
   abort: [];
+  cancelRevision: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
   toggleAutoCompaction: [enabled: boolean];
@@ -59,6 +73,7 @@ const emit = defineEmits<{
 const MAX_TEXTAREA_HEIGHT = 160;
 
 const inputText = ref("");
+const composerRootRef = ref<HTMLDivElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const isDisabled = computed(() => props.connectionStatus !== "connected");
@@ -133,6 +148,11 @@ const attachmentSummary = computed(() => {
   return `${attachments.value.length} images attached`;
 });
 
+const revisionBackup = ref<{
+  text: string;
+  attachments: ComposerAttachment[];
+} | null>(null);
+
 let attachmentNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 let dragDepth = 0;
 
@@ -177,6 +197,49 @@ function resizeTextarea() {
   });
 }
 
+function shouldRevealComposer(): boolean {
+  if (typeof window === "undefined") return false;
+  const el = composerRootRef.value;
+  if (!el) return false;
+  const rect = el.getBoundingClientRect();
+  const viewportHeight = window.innerHeight || 0;
+  const margin = 24;
+  return rect.top < margin || rect.bottom > viewportHeight - margin;
+}
+
+function focusComposer(options?: { reveal?: boolean }) {
+  nextTick(() => {
+    if (options?.reveal && shouldRevealComposer()) {
+      composerRootRef.value?.scrollIntoView({
+        behavior: "smooth",
+        block: "end",
+      });
+    }
+
+    const el = textareaRef.value;
+    if (!el) return;
+    el.focus();
+    const cursor = inputText.value.length;
+    el.setSelectionRange(cursor, cursor);
+    cursorOffset.value = cursor;
+    resizeTextarea();
+  });
+}
+
+function applyExternalText(
+  text: string,
+  options?: { clearAttachments?: boolean },
+) {
+  inputText.value = text;
+  if (options?.clearAttachments) {
+    clearAttachments();
+  }
+  clearAttachmentNotice();
+  dismissedMentionKey.value = null;
+  showPalette.value = text.startsWith("/");
+  focusComposer({ reveal: true });
+}
+
 watch(inputText, val => {
   showPalette.value = val.startsWith("/");
   if (showPalette.value) {
@@ -198,6 +261,28 @@ watch(mentionContext, (mention, previousMention) => {
     void props.ensureWorkspaceEntries();
   }
 });
+
+watch(
+  () => props.prefillText,
+  text => {
+    if (typeof text !== "string") return;
+    applyExternalText(text);
+  },
+);
+
+watch(
+  () => props.revision,
+  (revision, previousRevision) => {
+    if (!revision) return;
+    if (!previousRevision && !revisionBackup.value) {
+      revisionBackup.value = {
+        text: inputText.value,
+        attachments: [...attachments.value],
+      };
+    }
+    applyExternalText(revision.text, { clearAttachments: true });
+  },
+);
 
 function clearAttachmentNotice() {
   if (attachmentNoticeTimer) {
@@ -260,10 +345,12 @@ function submitMessage(message: string) {
   emit("submit", {
     message,
     images: toRpcImageContent(attachments.value),
+    revisionEntryId: props.revision?.entryId,
   });
   inputText.value = "";
   cursorOffset.value = 0;
   dismissedMentionKey.value = null;
+  revisionBackup.value = null;
   clearAttachments();
   clearAttachmentNotice();
   showPalette.value = false;
@@ -339,6 +426,21 @@ function handleAutoCompactionChange(event: Event) {
     "toggleAutoCompaction",
     Boolean((event.target as HTMLInputElement | null)?.checked),
   );
+}
+
+function handleCancelRevision() {
+  const backup = revisionBackup.value;
+  inputText.value = backup?.text ?? "";
+  attachments.value = backup ? [...backup.attachments] : [];
+  if (fileInputRef.value) {
+    fileInputRef.value.value = "";
+  }
+  revisionBackup.value = null;
+  clearAttachmentNotice();
+  dismissedMentionKey.value = null;
+  showPalette.value = inputText.value.startsWith("/");
+  emit("cancelRevision");
+  focusComposer();
 }
 
 function handleFilePickerOpen() {
@@ -472,7 +574,7 @@ resizeTextarea();
 </script>
 
 <template>
-  <div class="composer-bar">
+  <div ref="composerRootRef" class="composer-bar">
     <div class="composer-inner-wrap">
       <CommandPalette
         v-if="showPalette && commands.length > 0"
@@ -498,6 +600,23 @@ resizeTextarea();
         @dragleave.prevent="handleDragLeave"
         @drop.prevent="handleDrop"
       >
+        <div v-if="revision" class="revision-banner">
+          <div class="revision-banner-copy">
+            <span class="revision-kicker">Revising earlier message</span>
+            <p class="revision-preview">{{ revision.preview }}</p>
+            <p v-if="revision.hasImages" class="revision-note">
+              Only the text was copied. Re-attach images if you still need them.
+            </p>
+          </div>
+          <button
+            type="button"
+            class="revision-cancel-button"
+            @click="handleCancelRevision"
+          >
+            Cancel
+          </button>
+        </div>
+
         <input
           ref="fileInputRef"
           class="hidden-file-input"
@@ -662,6 +781,71 @@ resizeTextarea();
     border-color 0.15s ease,
     background 0.15s ease,
     box-shadow 0.15s ease;
+}
+
+.revision-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 82%, transparent);
+  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+}
+
+.revision-banner-copy {
+  min-width: 0;
+}
+
+.revision-kicker {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 4px;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-subtle);
+}
+
+.revision-preview,
+.revision-note {
+  margin: 0;
+}
+
+.revision-preview {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.revision-note {
+  margin-top: 4px;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  color: var(--text-subtle);
+}
+
+.revision-cancel-button {
+  flex-shrink: 0;
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  color: var(--text-muted);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.revision-cancel-button:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  color: var(--text);
 }
 
 .composer-dock:focus-within {
@@ -1045,6 +1229,14 @@ resizeTextarea();
   .composer-bar {
     padding: 8px 12px 10px;
     padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+
+  .revision-banner {
+    flex-direction: column;
+  }
+
+  .revision-cancel-button {
+    align-self: flex-start;
   }
 
   .composer-dock {

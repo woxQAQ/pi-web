@@ -32,14 +32,37 @@ defineProps<{
   currentThinkingLevel: string | null;
   autoCompactionEnabled: boolean;
   sessionStats: RpcSessionStats | null;
+  prefillText: string | null;
+  pendingRevision: {
+    entryId: string;
+    text: string;
+    preview: string;
+    hasImages: boolean;
+  } | null;
+  allowRevision: boolean;
 }>();
 
 const emit = defineEmits<{
-  submit: [payload: { message: string; images: RpcImageContent[] }];
+  submit: [
+    payload: {
+      message: string;
+      images: RpcImageContent[];
+      revisionEntryId?: string;
+    },
+  ];
   abort: [];
   selectModel: [model: RpcModelInfo];
   selectThinkingLevel: [level: string];
   toggleAutoCompaction: [enabled: boolean];
+  reviseMessage: [
+    payload: {
+      entryId: string;
+      text: string;
+      preview: string;
+      hasImages: boolean;
+    },
+  ];
+  cancelRevision: [];
 }>();
 
 const chatTranscriptRef = ref<InstanceType<typeof ChatTranscript> | null>(null);
@@ -70,6 +93,8 @@ defineExpose({ preserveTranscriptScroll });
       :messages="transcript"
       :is-streaming="isStreaming"
       :show-message-ids="isDebugMode"
+      :allow-revision="allowRevision"
+      @revise="emit('reviseMessage', $event)"
     />
     <SessionStatsBar :stats="sessionStats" />
     <ComposerBar
@@ -83,8 +108,11 @@ defineExpose({ preserveTranscriptScroll });
       :selected-model="currentModel"
       :thinking-level="currentThinkingLevel"
       :auto-compaction-enabled="autoCompactionEnabled"
+      :prefill-text="prefillText"
+      :revision="pendingRevision"
       @submit="emit('submit', $event)"
       @abort="emit('abort')"
+      @cancel-revision="emit('cancelRevision')"
       @select-model="emit('selectModel', $event)"
       @select-thinking-level="emit('selectThinkingLevel', $event)"
       @toggle-auto-compaction="emit('toggleAutoCompaction', $event)"

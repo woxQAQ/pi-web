@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight, Sparkle } from "lucide-vue-next";
+import { ChevronDown, ChevronRight, Pencil, Sparkle } from "lucide-vue-next";
 import { onBeforeUnmount, onMounted, ref, watch, nextTick } from "vue";
 import type { TranscriptEntry } from "../composables/useBridgeClient";
 import { userMessageCopyText } from "../utils/messageCopy";
@@ -10,6 +10,7 @@ import {
   isErrorMessage,
   errorMessageText,
   isToolResultMessage,
+  messageContent,
 } from "../utils/transcript";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 import ToolCard from "./ToolCard.vue";
@@ -18,6 +19,18 @@ const props = defineProps<{
   messages: readonly TranscriptEntry[];
   isStreaming: boolean;
   showMessageIds: boolean;
+  allowRevision: boolean;
+}>();
+
+const emit = defineEmits<{
+  revise: [
+    payload: {
+      entryId: string;
+      text: string;
+      preview: string;
+      hasImages: boolean;
+    },
+  ];
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
@@ -120,6 +133,43 @@ function toolResultImages(msg: TranscriptEntry): ImageContentBlock[] {
 
 function messageIdLabel(msg: TranscriptEntry): string {
   return msg.id ?? "missing";
+}
+
+function userMessageText(msg: TranscriptEntry): string {
+  return messageContent(msg).trim();
+}
+
+function hasMessageImages(msg: TranscriptEntry): boolean {
+  return contentBlocks(msg).some(block => block.kind === "image");
+}
+
+function revisionPreview(text: string, maxLength: number = 96): string {
+  const collapsed = text.replace(/\s+/g, " ").trim();
+  if (collapsed.length <= maxLength) return collapsed;
+  return `${collapsed.slice(0, maxLength - 1).trimEnd()}…`;
+}
+
+function canReviseMessage(msg: TranscriptEntry): msg is TranscriptEntry & {
+  id: string;
+} {
+  return Boolean(
+    props.allowRevision &&
+    !props.isStreaming &&
+    msg.role === "user" &&
+    typeof msg.id === "string" &&
+    userMessageText(msg),
+  );
+}
+
+function handleRevise(msg: TranscriptEntry) {
+  if (!canReviseMessage(msg)) return;
+  const text = userMessageText(msg);
+  emit("revise", {
+    entryId: msg.id,
+    text,
+    preview: revisionPreview(text),
+    hasImages: hasMessageImages(msg),
+  });
 }
 
 function userMessageElementForNode(node: Node | null): HTMLElement | null {
@@ -319,57 +369,70 @@ defineExpose({ preserveScroll });
       </div>
 
       <div v-else class="message-row" :class="roleClass(msg.role)">
-        <div
-          class="message-content"
-          :class="roleClass(msg.role)"
-          :data-user-message-index="msg.role === 'user' ? index : undefined"
-        >
-          <div v-if="showMessageIds" class="message-debug-id">
-            ID {{ messageIdLabel(msg) }}
-          </div>
-          <template v-for="(block, bIdx) in contentBlocks(msg)" :key="bIdx">
-            <div v-if="block.kind === 'thinking'" class="thinking-block">
-              <button
-                class="thinking-toggle"
-                @click="toggleThinking(messageStableKey(msg, index), bIdx)"
+        <div class="message-stack" :class="roleClass(msg.role)">
+          <div
+            class="message-content"
+            :class="roleClass(msg.role)"
+            :data-user-message-index="msg.role === 'user' ? index : undefined"
+          >
+            <div v-if="showMessageIds" class="message-debug-id">
+              ID {{ messageIdLabel(msg) }}
+            </div>
+            <template v-for="(block, bIdx) in contentBlocks(msg)" :key="bIdx">
+              <div v-if="block.kind === 'thinking'" class="thinking-block">
+                <button
+                  class="thinking-toggle"
+                  @click="toggleThinking(messageStableKey(msg, index), bIdx)"
+                >
+                  <Sparkle class="toggle-icon" aria-hidden="true" />
+                  Thinking
+                </button>
+                <MarkdownRenderer
+                  v-if="isThinkingExpanded(messageStableKey(msg, index), bIdx)"
+                  class="thinking-content"
+                  :content="block.text"
+                />
+              </div>
+
+              <ToolCard
+                v-else-if="block.kind === 'tool'"
+                class="tool-card-block"
+                :block="block"
+                :expanded="
+                  isToolBlockExpanded(messageStableKey(msg, index), bIdx)
+                "
+                @toggle="toggleToolBlock(messageStableKey(msg, index), bIdx)"
+              />
+
+              <figure
+                v-else-if="block.kind === 'image'"
+                class="message-image-block"
               >
-                <Sparkle class="toggle-icon" aria-hidden="true" />
-                Thinking
-              </button>
+                <img
+                  class="message-image"
+                  :src="block.src"
+                  :alt="block.alt"
+                  loading="lazy"
+                />
+              </figure>
+
               <MarkdownRenderer
-                v-if="isThinkingExpanded(messageStableKey(msg, index), bIdx)"
-                class="thinking-content"
+                v-else-if="block.kind === 'text' && block.text"
                 :content="block.text"
               />
-            </div>
-
-            <ToolCard
-              v-else-if="block.kind === 'tool'"
-              class="tool-card-block"
-              :block="block"
-              :expanded="
-                isToolBlockExpanded(messageStableKey(msg, index), bIdx)
-              "
-              @toggle="toggleToolBlock(messageStableKey(msg, index), bIdx)"
-            />
-
-            <figure
-              v-else-if="block.kind === 'image'"
-              class="message-image-block"
+            </template>
+          </div>
+          <div v-if="canReviseMessage(msg)" class="message-actions">
+            <button
+              type="button"
+              class="message-action-button"
+              aria-label="Edit message"
+              title="Edit message"
+              @click="handleRevise(msg)"
             >
-              <img
-                class="message-image"
-                :src="block.src"
-                :alt="block.alt"
-                loading="lazy"
-              />
-            </figure>
-
-            <MarkdownRenderer
-              v-else-if="block.kind === 'text' && block.text"
-              :content="block.text"
-            />
-          </template>
+              <Pencil class="message-action-icon" aria-hidden="true" />
+            </button>
+          </div>
         </div>
       </div>
     </template>
@@ -473,6 +536,17 @@ defineExpose({ preserveScroll });
   color: var(--text-subtle);
 }
 
+.message-stack {
+  min-width: 0;
+  width: 100%;
+}
+
+.message-stack.user {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
 .message-content {
   min-width: 0;
   font-size: 0.9rem;
@@ -501,6 +575,56 @@ defineExpose({ preserveScroll });
   font-size: 0.66rem;
   line-height: 1;
   color: var(--text-subtle);
+}
+
+.message-actions {
+  display: flex;
+  justify-content: flex-end;
+  width: fit-content;
+  max-width: min(720px, 100%);
+  margin: 6px 4px 0 0;
+}
+
+.message-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+  background: color-mix(in srgb, var(--panel) 84%, transparent);
+  color: var(--text-subtle);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-2px);
+  transition:
+    opacity 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease,
+    background 0.14s ease,
+    transform 0.14s ease;
+}
+
+.message-stack.user:hover .message-action-button,
+.message-stack.user:focus-within .message-action-button,
+.message-action-button:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
+}
+
+.message-action-button:hover,
+.message-action-button:focus-visible {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  color: var(--text);
+}
+
+.message-action-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .message-content.user {
@@ -749,6 +873,11 @@ defineExpose({ preserveScroll });
     margin-left: 0;
     max-width: 100%;
     padding-left: 0;
+  }
+
+  .message-actions {
+    max-width: 100%;
+    margin-right: 0;
   }
 
   .thinking-block {

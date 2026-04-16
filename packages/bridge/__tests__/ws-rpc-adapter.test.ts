@@ -1820,6 +1820,103 @@ describe("WsRpcAdapter", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
+    it("should open a detached session before navigate_tree on the live session", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-nav-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: "Revise me",
+        timestamp: Date.now(),
+      } as any);
+      const entryId = sessionManager.getLeafId();
+      const sessionFile = sessionManager.getSessionFile();
+      if (!entryId || !sessionFile) {
+        throw new Error("session fixture missing");
+      }
+
+      const header = {
+        type: "session",
+        version: 3,
+        id: sessionManager.getSessionId(),
+        timestamp: new Date().toISOString(),
+        cwd: tmpDir,
+      };
+      fs.writeFileSync(
+        sessionFile,
+        [
+          JSON.stringify(header),
+          ...sessionManager.getEntries().map(entry => JSON.stringify(entry)),
+        ].join("\n"),
+      );
+
+      (
+        context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
+      ).mockReturnValue(sessionFile);
+
+      const navigateTreeSpy = vi.fn().mockImplementation(async targetId => {
+        const target = sessionManager.getEntry(targetId as string);
+        if (target?.parentId) {
+          sessionManager.branch(target.parentId);
+        } else {
+          sessionManager.resetLeaf();
+        }
+        return { cancelled: false, editorText: "Revise me" };
+      });
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockReturnValue(() => {}),
+          navigateTree: navigateTreeSpy,
+          sessionManager,
+        },
+      });
+
+      const command: RpcCommand = {
+        id: "cmd-1",
+        type: "navigate_tree",
+        entryId,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 20));
+
+      expect(createAgentSessionMock).toHaveBeenCalledTimes(1);
+      expect(navigateTreeSpy).toHaveBeenCalledWith(entryId, {
+        summarize: undefined,
+        customInstructions: undefined,
+        replaceInstructions: undefined,
+        label: undefined,
+      });
+      expect(context.ctx.navigateTree).not.toHaveBeenCalled();
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const snapshotCall = [...sendCalls]
+        .reverse()
+        .find(
+          call =>
+            call.type === "event" &&
+            call.payload.type === "transcript_snapshot" &&
+            call.payload.sessionPath === sessionFile,
+        );
+      expect(snapshotCall?.payload.messages).toEqual([]);
+
+      const lastCall = sendCalls[sendCalls.length - 1];
+      expect(lastCall.payload.success).toBe(true);
+      expect(lastCall.payload.data.cancelled).toBe(false);
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
     it("should handle switch_session command", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-test-"));
       const sessionManager = SessionManager.create(tmpDir, tmpDir);

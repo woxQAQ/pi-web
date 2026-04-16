@@ -582,6 +582,15 @@ function handleResponse(payload: RpcResponse) {
         if (data) updateAvailableModels(data.models);
         break;
       }
+      case "navigate_tree": {
+        sendCommand({ type: "get_state" }).catch(() => {});
+        sendCommand({
+          type: "list_tree_entries",
+          sessionPath:
+            activeTreeSessionPath.value ?? sessionState.value?.sessionFile,
+        }).catch(() => {});
+        break;
+      }
       case "set_thinking_level":
         break;
     }

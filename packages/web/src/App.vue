@@ -42,6 +42,7 @@ const {
   pendingExtensionRequest,
   notifications,
   statusEntries,
+  prefillText,
   respondToUIRequest,
   dismissNotification,
 } = useBridgeClient();
@@ -67,6 +68,12 @@ const networkUrl = computed(() => {
 const sidebarOpen = ref(false);
 const treePanelOpen = ref(false);
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
+const pendingRevision = ref<{
+  entryId: string;
+  text: string;
+  preview: string;
+  hasImages: boolean;
+} | null>(null);
 
 const THEME_CACHE_KEY = "pi-web-theme";
 const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
@@ -156,6 +163,20 @@ watch(debugMode, value => {
 watch(connectionStatus, status => {
   if (status === "disconnected") {
     mainContentRef.value?.preserveTranscriptScroll();
+    pendingRevision.value = null;
+  }
+});
+
+watch(
+  () => sessionState.value?.sessionFile ?? null,
+  () => {
+    pendingRevision.value = null;
+  },
+);
+
+watch(isHistoricalView, historical => {
+  if (historical) {
+    pendingRevision.value = null;
   }
 });
 
@@ -171,6 +192,7 @@ function toggleDebugMode() {
 }
 
 function handleSessionSelect(sessionPath: string) {
+  pendingRevision.value = null;
   sendCommand({ type: "switch_session", sessionPath }).catch(() => {});
   sidebarOpen.value = false;
 }
@@ -180,18 +202,56 @@ function handleRefreshSessions() {
 }
 
 function handleNewSession() {
+  pendingRevision.value = null;
   sendCommand({ type: "new_session" }).catch(() => {});
   sidebarOpen.value = false;
 }
 
 function handleTreeNavigate(entryId: string) {
   if (isHistoricalView.value) return;
+  pendingRevision.value = null;
   treePanelOpen.value = false;
   sendCommand({ type: "navigate_tree", entryId }).catch(() => {});
 }
 
-function handlePrompt(message: string, images: RpcImageContent[]) {
-  sendPrompt(message, images);
+async function handlePrompt(payload: {
+  message: string;
+  images: RpcImageContent[];
+  revisionEntryId?: string;
+}) {
+  if (payload.revisionEntryId) {
+    try {
+      const response = await sendCommand({
+        type: "navigate_tree",
+        entryId: payload.revisionEntryId,
+      });
+      if (!response.success) {
+        return;
+      }
+      const result = response.data as { cancelled?: boolean } | undefined;
+      if (result?.cancelled) {
+        return;
+      }
+    } catch {
+      return;
+    }
+  }
+
+  pendingRevision.value = null;
+  sendPrompt(payload.message, payload.images);
+}
+
+function handleReviseMessage(payload: {
+  entryId: string;
+  text: string;
+  preview: string;
+  hasImages: boolean;
+}) {
+  pendingRevision.value = payload;
+}
+
+function handleCancelRevision() {
+  pendingRevision.value = null;
 }
 
 function handleAbort() {
@@ -337,8 +397,13 @@ onBeforeUnmount(() => {
         :current-thinking-level="currentThinkingLevel"
         :auto-compaction-enabled="sessionState?.autoCompactionEnabled ?? false"
         :session-stats="sessionStats"
-        @submit="handlePrompt($event.message, $event.images)"
+        :prefill-text="prefillText"
+        :pending-revision="pendingRevision"
+        :allow-revision="connectionStatus === 'connected' && !isHistoricalView"
+        @submit="handlePrompt($event)"
         @abort="handleAbort"
+        @revise-message="handleReviseMessage"
+        @cancel-revision="handleCancelRevision"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"
         @toggle-auto-compaction="handleAutoCompactionToggle"
