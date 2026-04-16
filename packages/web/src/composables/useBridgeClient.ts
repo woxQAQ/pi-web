@@ -804,7 +804,6 @@ async function fetchInitialState() {
       sendCommand({ type: "get_messages", direction: "latest", limit: 40 }),
       sendCommand({ type: "get_state" }),
       sendCommand({ type: "list_sessions" }),
-      sendCommand({ type: "get_commands" }),
       sendCommand({ type: "get_available_models" }),
     ]);
   } catch {

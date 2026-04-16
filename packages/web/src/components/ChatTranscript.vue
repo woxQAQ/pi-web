@@ -338,10 +338,9 @@ defineExpose({ preserveScroll });
     <div v-else-if="messages.length === 0" class="empty-state">
       <p class="empty-title">Start a conversation</p>
       <p class="empty-subtitle">
-        Use / to open commands, then keep the session moving.
+        Start typing to keep the session moving.
       </p>
       <div class="empty-hints">
-        <span class="hint-chip">/ commands</span>
         <span class="hint-chip">Enter send</span>
         <span class="hint-chip">Drop or paste images</span>
       </div>

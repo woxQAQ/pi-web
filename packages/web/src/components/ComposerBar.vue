@@ -22,7 +22,6 @@ import {
   getWorkspaceMentionSuggestions,
   type WorkspaceMentionSuggestion,
 } from "../utils/workspaceMentions";
-import CommandPalette from "./CommandPalette.vue";
 import ModelDropdown from "./ModelDropdown.vue";
 import WorkspaceMentionPalette from "./WorkspaceMentionPalette.vue";
 
@@ -77,7 +76,6 @@ const composerRootRef = ref<HTMLDivElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const isDisabled = computed(() => props.connectionStatus !== "connected");
-const paletteRef = ref<InstanceType<typeof CommandPalette> | null>(null);
 const mentionPaletteRef = ref<InstanceType<
   typeof WorkspaceMentionPalette
 > | null>(null);
@@ -88,15 +86,9 @@ const cursorOffset = ref(0);
 const dismissedMentionKey = ref<string | null>(null);
 const isComposing = ref(false);
 
-const showPalette = ref(false);
-const filterText = computed(() => {
-  if (!showPalette.value) return "";
-  return inputText.value.slice(1);
-});
-const mentionContext = computed(() => {
-  if (showPalette.value) return null;
-  return getWorkspaceMentionContext(inputText.value, cursorOffset.value);
-});
+const mentionContext = computed(() =>
+  getWorkspaceMentionContext(inputText.value, cursorOffset.value),
+);
 const mentionSuggestions = computed(() => {
   if (!mentionContext.value) return [];
   return getWorkspaceMentionSuggestions(
@@ -105,7 +97,7 @@ const mentionSuggestions = computed(() => {
   );
 });
 const showMentionPalette = computed(() => {
-  if (showPalette.value || !mentionContext.value) return false;
+  if (!mentionContext.value) return false;
   if (dismissedMentionKey.value === getMentionKey(mentionContext.value)) {
     return false;
   }
@@ -236,15 +228,10 @@ function applyExternalText(
   }
   clearAttachmentNotice();
   dismissedMentionKey.value = null;
-  showPalette.value = text.startsWith("/");
   focusComposer({ reveal: true });
 }
 
-watch(inputText, val => {
-  showPalette.value = val.startsWith("/");
-  if (showPalette.value) {
-    dismissedMentionKey.value = null;
-  }
+watch(inputText, () => {
   resizeTextarea();
   nextTick(() => {
     syncCursorFromTextarea();
@@ -353,7 +340,6 @@ function submitMessage(message: string) {
   revisionBackup.value = null;
   clearAttachments();
   clearAttachmentNotice();
-  showPalette.value = false;
   resizeTextarea();
 }
 
@@ -374,14 +360,6 @@ function handlePrimaryAction() {
     return;
   }
   handleSubmit();
-}
-
-function handleCommandSelect(commandName: string) {
-  submitMessage(`/${commandName}`);
-}
-
-function handlePaletteClose() {
-  showPalette.value = false;
 }
 
 function handleMentionSelect(item: WorkspaceMentionSuggestion) {
@@ -438,7 +416,6 @@ function handleCancelRevision() {
   revisionBackup.value = null;
   clearAttachmentNotice();
   dismissedMentionKey.value = null;
-  showPalette.value = inputText.value.startsWith("/");
   emit("cancelRevision");
   focusComposer();
 }
@@ -528,18 +505,6 @@ function handleInputKeydown(e: KeyboardEvent) {
   const composing = isInputComposing(e);
 
   if (
-    showPalette.value &&
-    paletteRef.value &&
-    (e.key === "ArrowDown" ||
-      e.key === "ArrowUp" ||
-      e.key === "Escape" ||
-      (e.key === "Enter" && !composing))
-  ) {
-    paletteRef.value.handleKeydown(e);
-    return;
-  }
-
-  if (
     showMentionPalette.value &&
     mentionPaletteRef.value &&
     (e.key === "ArrowDown" ||
@@ -559,7 +524,7 @@ function handleInputKeydown(e: KeyboardEvent) {
     return;
   }
 
-  if (e.key === "Enter" && !e.shiftKey && !showPalette.value) {
+  if (e.key === "Enter" && !e.shiftKey) {
     if (composing) return;
     e.preventDefault();
     handleSubmit();
@@ -576,16 +541,8 @@ resizeTextarea();
 <template>
   <div ref="composerRootRef" class="composer-bar">
     <div class="composer-inner-wrap">
-      <CommandPalette
-        v-if="showPalette && commands.length > 0"
-        ref="paletteRef"
-        :commands="commands"
-        :filter="filterText"
-        @select="handleCommandSelect"
-        @close="handlePaletteClose"
-      />
       <WorkspaceMentionPalette
-        v-else-if="showMentionPalette"
+        v-if="showMentionPalette"
         ref="mentionPaletteRef"
         :items="mentionSuggestions"
         :loading="workspaceEntriesLoading"

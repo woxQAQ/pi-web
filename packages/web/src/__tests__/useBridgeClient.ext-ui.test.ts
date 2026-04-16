@@ -121,7 +121,6 @@ describe("extension_ui_request handling", () => {
         "get_messages",
         "get_state",
         "list_sessions",
-        "get_commands",
         "get_available_models",
       ]),
     );
