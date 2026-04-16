@@ -367,6 +367,65 @@ describe("WsRpcAdapter", () => {
       expect(promptSpy).toHaveBeenCalledWith("Continue here", {
         source: "rpc",
       });
+
+      sessionManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Continue here" }],
+        timestamp: Date.now(),
+      } as any);
+      const newUserEntry = sessionManager.getLeafEntry();
+      sessionManager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "Done" }],
+        timestamp: Date.now(),
+        provider: "test",
+        model: "test",
+        api: "test",
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+            total: 0,
+          },
+        },
+        stopReason: "stop",
+      } as any);
+      const selectedSessionEventHandler = subscribeSpy.mock.calls[0]?.[0] as
+        | ((event: object) => void)
+        | undefined;
+      selectedSessionEventHandler?.({
+        type: "agent_end",
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const latestSnapshot = [...sendCalls]
+        .reverse()
+        .find(
+          call =>
+            call.type === "event" &&
+            call.payload.type === "transcript_snapshot" &&
+            call.payload.sessionPath === sessionFile,
+        );
+      expect(
+        latestSnapshot?.payload.messages.findLast(
+          (message: any) => message.role === "user",
+        ),
+      ).toMatchObject({
+        id: newUserEntry?.id,
+        role: "user",
+        content: [{ type: "text", text: "Continue here" }],
+      });
     });
 
     it("passes prompt attachments through when continuing the selected session", async () => {

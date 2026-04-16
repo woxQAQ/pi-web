@@ -1311,9 +1311,10 @@ export class WsRpcAdapter {
     switch (eventType) {
       case "message_start":
       case "message_update":
-      case "message_end":
+      case "message_end": {
         this.handleTranscriptLifecycleEvent(eventType, event, sessionPath);
         return;
+      }
       case "agent_start":
         this.sendEvent({
           type: "agent_start",
@@ -1321,6 +1322,19 @@ export class WsRpcAdapter {
         });
         return;
       case "agent_end":
+        if (this.selectedSession) {
+          // AgentSession persists message_end entries before agent_end fires, so
+          // this snapshot includes the real session entry IDs for the finished turn.
+          this.sendTranscriptSnapshot(
+            flattenMessagesForTranscript(
+              this.selectedSession.sessionManager.getBranch(),
+            ),
+            this.selectedSession.sessionFile ?? null,
+          );
+        }
+        this.sendEvent(event as unknown as Record<string, unknown>);
+        this.queueSessionStatsEvent(sessionPath);
+        return;
       case "model_select":
         this.sendEvent(event as unknown as Record<string, unknown>);
         this.queueSessionStatsEvent(sessionPath);
