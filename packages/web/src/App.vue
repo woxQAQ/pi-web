@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ExtensionDialog from "./components/ExtensionDialog.vue";
 import ReconnectBanner from "./components/ReconnectBanner.vue";
+import TreePanel from "./components/TreePanel.vue";
 import { useBridgeClient } from "./composables/useBridgeClient";
 import AppHeader from "./layout/AppHeader.vue";
 import AppMainContent from "./layout/AppMainContent.vue";
@@ -15,10 +16,6 @@ import type {
 import { readInitialDebugMode } from "./utils/debugMode";
 import type { RpcModelInfo } from "./utils/models";
 import { parseCompactSlashCommand } from "./utils/slashCommands";
-import {
-  resolveTreeNavigationTarget,
-  treeEntryMessageRole,
-} from "./utils/treeNavigation";
 
 type ThemeMode = "dark" | "light";
 
@@ -85,6 +82,7 @@ const networkUrl = computed(() => {
   return h;
 });
 const sidebarOpen = ref(false);
+const treePanelOpen = ref(false);
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
 const pendingRevision = ref<{
   entryId: string;
@@ -95,7 +93,6 @@ const pendingRevision = ref<{
 
 const THEME_CACHE_KEY = "pi-web-theme";
 const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
-const HIDE_TOOLS_CACHE_KEY = "pi-web-hide-tools";
 
 function readCachedTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";
@@ -119,17 +116,8 @@ function readCachedDebugMode(): boolean {
   );
 }
 
-function readCachedHideTools(): boolean {
-  if (typeof window === "undefined") return true;
-  const cached = window.localStorage.getItem(HIDE_TOOLS_CACHE_KEY);
-  if (cached === "true") return true;
-  if (cached === "false") return false;
-  return true;
-}
-
 const theme = ref<ThemeMode>(readCachedTheme());
 const debugMode = ref(readCachedDebugMode());
-const hideTools = ref(readCachedHideTools());
 const nextThemeLabel = computed<ThemeMode>(() =>
   theme.value === "dark" ? "light" : "dark",
 );
@@ -165,19 +153,6 @@ watch(connectionStatus, async status => {
         debugMode.value = savedDebugMode;
       }
     }
-
-    const hideToolsRes = await sendCommand({
-      type: "get_plugin_state",
-      key: "hideTools",
-    });
-    const savedHideTools = (
-      hideToolsRes.data as {
-        value?: RpcPluginStateValue;
-      }
-    ).value;
-    if (hideToolsRes.success && typeof savedHideTools === "boolean") {
-      hideTools.value = savedHideTools;
-    }
   } catch {
     // Server unavailable, keep cached values.
   }
@@ -198,15 +173,6 @@ watch(debugMode, value => {
     window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
   }
   sendCommand({ type: "set_plugin_state", key: "debugMode", value }).catch(
-    () => {},
-  );
-});
-
-watch(hideTools, value => {
-  if (typeof window !== "undefined") {
-    window.localStorage.setItem(HIDE_TOOLS_CACHE_KEY, String(value));
-  }
-  sendCommand({ type: "set_plugin_state", key: "hideTools", value }).catch(
     () => {},
   );
 });
@@ -250,10 +216,6 @@ function handleSessionSelect(sessionPath: string) {
 
 function handleRefreshSessions() {
   sendCommand({ type: "list_sessions" }).catch(() => {});
-  sendCommand({
-    type: "list_tree_entries",
-    sessionPath: sessionState.value?.sessionFile,
-  }).catch(() => {});
 }
 
 function handleNewSession() {
@@ -262,57 +224,11 @@ function handleNewSession() {
   sidebarOpen.value = false;
 }
 
-async function handleTreeNavigate(entryId: string) {
-  const entry = treeEntries.value.find(candidate => candidate.id === entryId);
-  if (!entry || !treeEntryMessageRole(entry)) return;
-
-  pendingRevision.value = null;
-  sidebarOpen.value = false;
-
-  if (mainContentRef.value?.focusTranscriptMessage(entryId)) {
-    return;
-  }
-
+function handleTreeNavigate(entryId: string) {
   if (isHistoricalView.value) return;
-
-  try {
-    const response = await sendCommand({
-      type: "navigate_tree",
-      entryId: resolveTreeNavigationTarget(treeEntries.value, entryId),
-    });
-    if (!response.success) return;
-
-    const result = response.data as { cancelled?: boolean } | undefined;
-    if (result?.cancelled) return;
-
-    await nextTick();
-    if (!mainContentRef.value?.focusTranscriptMessage(entryId)) {
-      mainContentRef.value?.queueTranscriptMessageFocus(entryId);
-    }
-  } catch {
-    // Ignore navigation failures and keep the current viewport intact.
-  }
-}
-
-async function handleBranchNavigate(entryId: string) {
-  if (isHistoricalView.value || isStreaming.value || isCompacting.value) return;
   pendingRevision.value = null;
-  mainContentRef.value?.preserveTranscriptViewport();
-
-  try {
-    const response = await sendCommand({ type: "navigate_tree", entryId });
-    if (!response.success) {
-      mainContentRef.value?.clearTranscriptViewportPreserve();
-      return;
-    }
-
-    const result = response.data as { cancelled?: boolean } | undefined;
-    if (result?.cancelled) {
-      mainContentRef.value?.clearTranscriptViewportPreserve();
-    }
-  } catch {
-    mainContentRef.value?.clearTranscriptViewportPreserve();
-  }
+  treePanelOpen.value = false;
+  sendCommand({ type: "navigate_tree", entryId }).catch(() => {});
 }
 
 async function handlePrompt(payload: {
@@ -398,8 +314,19 @@ function handleAutoCompactionToggle(enabled: boolean) {
   setAutoCompactionEnabled(enabled).catch(() => {});
 }
 
-function toggleHideTools() {
-  hideTools.value = !hideTools.value;
+async function openTreePanel() {
+  sidebarOpen.value = false;
+  if (connectionStatus.value === "connected") {
+    try {
+      await sendCommand({
+        type: "list_tree_entries",
+        sessionPath: sessionState.value?.sessionFile,
+      });
+    } catch {
+      // Keep the panel reachable even if refresh fails.
+    }
+  }
+  treePanelOpen.value = true;
 }
 
 function handleUIRespond(payload: Parameters<typeof respondToUIRequest>[0]) {
@@ -466,18 +393,16 @@ onBeforeUnmount(() => {
     <div class="app-body">
       <AppSidebar
         :sessions="sessions"
-        :tree-entries="treeEntries"
         :active-session-id="activeSessionId"
         :running-session-path="runningSessionPath"
         :sidebar-open="sidebarOpen"
+        :tree-panel-open="treePanelOpen"
         :is-historical-view="isHistoricalView"
-        :hide-tools="hideTools"
         @close-sidebar="sidebarOpen = false"
+        @open-tree-panel="openTreePanel"
         @select-session="handleSessionSelect"
         @refresh-sessions="handleRefreshSessions"
         @new-session="handleNewSession"
-        @navigate-tree="handleTreeNavigate"
-        @toggle-hide-tools="toggleHideTools"
       />
 
       <AppMainContent
@@ -485,7 +410,6 @@ onBeforeUnmount(() => {
         :compat-warning-visible="compatWarningVisible"
         :status-entries="statusEntries"
         :transcript="transcript"
-        :tree-entries="treeEntries"
         :transcript-has-older="transcriptHasOlder"
         :transcript-initial-loading="transcriptInitialLoading"
         :transcript-page-loading="transcriptPageLoading"
@@ -505,15 +429,10 @@ onBeforeUnmount(() => {
         :prefill-text="prefillText"
         :pending-revision="pendingRevision"
         :allow-revision="connectionStatus === 'connected' && !isHistoricalView"
-        :allow-branch-navigation="
-          connectionStatus === 'connected' && !isHistoricalView
-        "
-        :hide-tools="hideTools"
         @submit="handlePrompt($event)"
         @load-older-transcript="loadOlderTranscriptPage"
         @abort="handleAbort"
         @revise-message="handleReviseMessage"
-        @navigate-branch="handleBranchNavigate"
         @cancel-revision="handleCancelRevision"
         @select-model="handleModelSelect"
         @select-thinking-level="handleThinkingLevelSelect"
@@ -525,6 +444,15 @@ onBeforeUnmount(() => {
       :connection-error="connectionError"
       :notifications="notifications"
       @dismiss="handleDismissNotification"
+    />
+
+    <TreePanel
+      :open="treePanelOpen"
+      :entries="treeEntries"
+      :session-label="activeSessionLabel"
+      :is-historical-view="isHistoricalView"
+      @close="treePanelOpen = false"
+      @navigate="handleTreeNavigate"
     />
 
     <ExtensionDialog
@@ -619,7 +547,7 @@ onBeforeUnmount(() => {
 
 .app-body {
   display: grid;
-  grid-template-columns: 304px minmax(0, 1fr);
+  grid-template-columns: 272px minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   overflow: hidden;

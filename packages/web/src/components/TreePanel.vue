@@ -2,7 +2,6 @@
 import { X } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import type { TreeEntry } from "../composables/useBridgeClient";
-import { treeEntryMessageRole } from "../utils/treeNavigation";
 
 const props = defineProps<{
   entries: readonly TreeEntry[];
@@ -45,10 +44,9 @@ function entryLabel(entry: TreeEntry): string {
 }
 
 function entryRole(entry: TreeEntry): string {
-  const messageRole = treeEntryMessageRole(entry);
-  if (messageRole) return messageRole;
-
   const label = entryLabel(entry).toLowerCase();
+  if (label.startsWith("user:")) return "user";
+  if (label.startsWith("assistant:")) return "assistant";
   if (label.startsWith("[tool:")) return "tool";
   return entry.type;
 }
@@ -61,14 +59,8 @@ function isAssistantEntry(entry: TreeEntry): boolean {
   return entryRole(entry) === "assistant";
 }
 
-function isNavigableEntry(entry: TreeEntry): boolean {
-  const role = treeEntryMessageRole(entry);
-  return role === "user" || role === "assistant";
-}
-
 function handleNavigate(entryId: string) {
-  const entry = props.entries.find(candidate => candidate.id === entryId);
-  if (!canNavigate.value || !entry || !isNavigableEntry(entry)) return;
+  if (!canNavigate.value) return;
   emit("navigate", entryId);
 }
 </script>
@@ -125,17 +117,12 @@ function handleNavigate(entryId: string) {
               active: entry.isActive,
               path: entry.isOnActivePath,
               readonly: !canNavigate,
-              ignored: !isNavigableEntry(entry),
               'user-message': isUserEntry(entry),
               'assistant-message': isAssistantEntry(entry),
             }"
             type="button"
-            :disabled="!canNavigate || !isNavigableEntry(entry)"
-            :title="
-              isNavigableEntry(entry)
-                ? entryLabel(entry)
-                : `${entryLabel(entry)} (jump unsupported)`
-            "
+            :disabled="!canNavigate"
+            :title="entryLabel(entry)"
             @click="handleNavigate(entry.id)"
           >
             <span class="tree-guides" aria-hidden="true">
@@ -350,15 +337,6 @@ function handleNavigate(entryId: string) {
 
 .tree-item.readonly {
   cursor: default;
-}
-
-.tree-item.ignored {
-  opacity: 0.52;
-  cursor: default;
-}
-
-.tree-item.ignored:hover {
-  background: transparent;
 }
 
 .tree-item.path {

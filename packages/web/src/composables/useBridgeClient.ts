@@ -328,6 +328,14 @@ function currentTranscriptContainsLiveOnlyEntries(): boolean {
   );
 }
 
+function applySessionTranscript(
+  entries: readonly (TranscriptEntry | RpcTranscriptMessage)[],
+  sessionPath: string | null,
+) {
+  if (!shouldReplaceSessionTranscript(sessionPath)) return;
+  replaceTranscript(entries, sessionPath);
+}
+
 function applySessionTranscriptPage(page: RpcTranscriptPage) {
   if (
     page.messages.length === 0 &&
@@ -788,13 +796,8 @@ function handleEvent(payload: RpcBridgeEvent) {
     }
     case "agent_end": {
       isStreaming.value = false;
-      // Refresh state and tree data after agent completes.
+      // Refresh state after agent completes
       sendCommand({ type: "get_state" }).catch(() => {});
-      sendCommand({
-        type: "list_tree_entries",
-        sessionPath:
-          activeTreeSessionPath.value ?? sessionState.value?.sessionFile,
-      }).catch(() => {});
       break;
     }
     case "model_select": {
@@ -885,7 +888,6 @@ async function fetchInitialState() {
       sendCommand({ type: "get_messages", direction: "latest", limit: 40 }),
       sendCommand({ type: "get_state" }),
       sendCommand({ type: "list_sessions" }),
-      sendCommand({ type: "list_tree_entries" }),
       sendCommand({ type: "get_available_models" }),
       sendCommand({ type: "get_commands" }),
     ]);
