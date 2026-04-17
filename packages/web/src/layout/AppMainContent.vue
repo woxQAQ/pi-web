@@ -7,6 +7,7 @@ import SessionStatsBar from "../components/SessionStatsBar.vue";
 import type {
   ConnectionStatus,
   TranscriptEntry,
+  TreeEntry,
 } from "../composables/useBridgeClient";
 import type {
   RpcImageContent,
@@ -21,6 +22,7 @@ defineProps<{
   compatWarningVisible: boolean;
   statusEntries: Record<string, string>;
   transcript: readonly TranscriptEntry[];
+  treeEntries: readonly TreeEntry[];
   transcriptHasOlder: boolean;
   transcriptInitialLoading: boolean;
   transcriptPageLoading: boolean;
@@ -45,6 +47,8 @@ defineProps<{
     hasImages: boolean;
   } | null;
   allowRevision: boolean;
+  allowBranchNavigation: boolean;
+  hideTools: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -68,6 +72,7 @@ const emit = defineEmits<{
       hasImages: boolean;
     },
   ];
+  navigateBranch: [entryId: string];
   cancelRevision: [];
 }>();
 
@@ -77,7 +82,29 @@ function preserveTranscriptScroll() {
   chatTranscriptRef.value?.preserveScroll();
 }
 
-defineExpose({ preserveTranscriptScroll });
+function preserveTranscriptViewport() {
+  chatTranscriptRef.value?.preserveViewport();
+}
+
+function clearTranscriptViewportPreserve() {
+  chatTranscriptRef.value?.clearPreservedViewport();
+}
+
+function focusTranscriptMessage(entryId: string): boolean {
+  return chatTranscriptRef.value?.focusMessage(entryId) ?? false;
+}
+
+function queueTranscriptMessageFocus(entryId: string) {
+  chatTranscriptRef.value?.queueFocusMessage(entryId);
+}
+
+defineExpose({
+  preserveTranscriptScroll,
+  preserveTranscriptViewport,
+  clearTranscriptViewportPreserve,
+  focusTranscriptMessage,
+  queueTranscriptMessageFocus,
+});
 </script>
 
 <template>
@@ -97,6 +124,7 @@ defineExpose({ preserveTranscriptScroll });
     <ChatTranscript
       ref="chatTranscriptRef"
       :messages="transcript"
+      :tree-entries="treeEntries"
       :has-older="transcriptHasOlder"
       :initial-loading="transcriptInitialLoading"
       :page-loading="transcriptPageLoading"
@@ -104,8 +132,11 @@ defineExpose({ preserveTranscriptScroll });
       :is-compacting="isCompacting"
       :show-message-ids="isDebugMode"
       :allow-revision="allowRevision"
+      :allow-branch-navigation="allowBranchNavigation"
+      :hide-tools="hideTools"
       @load-older="emit('loadOlderTranscript')"
       @revise="emit('reviseMessage', $event)"
+      @navigate-branch="emit('navigateBranch', $event)"
     />
     <SessionStatsBar :stats="sessionStats" />
     <ComposerBar

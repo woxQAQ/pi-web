@@ -106,7 +106,7 @@ describe("extension_ui_request handling", () => {
     vi.resetModules();
   });
 
-  it("does not request tree entries during initial connect", async () => {
+  it("requests tree entries during initial connect", async () => {
     await importComposable();
     const ws = getLastMockWs();
     simulateOpen(ws);
@@ -121,16 +121,11 @@ describe("extension_ui_request handling", () => {
         "get_messages",
         "get_state",
         "list_sessions",
+        "list_tree_entries",
         "get_available_models",
         "get_commands",
       ]),
     );
-
-    // Tree data is loaded lazily when the panel is opened.
-    const treeRequests = sentCommandTypes.filter(
-      type => type === "list_tree_entries",
-    );
-    expect(treeRequests).toHaveLength(0);
   });
 
   it("updates tree entries from switch_session responses", async () => {
@@ -1432,9 +1427,18 @@ describe("extension_ui_request handling", () => {
     });
 
     expect(client.isStreaming.value).toBe(false);
-    expect(ws.send).toHaveBeenCalledTimes(1);
-    expect(ws.send).toHaveBeenCalledWith(
-      expect.stringContaining('"type":"get_state"'),
+    const refreshRequests = ws.send.mock.calls.map(([message]: [string]) =>
+      JSON.parse(message) as { payload?: { type?: string } },
+    );
+    expect(refreshRequests).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          payload: expect.objectContaining({ type: "get_state" }),
+        }),
+        expect.objectContaining({
+          payload: expect.objectContaining({ type: "list_tree_entries" }),
+        }),
+      ]),
     );
   });
 

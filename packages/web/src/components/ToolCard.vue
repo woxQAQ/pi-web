@@ -16,6 +16,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   toggle: [];
+  previewImage: [payload: { images: ImageContentBlock[]; index: number }];
 }>();
 
 const model = computed(() => buildToolCardModel(props.block));
@@ -56,6 +57,13 @@ const resultImages = computed(() =>
   ),
 );
 const hasImageResult = computed(() => resultImages.value.length > 0);
+
+function handlePreviewImage(index: number) {
+  emit("previewImage", {
+    images: [...resultImages.value],
+    index,
+  });
+}
 </script>
 
 <template>
@@ -98,12 +106,19 @@ const hasImageResult = computed(() => resultImages.value.length > 0);
         :key="`${image.src}-${index}`"
         class="tool-card-image-block"
       >
-        <img
-          class="tool-card-image"
-          :src="image.src"
-          :alt="image.alt"
-          loading="lazy"
-        />
+        <button
+          type="button"
+          class="tool-card-image-button"
+          :aria-label="`Open image ${index + 1}`"
+          @click="handlePreviewImage(index)"
+        >
+          <img
+            class="tool-card-image"
+            :src="image.src"
+            :alt="image.alt"
+            loading="lazy"
+          />
+        </button>
       </figure>
     </div>
 
@@ -291,6 +306,14 @@ const hasImageResult = computed(() => resultImages.value.length > 0);
   margin: 0;
 }
 
+.tool-card-image-button {
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+}
+
 .tool-card-image {
   display: block;
   max-width: min(100%, 420px);
@@ -300,6 +323,17 @@ const hasImageResult = computed(() => resultImages.value.length > 0);
   background: var(--tool-card-bg-strong);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
   object-fit: contain;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.tool-card-image-button:hover .tool-card-image,
+.tool-card-image-button:focus-visible .tool-card-image {
+  transform: translateY(-1px) scale(1.01);
+  border-color: color-mix(in srgb, var(--border-strong) 88%, white 12%);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.16);
 }
 
 .tool-card-code-panel {
