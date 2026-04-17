@@ -1869,7 +1869,7 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.command).toBe("list_tree_entries");
       expect(response.payload.success).toBe(true);
       expect(response.payload.data.entries).toHaveLength(2);
-      expect(response.payload.data.entries[0]).toEqual({
+      expect(response.payload.data.entries[0]).toMatchObject({
         id: "entry-1",
         label: "user",
         type: "message",
@@ -1879,7 +1879,13 @@ describe("WsRpcAdapter", () => {
         trackColumns: [],
         isActive: false,
         isOnActivePath: true,
+        role: "user",
+        previewText: "user",
+        isSettingsEntry: false,
+        isLabeled: false,
+        isToolOnlyAssistant: false,
       });
+      expect(response.payload.data.entries[0].searchText).toContain("message");
     });
 
     it("should load list_tree_entries from the session file when available", async () => {
@@ -1922,13 +1928,44 @@ describe("WsRpcAdapter", () => {
       const response = JSON.parse(lastCall);
 
       expect(response.payload.success).toBe(true);
-      expect(response.payload.data.entries).toHaveLength(2);
-      expect(response.payload.data.entries[0]).toMatchObject({
-        label: "user: Hello",
-        depth: 0,
-      });
-      expect(response.payload.data.entries[1]).toMatchObject({
+      expect(response.payload.data.entries).toHaveLength(4);
+      expect(
+        response.payload.data.entries.map(
+          (entry: {
+            label: string;
+            role: string;
+            isSettingsEntry: boolean;
+          }) => ({
+            label: entry.label,
+            role: entry.role,
+            isSettingsEntry: entry.isSettingsEntry,
+          }),
+        ),
+      ).toEqual([
+        {
+          label: "[model: gpt-4.1]",
+          role: "meta",
+          isSettingsEntry: true,
+        },
+        {
+          label: "[thinking: high]",
+          role: "meta",
+          isSettingsEntry: true,
+        },
+        {
+          label: "user: Hello",
+          role: "user",
+          isSettingsEntry: false,
+        },
+        {
+          label: "assistant: Hi",
+          role: "assistant",
+          isSettingsEntry: false,
+        },
+      ]);
+      expect(response.payload.data.entries[3]).toMatchObject({
         label: "assistant: Hi",
+        previewText: "Hi",
         depth: 0,
         isActive: true,
       });
@@ -2448,6 +2485,242 @@ describe("WsRpcAdapter", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
+    it("should select the requested user tree entry exactly", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-select-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: "First prompt",
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "First reply" }],
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "user",
+        content: "Second prompt",
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "assistant",
+        content: [{ type: "text", text: "Second reply" }],
+        timestamp: Date.now(),
+      } as any);
+
+      const targetEntryId = String(
+        (sessionManager.getEntries()[0] as { id: string }).id,
+      );
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      const switchCommand: RpcCommand = {
+        id: "switch-1",
+        type: "switch_session",
+        sessionPath: sessionFile,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({ type: "command", payload: switchCommand }),
+        ),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockReturnValue(() => {}),
+          sessionManager,
+        },
+      });
+
+      const command: RpcCommand = {
+        id: "cmd-select-user",
+        type: "select_tree_entry",
+        entryId: targetEntryId,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 20));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const responseCall = [...sendCalls]
+        .reverse()
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload.command === "select_tree_entry" &&
+            call.payload.success,
+        );
+
+      expect(responseCall?.payload.data.transcript.messages).toHaveLength(1);
+      expect(responseCall?.payload.data.transcript.messages[0]).toMatchObject({
+        id: targetEntryId,
+        role: "user",
+        content: "First prompt",
+      });
+      expect(responseCall?.payload.data.treeEntries.find(
+        (entry: { id: string }) => entry.id === targetEntryId,
+      )).toMatchObject({ isActive: true, isOnActivePath: true });
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("should trim later tool calls when selecting a tool tree entry", async () => {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "pi-web-select-tool-"),
+      );
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: "Inspect the files",
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "assistant",
+        content: [
+          { type: "thinking", thinking: "Inspecting both files" },
+          {
+            type: "toolCall",
+            id: "tool-1",
+            name: "read",
+            arguments: '{"path":"a.txt"}',
+          },
+          {
+            type: "toolCall",
+            id: "tool-2",
+            name: "read",
+            arguments: '{"path":"b.txt"}',
+          },
+        ],
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "toolResult",
+        toolCallId: "tool-1",
+        toolName: "read",
+        content: [{ type: "text", text: "a.txt contents" }],
+        timestamp: Date.now(),
+      } as any);
+      sessionManager.appendMessage({
+        role: "toolResult",
+        toolCallId: "tool-2",
+        toolName: "read",
+        content: [{ type: "text", text: "b.txt contents" }],
+        timestamp: Date.now(),
+      } as any);
+
+      const targetEntryId = String(
+        (sessionManager.getEntries()[2] as { id: string }).id,
+      );
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      const switchCommand: RpcCommand = {
+        id: "switch-2",
+        type: "switch_session",
+        sessionPath: sessionFile,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({ type: "command", payload: switchCommand }),
+        ),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      createAgentSessionMock.mockResolvedValue({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: vi.fn().mockReturnValue(() => {}),
+          sessionManager,
+        },
+      });
+
+      const command: RpcCommand = {
+        id: "cmd-select-tool",
+        type: "select_tree_entry",
+        entryId: targetEntryId,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 20));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const responseCall = [...sendCalls]
+        .reverse()
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload.command === "select_tree_entry" &&
+            call.payload.success,
+        );
+
+      const messages = responseCall?.payload.data.transcript.messages as Array<{
+        id?: string;
+        role: string;
+        toolCallId?: string;
+        content?: unknown;
+      }>;
+      const assistantMessage = messages.find(
+        message => message.role === "assistant",
+      );
+
+      expect(messages).toHaveLength(3);
+      expect(assistantMessage?.content).toEqual([
+        { type: "thinking", thinking: "Inspecting both files" },
+        {
+          type: "toolCall",
+          id: "tool-1",
+          name: "read",
+          arguments: '{"path":"a.txt"}',
+        },
+      ]);
+      expect(JSON.stringify(assistantMessage?.content)).not.toContain("tool-2");
+      expect(messages.at(-1)).toMatchObject({
+        id: targetEntryId,
+        role: "toolResult",
+        toolCallId: "tool-1",
+      });
+      expect(responseCall?.payload.data.treeEntries.find(
+        (entry: { id: string }) => entry.id === targetEntryId,
+      )).toMatchObject({ isActive: true, isOnActivePath: true });
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
     it("should handle switch_session command", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-test-"));
       const sessionManager = SessionManager.create(tmpDir, tmpDir);
@@ -2502,15 +2775,45 @@ describe("WsRpcAdapter", () => {
         sessionManager.getSessionId(),
       );
       expect(responseCall?.payload.data.sessionName).toBe("Hello");
-      expect(responseCall?.payload.data.treeEntries).toHaveLength(2);
-      expect(responseCall?.payload.data.treeEntries[0]).toMatchObject({
-        label: "user: Hello",
-        type: "message",
-        depth: 0,
-      });
-      expect(responseCall?.payload.data.treeEntries[1]).toMatchObject({
+      expect(responseCall?.payload.data.treeEntries).toHaveLength(4);
+      expect(
+        responseCall?.payload.data.treeEntries.map(
+          (entry: {
+            label: string;
+            role: string;
+            isSettingsEntry: boolean;
+          }) => ({
+            label: entry.label,
+            role: entry.role,
+            isSettingsEntry: entry.isSettingsEntry,
+          }),
+        ),
+      ).toEqual([
+        {
+          label: "[model: gpt-4.1]",
+          role: "meta",
+          isSettingsEntry: true,
+        },
+        {
+          label: "[thinking: high]",
+          role: "meta",
+          isSettingsEntry: true,
+        },
+        {
+          label: "user: Hello",
+          role: "user",
+          isSettingsEntry: false,
+        },
+        {
+          label: "assistant: Hi",
+          role: "assistant",
+          isSettingsEntry: false,
+        },
+      ]);
+      expect(responseCall?.payload.data.treeEntries[3]).toMatchObject({
         label: "assistant: Hi",
         type: "message",
+        previewText: "Hi",
         depth: 0,
         isActive: true,
       });

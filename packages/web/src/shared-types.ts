@@ -34,6 +34,8 @@ export type {
   RpcSessionStatsEvent,
   RpcSlashCommand,
   RpcThinkingLevel,
+  RpcTreeEntry,
+  RpcTreeTrackColumn,
   RpcToolArguments,
   RpcToolResultDetails,
   RpcTranscriptContent,

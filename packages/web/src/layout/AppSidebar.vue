@@ -1,22 +1,28 @@
 <script setup lang="ts">
-import { ListTree, RefreshCw, Plus } from "lucide-vue-next";
+import { Plus, RefreshCw } from "lucide-vue-next";
 import SessionRail from "../components/SessionRail.vue";
-import type { SessionEntry } from "../composables/useBridgeClient";
+import SessionTreeRail from "../components/SessionTreeRail.vue";
+import type { SessionEntry, TreeEntry } from "../composables/useBridgeClient";
 
 defineProps<{
   sessions: readonly SessionEntry[];
+  treeEntries: readonly TreeEntry[];
   activeSessionId: string | null;
   runningSessionPath: string | null;
   sidebarOpen: boolean;
-  treePanelOpen: boolean;
+  sidebarView: "sessions" | "tree";
+  sessionLabel: string;
+  sessionPath: string | null;
   isHistoricalView: boolean;
 }>();
 
 const emit = defineEmits<{
   closeSidebar: [];
-  openTreePanel: [];
   selectSession: [sessionPath: string];
+  selectTreeEntry: [entryId: string];
+  backToSessions: [];
   refreshSessions: [];
+  refreshTree: [];
   newSession: [];
 }>();
 </script>
@@ -24,6 +30,7 @@ const emit = defineEmits<{
 <template>
   <aside class="left-rail" :class="{ open: sidebarOpen }">
     <SessionRail
+      v-if="sidebarView === 'sessions'"
       :sessions="sessions"
       :active-session-id="activeSessionId"
       :running-session-path="runningSessionPath"
@@ -31,17 +38,7 @@ const emit = defineEmits<{
     >
       <template #header-actions>
         <button
-          class="tree-rail-button"
-          :class="{ active: treePanelOpen }"
-          type="button"
-          aria-label="Browse tree"
-          title="Browse tree"
-          @click="emit('openTreePanel')"
-        >
-          <ListTree aria-hidden="true" />
-        </button>
-        <button
-          class="tree-rail-button"
+          class="rail-button"
           type="button"
           aria-label="Refresh sessions"
           title="Refresh sessions"
@@ -50,7 +47,7 @@ const emit = defineEmits<{
           <RefreshCw aria-hidden="true" />
         </button>
         <button
-          class="tree-rail-button"
+          class="rail-button"
           type="button"
           aria-label="New session"
           title="New session"
@@ -60,6 +57,17 @@ const emit = defineEmits<{
         </button>
       </template>
     </SessionRail>
+
+    <SessionTreeRail
+      v-else
+      :entries="treeEntries"
+      :session-label="sessionLabel"
+      :session-path="sessionPath"
+      :is-historical-view="isHistoricalView"
+      @back="emit('backToSessions')"
+      @select="emit('selectTreeEntry', $event)"
+      @refresh="emit('refreshTree')"
+    />
   </aside>
   <div class="rail-backdrop" @click="emit('closeSidebar')"></div>
 </template>
@@ -69,12 +77,13 @@ const emit = defineEmits<{
   grid-column: 1;
   display: flex;
   flex-direction: column;
+  min-width: 0;
   background: var(--rail-bg);
   border-right: 1px solid var(--border);
   overflow: hidden;
 }
 
-.tree-rail-button {
+.rail-button {
   width: 28px;
   height: 28px;
   display: inline-flex;
@@ -93,19 +102,13 @@ const emit = defineEmits<{
     color 0.15s ease;
 }
 
-.tree-rail-button:hover {
+.rail-button:hover {
   background: var(--panel-2);
   border-color: var(--border-strong);
   color: var(--text-muted);
 }
 
-.tree-rail-button.active {
-  background: var(--panel-3);
-  border-color: var(--border-strong);
-  color: var(--text);
-}
-
-.tree-rail-button svg {
+.rail-button svg {
   width: 16px;
   height: 16px;
 }
@@ -120,7 +123,7 @@ const emit = defineEmits<{
     top: 0;
     left: 0;
     bottom: 0;
-    width: min(82vw, 300px);
+    width: min(88vw, 360px);
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     z-index: 15;

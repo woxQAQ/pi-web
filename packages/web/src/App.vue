@@ -2,7 +2,6 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import ExtensionDialog from "./components/ExtensionDialog.vue";
 import ReconnectBanner from "./components/ReconnectBanner.vue";
-import TreePanel from "./components/TreePanel.vue";
 import { useBridgeClient } from "./composables/useBridgeClient";
 import AppHeader from "./layout/AppHeader.vue";
 import AppMainContent from "./layout/AppMainContent.vue";
@@ -18,6 +17,7 @@ import type { RpcModelInfo } from "./utils/models";
 import { parseCompactSlashCommand } from "./utils/slashCommands";
 
 type ThemeMode = "dark" | "light";
+type SidebarView = "sessions" | "tree";
 
 const {
   connectionStatus,
@@ -29,6 +29,7 @@ const {
   sessionStats,
   sessions,
   treeEntries,
+  activeTreeSessionPath,
   liveSessionPath,
   isHistoricalView,
   commands,
@@ -82,7 +83,7 @@ const networkUrl = computed(() => {
   return h;
 });
 const sidebarOpen = ref(false);
-const treePanelOpen = ref(false);
+const sidebarView = ref<SidebarView>("sessions");
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
 const pendingRevision = ref<{
   entryId: string;
@@ -181,6 +182,7 @@ watch(connectionStatus, status => {
   if (status === "disconnected") {
     mainContentRef.value?.preserveTranscriptScroll();
     pendingRevision.value = null;
+    sidebarView.value = "sessions";
   }
 });
 
@@ -197,7 +199,21 @@ watch(isHistoricalView, historical => {
   }
 });
 
+watch(
+  () => sessionState.value?.sessionId ?? null,
+  sessionId => {
+    if (!sessionId) {
+      sidebarView.value = "sessions";
+    }
+  },
+);
+
 const compatWarningVisible = ref(false);
+
+function isCompactLayout(): boolean {
+  if (typeof window === "undefined") return false;
+  return window.matchMedia("(max-width: 900px)").matches;
+}
 
 function toggleTheme() {
   theme.value = theme.value === "dark" ? "light" : "dark";
@@ -208,27 +224,51 @@ function toggleDebugMode() {
   debugMode.value = !debugMode.value;
 }
 
-function handleSessionSelect(sessionPath: string) {
+async function handleSessionSelect(sessionPath: string) {
   pendingRevision.value = null;
-  sendCommand({ type: "switch_session", sessionPath }).catch(() => {});
-  sidebarOpen.value = false;
+  try {
+    const response = await sendCommand({ type: "switch_session", sessionPath });
+    if (response.success) {
+      sidebarView.value = "tree";
+    }
+  } catch {
+    // Keep the current sidebar state on failure.
+  }
 }
 
 function handleRefreshSessions() {
   sendCommand({ type: "list_sessions" }).catch(() => {});
 }
 
-function handleNewSession() {
+async function handleNewSession() {
   pendingRevision.value = null;
-  sendCommand({ type: "new_session" }).catch(() => {});
-  sidebarOpen.value = false;
+  try {
+    const response = await sendCommand({ type: "new_session" });
+    if (response.success) {
+      sidebarView.value = "tree";
+    }
+  } catch {
+    // Keep the current sidebar state on failure.
+  }
 }
 
-function handleTreeNavigate(entryId: string) {
+function handleSidebarBack() {
+  sidebarView.value = "sessions";
+}
+
+function handleRefreshTree() {
+  const sessionPath =
+    activeTreeSessionPath.value ?? sessionState.value?.sessionFile ?? undefined;
+  sendCommand({ type: "list_tree_entries", sessionPath }).catch(() => {});
+}
+
+function handleTreeEntrySelect(entryId: string) {
   if (isHistoricalView.value) return;
   pendingRevision.value = null;
-  treePanelOpen.value = false;
-  sendCommand({ type: "navigate_tree", entryId }).catch(() => {});
+  sendCommand({ type: "select_tree_entry", entryId }).catch(() => {});
+  if (isCompactLayout()) {
+    sidebarOpen.value = false;
+  }
 }
 
 async function handlePrompt(payload: {
@@ -314,21 +354,6 @@ function handleAutoCompactionToggle(enabled: boolean) {
   setAutoCompactionEnabled(enabled).catch(() => {});
 }
 
-async function openTreePanel() {
-  sidebarOpen.value = false;
-  if (connectionStatus.value === "connected") {
-    try {
-      await sendCommand({
-        type: "list_tree_entries",
-        sessionPath: sessionState.value?.sessionFile,
-      });
-    } catch {
-      // Keep the panel reachable even if refresh fails.
-    }
-  }
-  treePanelOpen.value = true;
-}
-
 function handleUIRespond(payload: Parameters<typeof respondToUIRequest>[0]) {
   respondToUIRequest(payload);
 }
@@ -393,15 +418,20 @@ onBeforeUnmount(() => {
     <div class="app-body">
       <AppSidebar
         :sessions="sessions"
+        :tree-entries="treeEntries"
         :active-session-id="activeSessionId"
         :running-session-path="runningSessionPath"
         :sidebar-open="sidebarOpen"
-        :tree-panel-open="treePanelOpen"
+        :sidebar-view="sidebarView"
+        :session-label="activeSessionLabel"
+        :session-path="activeTreeSessionPath"
         :is-historical-view="isHistoricalView"
         @close-sidebar="sidebarOpen = false"
-        @open-tree-panel="openTreePanel"
         @select-session="handleSessionSelect"
+        @select-tree-entry="handleTreeEntrySelect"
+        @back-to-sessions="handleSidebarBack"
         @refresh-sessions="handleRefreshSessions"
+        @refresh-tree="handleRefreshTree"
         @new-session="handleNewSession"
       />
 
@@ -444,15 +474,6 @@ onBeforeUnmount(() => {
       :connection-error="connectionError"
       :notifications="notifications"
       @dismiss="handleDismissNotification"
-    />
-
-    <TreePanel
-      :open="treePanelOpen"
-      :entries="treeEntries"
-      :session-label="activeSessionLabel"
-      :is-historical-view="isHistoricalView"
-      @close="treePanelOpen = false"
-      @navigate="handleTreeNavigate"
     />
 
     <ExtensionDialog
@@ -547,7 +568,7 @@ onBeforeUnmount(() => {
 
 .app-body {
   display: grid;
-  grid-template-columns: 272px minmax(0, 1fr);
+  grid-template-columns: clamp(280px, 24vw, 360px) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   overflow: hidden;
