@@ -217,6 +217,22 @@ describe("Bridge Lifecycle", () => {
       expect(doneCallback).toHaveBeenCalledTimes(1);
     });
 
+    it("can skip process-level SIGINT capture for embedded /web usage", async () => {
+      const controller = await startBridge(
+        { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+        mockContext,
+        doneCallback,
+        { captureSigint: false },
+      );
+      controllers.push(controller);
+
+      expect(process.listeners("SIGINT")).toHaveLength(0);
+
+      await controller.stop();
+      expect(controller.getState().status).toBe("stopped");
+      expect(doneCallback).toHaveBeenCalledTimes(1);
+    });
+
     it("shuts down on SIGINT", async () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },

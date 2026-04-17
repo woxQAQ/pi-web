@@ -46,10 +46,19 @@ export interface BridgeController {
  * @param done Callback invoked when bridge shuts down
  * @returns Bridge controller
  */
+export interface StartBridgeOptions {
+  /**
+   * Register a process-level SIGINT handler.
+   * Disable this when the caller already handles Ctrl+C inside a custom UI.
+   */
+  captureSigint?: boolean;
+}
+
 export async function startBridge(
   config: BridgeConfig,
   context: WsRpcAdapterContext,
   done: BridgeDoneCallback,
+  options: StartBridgeOptions = {},
 ): Promise<BridgeController> {
   // Create event bus for internal communication
   const eventBus = new BridgeEventBus(config);
@@ -132,11 +141,13 @@ export async function startBridge(
   };
 
   // Register SIGINT handler
-  sigintHandler = () => {
-    console.log("\n[Bridge] SIGINT received, shutting down...");
-    void shutdown();
-  };
-  process.on("SIGINT", sigintHandler);
+  if (options.captureSigint !== false) {
+    sigintHandler = () => {
+      console.log("\n[Bridge] SIGINT received, shutting down...");
+      void shutdown();
+    };
+    process.on("SIGINT", sigintHandler);
+  }
 
   // Return controller
   return {
