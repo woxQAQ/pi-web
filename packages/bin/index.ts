@@ -116,6 +116,8 @@ async function webBridgeHandler(
         },
         dispose() {
           view.dispose();
+          // Force a full redraw so the tall terminal view cannot leave stale lines behind.
+          queueMicrotask(() => tui.requestRender(true));
         },
       };
     });

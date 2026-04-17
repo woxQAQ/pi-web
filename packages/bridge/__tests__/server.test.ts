@@ -165,6 +165,40 @@ describe("BridgeServer", () => {
       expect(events).toContainEqual({ type: "server_stop" });
     });
 
+    it("stops even when a browser websocket is still connected", async () => {
+      const server = new BridgeServer(
+        { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+        mockContext,
+        eventBus,
+        event => events.push(event),
+      );
+
+      const address = await server.start();
+      const ws = new WebSocket(`ws://localhost:${address.port}/ws`);
+
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", () => resolve());
+        ws.once("error", reject);
+      });
+
+      const closedPromise = new Promise<void>(resolve => {
+        ws.once("close", () => resolve());
+      });
+
+      await Promise.race([
+        server.stop(),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error("server stop timed out")), 1500);
+        }),
+      ]);
+      await closedPromise;
+
+      expect(server.getIsRunning()).toBe(false);
+      expect(server.getAddress()).toBeUndefined();
+      expect(ws.readyState).toBe(WebSocket.CLOSED);
+      expect(events).toContainEqual({ type: "server_stop" });
+    });
+
     it("can restart after a full stop", async () => {
       const server = new BridgeServer(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },

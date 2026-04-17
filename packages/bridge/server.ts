@@ -158,6 +158,39 @@ export class BridgeServer {
     });
   }
 
+  private closeWebSocketConnection(ws: WebSocket): Promise<void> {
+    return new Promise(resolve => {
+      if (ws.readyState === WebSocket.CLOSED) {
+        resolve();
+        return;
+      }
+
+      let settled = false;
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        clearTimeout(timeoutId);
+        resolve();
+      };
+
+      const timeoutId = setTimeout(() => {
+        if (ws.readyState !== WebSocket.CLOSED) {
+          ws.terminate();
+        }
+      }, 500);
+
+      ws.once("close", finish);
+
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1001, "server_shutdown");
+      } else if (ws.readyState === WebSocket.CONNECTING) {
+        ws.terminate();
+      }
+    });
+  }
+
   /**
    * Stop the server and close all connections
    */
@@ -166,11 +199,20 @@ export class BridgeServer {
       return;
     }
 
-    // Close all WebSocket connections
+    const openSockets = this.wsServer
+      ? Array.from(this.wsServer.clients)
+      : [];
+
+    // Resolve adapter-side state immediately, then force the sockets closed so
+    // wsServer.close() and httpServer.close() cannot hang on a stale browser tab.
     for (const [_clientId, adapter] of this.adapters) {
       adapter.dispose();
     }
     this.adapters.clear();
+
+    await Promise.all(
+      openSockets.map(ws => this.closeWebSocketConnection(ws)),
+    );
 
     // Close WebSocket server
     if (this.wsServer) {
