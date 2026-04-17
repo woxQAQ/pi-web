@@ -206,10 +206,15 @@ function handleSelect(entryId: string) {
 
 .header-kicker,
 .tree-role,
-.tree-current,
-.filter-chip {
+.tree-current {
   font-size: 0.68rem;
   letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.filter-chip {
+  font-size: 0.63rem;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
@@ -255,19 +260,30 @@ function handleSelect(entryId: string) {
 
 .filter-row {
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 2px;
+  scrollbar-width: none;
+}
+
+.filter-row::-webkit-scrollbar {
+  display: none;
 }
 
 .filter-chip {
-  height: 28px;
+  height: 27px;
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
-  padding: 0 10px;
+  justify-content: center;
+  padding: 0 8px;
   border-radius: 8px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-subtle);
+  white-space: nowrap;
   cursor: pointer;
   transition:
     background 0.12s ease,
