@@ -309,7 +309,10 @@ function handleSelect(entryId: string) {
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 8px;
+  appearance: none;
+  -webkit-appearance: none;
   background: transparent;
+  box-shadow: none;
   color: inherit;
   text-align: left;
   cursor: pointer;
@@ -329,12 +332,12 @@ function handleSelect(entryId: string) {
 
 .tree-item.in-path {
   opacity: 1;
-  background: color-mix(in srgb, var(--panel) 66%, transparent);
+  background: transparent;
 }
 
 .tree-item.active {
-  background: color-mix(in srgb, var(--panel-3) 80%, transparent);
-  border-color: color-mix(in srgb, var(--border-strong) 72%, transparent);
+  background: color-mix(in srgb, var(--panel-3) 56%, transparent);
+  border-color: color-mix(in srgb, var(--border-strong) 60%, transparent);
 }
 
 .tree-guides {
