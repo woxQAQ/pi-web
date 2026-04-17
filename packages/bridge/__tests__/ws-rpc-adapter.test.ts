@@ -2,6 +2,10 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { SessionManager } from "@mariozechner/pi-coding-agent";
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+} from "@mariozechner/pi-coding-agent";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { createAgentSessionMock } = vi.hoisted(() => ({
@@ -46,12 +50,41 @@ const createMockWebSocket = (): WebSocket => {
 };
 
 // Mock context
-const createMockContext = (): WsRpcAdapterContext => ({
-  pi: {
+const createMockContext = (): WsRpcAdapterContext => {
+  const sessionManager = {
+    getCwd: vi.fn().mockReturnValue("/test/project"),
+    getSessionDir: vi.fn().mockReturnValue("/path/to"),
+    getSessionId: vi.fn().mockReturnValue("session-123"),
+    getSessionFile: vi.fn().mockReturnValue("/path/to/session.json"),
+    getLeafId: vi.fn().mockReturnValue(null),
+    getLeafEntry: vi.fn().mockReturnValue(undefined),
+    getEntry: vi.fn().mockReturnValue(undefined),
+    getLabel: vi.fn().mockReturnValue(undefined),
+    getBranch: vi.fn().mockReturnValue([{ role: "user", content: "Hello" }]),
+    getHeader: vi.fn().mockReturnValue(null),
+    getEntries: vi.fn().mockReturnValue([{ role: "user", content: "Hello" }]),
+    getTree: vi.fn().mockReturnValue([]),
+    getSessionName: vi.fn().mockReturnValue("test-session"),
+  };
+
+  const model = {
+    id: "gpt-4",
+    name: "GPT-4",
+    api: "openai-responses",
+    provider: "openai",
+    baseUrl: "https://example.com",
+    reasoning: true,
+    input: ["text"] as const,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 8192,
+  };
+
+  const pi = {
     sendUserMessage: vi.fn(),
     setModel: vi.fn().mockResolvedValue(true),
     setThinkingLevel: vi.fn(),
-    getThinkingLevel: vi.fn().mockReturnValue("normal"),
+    getThinkingLevel: vi.fn().mockReturnValue("medium"),
     setSessionName: vi.fn(),
     getSessionName: vi.fn().mockReturnValue("test-session"),
     getCommands: vi
@@ -60,21 +93,24 @@ const createMockContext = (): WsRpcAdapterContext => ({
         { name: "test", description: "Test command", source: "extension" },
       ]),
     on: vi.fn(),
-  },
-  ctx: {
-    sessionManager: {
-      getBranch: vi.fn().mockReturnValue([{ role: "user", content: "Hello" }]),
-      getEntries: vi.fn().mockReturnValue([{ role: "user", content: "Hello" }]),
-      getSessionId: vi.fn().mockReturnValue("session-123"),
-      getSessionFile: vi.fn().mockReturnValue("/path/to/session.json"),
-    },
-    model: { id: "gpt-4", provider: "openai" },
+  } as unknown as ExtensionAPI;
+
+  const ctx = {
+    sessionManager,
+    model,
     modelRegistry: {
-      getAvailable: vi.fn().mockResolvedValue([
-        { id: "gpt-4", provider: "openai", name: "GPT-4" },
-        { id: "claude", provider: "anthropic", name: "Claude" },
+      getAvailable: vi.fn().mockReturnValue([
+        model,
+        {
+          ...model,
+          id: "claude",
+          name: "Claude",
+          provider: "anthropic",
+          api: "anthropic-messages",
+          reasoning: false,
+        },
       ]),
-    },
+    } as unknown as ExtensionCommandContext["modelRegistry"],
     isIdle: vi.fn().mockReturnValue(true),
     signal: undefined,
     abort: vi.fn(),
@@ -86,13 +122,20 @@ const createMockContext = (): WsRpcAdapterContext => ({
       .mockReturnValue({ tokens: 1000, contextWindow: 8000, percent: 12.5 }),
     getSystemPrompt: vi.fn().mockReturnValue("You are a helpful assistant."),
     cwd: "/test/project",
+    ui: {
+      custom: vi.fn(),
+    },
+    hasUI: true,
     waitForIdle: vi.fn().mockResolvedValue(undefined),
     newSession: vi.fn().mockResolvedValue({ cancelled: false }),
     fork: vi.fn().mockResolvedValue({ cancelled: false }),
     navigateTree: vi.fn().mockResolvedValue({ cancelled: false }),
     switchSession: vi.fn().mockResolvedValue({ cancelled: false }),
-  },
-});
+    reload: vi.fn().mockResolvedValue(undefined),
+  } as unknown as ExtensionCommandContext;
+
+  return { pi, ctx };
+};
 
 describe("WsRpcAdapter", () => {
   let ws: WebSocket;
@@ -1167,14 +1210,59 @@ describe("WsRpcAdapter", () => {
       });
     });
 
-    it("pushes session stats after agent_end", async () => {
+    it("shapes agent_start events explicitly", () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const agentStartHandler = (
+        context.pi.on as ReturnType<typeof vi.fn>
+      ).mock.calls.find(call => call[0] === "agent_start")?.[1];
+
+      agentStartHandler?.({ type: "agent_start", leaked: true });
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(1);
+      expect(sendCalls[0].payload).toEqual({ type: "agent_start" });
+    });
+
+    it("pushes shaped agent_end events and session stats", async () => {
       (ws.send as ReturnType<typeof vi.fn>).mockClear();
 
       const agentEndHandler = (
         context.pi.on as ReturnType<typeof vi.fn>
       ).mock.calls.find(call => call[0] === "agent_end")?.[1];
 
-      agentEndHandler?.({ type: "agent_end" });
+      agentEndHandler?.({
+        type: "agent_end",
+        leaked: true,
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Done." }],
+            api: "openai-responses",
+            provider: "openai",
+            model: "gpt-5",
+            usage: {
+              input: 10,
+              output: 4,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 14,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+            stopReason: "stop",
+            timestamp: 123,
+          },
+        ],
+      });
 
       await new Promise(r => setTimeout(r, 10));
 
@@ -1183,7 +1271,120 @@ describe("WsRpcAdapter", () => {
       );
 
       expect(sendCalls).toHaveLength(2);
-      expect(sendCalls[0].payload).toMatchObject({ type: "agent_end" });
+      expect(sendCalls[0].payload).toEqual({
+        type: "agent_end",
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Done." }],
+            api: "openai-responses",
+            provider: "openai",
+            model: "gpt-5",
+            usage: {
+              input: 10,
+              output: 4,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 14,
+              cost: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                total: 0,
+              },
+            },
+            stopReason: "stop",
+            timestamp: 123,
+          },
+        ],
+      });
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "session_stats",
+        stats: {
+          tokens: 1000,
+          contextWindow: 8000,
+          percent: 12.5,
+        },
+      });
+    });
+
+    it("shapes model_select events explicitly", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const modelSelectHandler = (
+        context.pi.on as ReturnType<typeof vi.fn>
+      ).mock.calls.find(call => call[0] === "model_select")?.[1];
+
+      modelSelectHandler?.({
+        type: "model_select",
+        model: {
+          id: "gpt-5",
+          provider: "openai",
+          name: "GPT-5",
+          api: "openai-responses",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: true,
+          input: ["text", "image"],
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          },
+          contextWindow: 400000,
+          maxTokens: 128000,
+        },
+        previousModel: {
+          id: "gpt-4.1",
+          provider: "openai",
+          name: "GPT-4.1",
+          api: "openai-responses",
+          baseUrl: "https://api.openai.com/v1",
+          reasoning: false,
+          input: ["text"],
+          cost: {
+            input: 0,
+            output: 0,
+            cacheRead: 0,
+            cacheWrite: 0,
+          },
+          contextWindow: 128000,
+          maxTokens: 32768,
+        },
+        source: "set",
+        leaked: true,
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[0].payload).toEqual({
+        type: "model_select",
+        model: {
+          id: "gpt-5",
+          provider: "openai",
+          name: "GPT-5",
+          api: "openai-responses",
+          reasoning: true,
+          contextWindow: 400000,
+          maxTokens: 128000,
+        },
+        previousModel: {
+          id: "gpt-4.1",
+          provider: "openai",
+          name: "GPT-4.1",
+          api: "openai-responses",
+          reasoning: false,
+          contextWindow: 128000,
+          maxTokens: 32768,
+        },
+        source: "set",
+      });
       expect(sendCalls[1].payload).toMatchObject({
         type: "session_stats",
         stats: {
@@ -1228,9 +1429,13 @@ describe("WsRpcAdapter", () => {
 
       const compactionEndHandler = (
         context.pi.on as ReturnType<typeof vi.fn>
-      ).mock.calls.find(call => call[0] === "compaction_end")?.[1];
+      ).mock.calls.find(call => call[0] === "session_compact")?.[1];
 
-      compactionEndHandler?.({ type: "compaction_end" });
+      compactionEndHandler?.({
+        type: "session_compact",
+        compactionEntry: sessionManager.getBranch().at(-1),
+        fromExtension: false,
+      });
 
       await new Promise(r => setTimeout(r, 10));
 

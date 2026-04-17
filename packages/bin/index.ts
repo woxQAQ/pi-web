@@ -9,6 +9,11 @@
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionUIContext,
+} from "@mariozechner/pi-coding-agent";
 import { isBridgeExitInput } from "../bridge/exit-input.js";
 import { startBridge, type BridgeController } from "../bridge/lifecycle.js";
 import { createBridgeTerminalView } from "../bridge/terminal-log-view.js";
@@ -16,9 +21,9 @@ import { DEFAULT_BRIDGE_CONFIG, type BridgeConfig } from "../bridge/types.js";
 import type { WsRpcAdapterContext } from "../bridge/ws-rpc-adapter.js";
 
 async function webBridgeHandler(
-  args: string,
-  ctx: any,
-  pi: any,
+  _args: string,
+  ctx: ExtensionCommandContext,
+  pi: ExtensionAPI,
 ): Promise<void> {
   const adapterContext: WsRpcAdapterContext = {
     pi,
@@ -52,19 +57,17 @@ async function webBridgeHandler(
     });
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
-    await ctx.ui.custom(
-      (_tui: any, _theme: any, _kb: any, done: () => void) => {
-        return {
-          render() {
-            return [`Error: ${errorMsg}`, "", "Press any key to exit..."];
-          },
-          handleInput() {
-            done();
-          },
-          invalidate() {},
-        };
-      },
-    );
+    await ctx.ui.custom<void>((_tui, _theme, _kb, done) => {
+      return {
+        render() {
+          return [`Error: ${errorMsg}`, "", "Press any key to exit..."];
+        },
+        handleInput() {
+          done();
+        },
+        invalidate() {},
+      };
+    });
     return;
   }
 
@@ -78,7 +81,7 @@ async function webBridgeHandler(
   process.stdin.on("data", stdinExitHandler);
 
   try {
-    await ctx.ui.custom((tui: any, _theme: any, kb: any, done: () => void) => {
+    await ctx.ui.custom<void>((tui, _theme, kb, done) => {
       let finishRequested = false;
       finishWebMode = () => {
         if (finishRequested) {
@@ -90,7 +93,7 @@ async function webBridgeHandler(
       };
 
       const view = createBridgeTerminalView(
-        (handler: any) => bridgeController!.subscribe(handler),
+        handler => bridgeController!.subscribe(handler),
         () => bridgeController!.getState(),
         () => bridgeController!.getClients(),
         config,
@@ -104,7 +107,20 @@ async function webBridgeHandler(
         },
         handleInput(input: string) {
           view.handleInput(input);
-          if (isBridgeExitInput(input, kb) || view.shouldExit()) {
+          if (
+            isBridgeExitInput(input, {
+              matches: (candidate, action) => {
+                if (action !== "selectCancel" && action !== "copy") {
+                  return false;
+                }
+                return kb.matches(
+                  candidate,
+                  action as unknown as Parameters<typeof kb.matches>[1],
+                );
+              },
+            }) ||
+            view.shouldExit()
+          ) {
             finishWebMode?.();
           }
         },
@@ -131,10 +147,13 @@ async function webBridgeHandler(
   }
 }
 
-export default function registerWebBridge(pi: any, _state: any): void {
+export default function registerWebBridge(
+  pi: ExtensionAPI,
+  _state: unknown,
+): void {
   pi.registerCommand("web", {
     description: "Start web bridge server for browser-based interaction",
-    handler: async (args: string, ctx: any) => {
+    handler: async (args: string, ctx: ExtensionCommandContext) => {
       await webBridgeHandler(args, ctx, pi);
     },
   });

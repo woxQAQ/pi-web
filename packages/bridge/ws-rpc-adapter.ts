@@ -5,8 +5,13 @@ import * as path from "node:path";
 import {
   SessionManager,
   createAgentSession,
+  type AgentEndEvent as PiAgentEndEvent,
   type AgentSession,
   type AgentSessionEvent,
+  type AgentStartEvent as PiAgentStartEvent,
+  type ExtensionAPI,
+  type ExtensionCommandContext,
+  type ExtensionUIContext,
   type SessionEntry,
 } from "@mariozechner/pi-coding-agent";
 import type { WebSocket } from "ws";
@@ -16,15 +21,22 @@ import type {
   BridgeConfig,
   BridgeEvent,
   ClientMessage,
+  RpcAgentEndEvent,
+  RpcAgentMessage,
+  RpcAgentStartEvent,
+  RpcBridgeEvent,
   RpcCommand,
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
   RpcImageContent,
+  RpcModel,
+  RpcModelSelectEvent,
   RpcResponse,
   RpcSessionState,
   RpcSessionStats,
   RpcSessionStatsEvent,
   RpcSlashCommand,
+  RpcThinkingLevel,
   RpcTranscriptMessage,
   RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
@@ -36,89 +48,52 @@ import type {
   WsClient,
 } from "./types.js";
 
-/**
- * Extended context available in Pi extension API
- */
-interface PiExtensionContext {
-  sessionManager: {
-    getBranch: () => unknown[];
-    getEntries: () => unknown[] | undefined;
-    getSessionId: () => string;
-    getSessionFile: () => string | undefined;
-  };
-  model: unknown;
-  modelRegistry: {
-    getAvailable: () => Promise<unknown[]>;
-  };
-  isIdle: () => boolean;
-  signal: AbortSignal | undefined;
-  abort: () => void;
-  compact: (options?: {
-    onComplete?: (result: unknown) => void;
-    onError?: (error: Error) => void;
-  }) => void;
-  shutdown: () => void;
-  hasPendingMessages: () => boolean;
-  getContextUsage: () =>
-    | { tokens: number | null; contextWindow: number; percent: number | null }
-    | undefined;
-  getSystemPrompt: () => string;
-  cwd: string;
-}
+type PiModel = Parameters<ExtensionAPI["setModel"]>[0];
+type PiThinkingLevel = ReturnType<ExtensionAPI["getThinkingLevel"]>;
+type UserMessageContent = Parameters<ExtensionAPI["sendUserMessage"]>[0];
+type UserMessageBlock = Exclude<UserMessageContent, string>[number];
+type PiTextContent = Extract<UserMessageBlock, { type: "text" }>;
+type PiAgentMessage = NonNullable<PiAgentEndEvent["messages"]>[number];
+type PiAgentUserMessage = Extract<PiAgentMessage, { role: "user" }>;
+type PiAgentAssistantMessage = Extract<PiAgentMessage, { role: "assistant" }>;
+type PiAgentToolResultMessage = Extract<PiAgentMessage, { role: "toolResult" }>;
+type PiAgentUserContentBlock = Exclude<
+  PiAgentUserMessage["content"],
+  string
+>[number];
+type PiAgentAssistantContentBlock = PiAgentAssistantMessage["content"][number];
+type PiAgentToolResultContentBlock =
+  PiAgentToolResultMessage["content"][number];
+type PiAgentTextOrImageContentBlock =
+  | PiAgentUserContentBlock
+  | PiAgentToolResultContentBlock;
+type RpcAgentUserContentBlock = Exclude<
+  Extract<RpcAgentMessage, { role: "user" }>["content"],
+  string
+>[number];
+type RpcAgentAssistantContentBlock = Extract<
+  RpcAgentMessage,
+  { role: "assistant" }
+>["content"][number];
+type RpcAgentToolResultContentBlock = Extract<
+  RpcAgentMessage,
+  { role: "toolResult" }
+>["content"][number];
+type RpcAgentTextOrImageContentBlock =
+  | RpcAgentUserContentBlock
+  | RpcAgentToolResultContentBlock;
+type PiModelSelectEventLike = {
+  model: PiModel;
+  previousModel?: PiModel;
+  source: RpcModelSelectEvent["source"];
+};
 
 /**
- * Extended command context available in Pi extension API
- */
-interface PiExtensionCommandContext extends PiExtensionContext {
-  waitForIdle: () => Promise<void>;
-  newSession: (options?: {
-    parentSession?: string;
-  }) => Promise<{ cancelled: boolean }>;
-  fork: (entryId: string) => Promise<{ cancelled: boolean }>;
-  navigateTree: (
-    targetId: string,
-    options?: {
-      summarize?: boolean;
-      customInstructions?: string;
-      replaceInstructions?: boolean;
-      label?: string;
-    },
-  ) => Promise<{ cancelled: boolean }>;
-  switchSession: (sessionPath: string) => Promise<{ cancelled: boolean }>;
-}
-
-/**
- * Pi extension API surface
- */
-interface BridgeTextContent {
-  type: "text";
-  text: string;
-}
-
-interface PiExtensionAPI {
-  sendUserMessage: (
-    content: string | Array<BridgeTextContent | RpcImageContent>,
-    options?: { deliverAs?: "steer" | "followUp" },
-  ) => void;
-  setModel: (model: unknown) => Promise<boolean>;
-  setThinkingLevel: (level: unknown) => void;
-  getThinkingLevel: () => unknown;
-  setSessionName: (name: string) => void;
-  getSessionName: () => string | undefined;
-  getCommands: () => Array<{
-    name: string;
-    description?: string;
-    source: string;
-  }>;
-  on: (event: string, handler: (event: object) => void) => void;
-}
-
-/**
- * Context passed to the adapter containing Pi extension APIs
+ * Context passed to the adapter containing Pi extension APIs.
  */
 export interface WsRpcAdapterContext {
-  pi: PiExtensionAPI;
-  ctx: PiExtensionCommandContext;
+  pi: ExtensionAPI;
+  ctx: ExtensionCommandContext;
 }
 
 /**
@@ -136,6 +111,181 @@ interface TranscriptSyncState {
   nextEphemeralId: number;
   messageIdToKey: Map<string, string>;
   openKeysByRole: Map<string, string[]>;
+}
+
+function toRpcAgentStartEvent(): RpcAgentStartEvent {
+  return { type: "agent_start" };
+}
+
+function toRpcAgentEndEvent(event: {
+  messages?: PiAgentEndEvent["messages"];
+}): RpcAgentEndEvent {
+  if (!Array.isArray(event.messages)) {
+    return { type: "agent_end" };
+  }
+
+  return {
+    type: "agent_end",
+    messages: event.messages.flatMap(message => {
+      const shaped = toRpcAgentMessage(message);
+      return shaped ? [shaped] : [];
+    }),
+  };
+}
+
+function toRpcAgentMessage(message: PiAgentMessage): RpcAgentMessage | null {
+  switch (message.role) {
+    case "user":
+      return {
+        role: "user",
+        content:
+          typeof message.content === "string"
+            ? message.content
+            : message.content.map(toRpcAgentTextOrImageContentBlock),
+        timestamp: message.timestamp,
+      };
+    case "assistant":
+      return {
+        role: "assistant",
+        content: message.content.map(toRpcAgentAssistantContentBlock),
+        api: message.api,
+        provider: message.provider,
+        model: message.model,
+        responseId: message.responseId,
+        usage: {
+          input: message.usage.input,
+          output: message.usage.output,
+          cacheRead: message.usage.cacheRead,
+          cacheWrite: message.usage.cacheWrite,
+          totalTokens: message.usage.totalTokens,
+          cost: {
+            input: message.usage.cost.input,
+            output: message.usage.cost.output,
+            cacheRead: message.usage.cost.cacheRead,
+            cacheWrite: message.usage.cost.cacheWrite,
+            total: message.usage.cost.total,
+          },
+        },
+        stopReason: message.stopReason,
+        errorMessage: message.errorMessage,
+        timestamp: message.timestamp,
+      };
+    case "toolResult":
+      return {
+        role: "toolResult",
+        toolCallId: message.toolCallId,
+        toolName: message.toolName,
+        content: message.content.map(toRpcAgentTextOrImageContentBlock),
+        details: message.details,
+        isError: message.isError,
+        timestamp: message.timestamp,
+      };
+    default:
+      return null;
+  }
+}
+
+function toRpcAgentTextOrImageContentBlock(
+  block: PiAgentTextOrImageContentBlock,
+): RpcAgentTextOrImageContentBlock {
+  switch (block.type) {
+    case "text":
+      return {
+        type: "text",
+        text: block.text,
+        textSignature: block.textSignature,
+      };
+    case "image":
+      return {
+        type: "image",
+        data: block.data,
+        mimeType: block.mimeType,
+      };
+  }
+}
+
+function toRpcAgentAssistantContentBlock(
+  block: PiAgentAssistantContentBlock,
+): RpcAgentAssistantContentBlock {
+  switch (block.type) {
+    case "text":
+      return {
+        type: "text",
+        text: block.text,
+        textSignature: block.textSignature,
+      };
+    case "thinking":
+      return {
+        type: "thinking",
+        thinking: block.thinking,
+        thinkingSignature: block.thinkingSignature,
+        redacted: block.redacted,
+      };
+    case "toolCall":
+      return {
+        type: "toolCall",
+        id: block.id,
+        name: block.name,
+        arguments: block.arguments,
+        thoughtSignature: block.thoughtSignature,
+      };
+  }
+}
+
+function toRpcModel(model: PiModel): RpcModel {
+  return {
+    id: model.id,
+    provider: model.provider,
+    name: model.name,
+    api: model.api,
+    reasoning: model.reasoning,
+    contextWindow: model.contextWindow,
+    maxTokens: model.maxTokens,
+  };
+}
+
+function isPiModel(value: unknown): value is PiModel {
+  if (!value || typeof value !== "object") return false;
+  const typedValue = value as { id?: unknown; provider?: unknown };
+  return (
+    typeof typedValue.id === "string" && typeof typedValue.provider === "string"
+  );
+}
+
+function isModelSelectSource(
+  value: unknown,
+): value is RpcModelSelectEvent["source"] {
+  return value === "set" || value === "cycle" || value === "restore";
+}
+
+function isPiModelSelectEventLike(
+  value: unknown,
+): value is PiModelSelectEventLike {
+  if (!value || typeof value !== "object") return false;
+  const typedValue = value as {
+    model?: unknown;
+    previousModel?: unknown;
+    source?: unknown;
+  };
+  return (
+    isPiModel(typedValue.model) &&
+    (typedValue.previousModel === undefined ||
+      isPiModel(typedValue.previousModel)) &&
+    isModelSelectSource(typedValue.source)
+  );
+}
+
+function toRpcModelSelectEvent(
+  event: PiModelSelectEventLike,
+): RpcModelSelectEvent {
+  return {
+    type: "model_select",
+    model: toRpcModel(event.model),
+    previousModel: event.previousModel
+      ? toRpcModel(event.previousModel)
+      : undefined,
+    source: event.source,
+  };
 }
 
 interface SessionTreeNodeLike {
@@ -778,9 +928,7 @@ function extractEventMessage(event: object): Record<string, unknown> | null {
   return null;
 }
 
-function findLatestModelInfo(
-  branch: readonly SessionEntry[],
-): { provider: string; id: string } | null {
+function findLatestModelInfo(branch: readonly SessionEntry[]): RpcModel | null {
   for (let index = branch.length - 1; index >= 0; index -= 1) {
     const entry = branch[index];
     if (entry?.type === "model_change") {
@@ -791,6 +939,20 @@ function findLatestModelInfo(
   return null;
 }
 
+function normalizeThinkingLevel(value: string): RpcThinkingLevel {
+  switch (value) {
+    case "off":
+    case "minimal":
+    case "low":
+    case "medium":
+    case "high":
+    case "xhigh":
+      return value;
+    default:
+      return "off";
+  }
+}
+
 function buildStateFromStoredSession(
   sessionManager: SessionManager,
 ): RpcSessionState {
@@ -799,8 +961,8 @@ function buildStateFromStoredSession(
   const model = findLatestModelInfo(branch);
 
   return {
-    model,
-    thinkingLevel: context.thinkingLevel,
+    model: model ?? undefined,
+    thinkingLevel: normalizeThinkingLevel(context.thinkingLevel),
     isStreaming: false,
     isCompacting: false,
     steeringMode: "all",
@@ -1048,12 +1210,12 @@ function normalizeRpcImages(images: unknown): RpcImageContent[] | undefined {
 function buildUserMessageContent(
   message: string,
   images?: RpcImageContent[],
-): string | Array<BridgeTextContent | RpcImageContent> {
+): UserMessageContent {
   if (!images?.length) return message;
 
-  const content: Array<BridgeTextContent | RpcImageContent> = [];
+  const content: UserMessageBlock[] = [];
   if (message) {
-    content.push({ type: "text", text: message });
+    content.push({ type: "text", text: message } as PiTextContent);
   }
   content.push(...images);
   return content;
@@ -1217,24 +1379,18 @@ export class WsRpcAdapter {
   subscribeToEvents(): void {
     void this.eventBus;
 
-    this.context.pi.on("agent_start", (event: object) => {
+    this.context.pi.on("agent_start", (_event: PiAgentStartEvent) => {
       if (!this.shouldHandleLiveSessionEvents()) return;
-      this.sendEvent({
-        type: "agent_start",
-        ...(event as Record<string, unknown>),
-      });
+      this.sendEvent(toRpcAgentStartEvent());
     });
 
-    this.context.pi.on("agent_end", (event: object) => {
+    this.context.pi.on("agent_end", (event: PiAgentEndEvent) => {
       if (!this.shouldHandleLiveSessionEvents()) return;
-      this.sendEvent({
-        type: "agent_end",
-        ...(event as Record<string, unknown>),
-      });
+      this.sendEvent(toRpcAgentEndEvent(event));
       this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
     });
 
-    this.context.pi.on("compaction_end", () => {
+    this.context.pi.on("session_compact", () => {
       if (!this.shouldHandleLiveSessionEvents()) return;
       this.sendTranscriptSnapshot(this.buildCurrentTranscriptPage());
       this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
@@ -1267,17 +1423,14 @@ export class WsRpcAdapter {
       );
     });
 
-    this.context.pi.on("model_select", (event: object) => {
+    this.context.pi.on("model_select", event => {
       if (!this.shouldHandleLiveSessionEvents()) return;
-      this.sendEvent({
-        type: "model_select",
-        ...(event as Record<string, unknown>),
-      });
+      this.sendEvent(toRpcModelSelectEvent(event));
       this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
     });
   }
 
-  private sendEvent(payload: Record<string, unknown>): void {
+  private sendEvent(payload: RpcBridgeEvent): void {
     this.sendResponse({
       type: "event",
       payload,
@@ -1365,7 +1518,7 @@ export class WsRpcAdapter {
       type: "transcript_snapshot",
       ...page,
     };
-    this.sendEvent(payload as unknown as Record<string, unknown>);
+    this.sendEvent(payload);
   }
 
   private sendInitialTranscriptSnapshot(): void {
@@ -1485,7 +1638,7 @@ export class WsRpcAdapter {
       sessionPath: sessionPath ?? undefined,
       message: transcriptMessage,
     };
-    this.sendEvent(payload as unknown as Record<string, unknown>);
+    this.sendEvent(payload);
     if (eventType !== "message_start") {
       this.queueSessionStatsEvent(sessionPath);
     }
@@ -1493,20 +1646,30 @@ export class WsRpcAdapter {
 
   private handleSelectedSessionEvent(event: AgentSessionEvent): void {
     const sessionPath = this.currentTranscriptSessionPath();
-    const eventType = (event as { type: string }).type;
+    const eventType: string = event.type;
 
-    switch (eventType) {
+    if (eventType === "session_compact") {
+      this.sendTranscriptSnapshot(this.buildCurrentTranscriptPage());
+      this.queueSessionStatsEvent(sessionPath);
+      return;
+    }
+
+    if (eventType === "model_select") {
+      if (!isPiModelSelectEventLike(event)) return;
+      this.sendEvent(toRpcModelSelectEvent(event));
+      this.queueSessionStatsEvent(sessionPath);
+      return;
+    }
+
+    switch (event.type) {
       case "message_start":
       case "message_update":
       case "message_end": {
-        this.handleTranscriptLifecycleEvent(eventType, event, sessionPath);
+        this.handleTranscriptLifecycleEvent(event.type, event, sessionPath);
         return;
       }
       case "agent_start":
-        this.sendEvent({
-          type: "agent_start",
-          ...(event as unknown as Record<string, unknown>),
-        });
+        this.sendEvent(toRpcAgentStartEvent());
         return;
       case "agent_end":
         if (this.selectedSession) {
@@ -1521,15 +1684,11 @@ export class WsRpcAdapter {
             ),
           );
         }
-        this.sendEvent(event as unknown as Record<string, unknown>);
+        this.sendEvent(toRpcAgentEndEvent(event));
         this.queueSessionStatsEvent(sessionPath);
         return;
       case "compaction_end":
         this.sendTranscriptSnapshot(this.buildCurrentTranscriptPage());
-        this.queueSessionStatsEvent(sessionPath);
-        return;
-      case "model_select":
-        this.sendEvent(event as unknown as Record<string, unknown>);
         this.queueSessionStatsEvent(sessionPath);
         return;
       default:
@@ -1596,7 +1755,7 @@ export class WsRpcAdapter {
     });
 
     await created.session.bindExtensions({
-      uiContext: this.createExtensionUIContext() as never,
+      uiContext: this.createExtensionUIContext(),
       onError: error => {
         console.error(
           `WsRpcAdapter[${this.client.id}]: Detached session extension error:`,
@@ -1630,7 +1789,10 @@ export class WsRpcAdapter {
       return {
         model:
           this.selectedSession.model ??
-          findLatestModelInfo(this.selectedSession.sessionManager.getBranch()),
+          findLatestModelInfo(
+            this.selectedSession.sessionManager.getBranch(),
+          ) ??
+          undefined,
         thinkingLevel: this.selectedSession.thinkingLevel,
         isStreaming: this.selectedSession.isStreaming,
         isCompacting: this.selectedSession.isCompacting,
@@ -1721,11 +1883,9 @@ export class WsRpcAdapter {
     if (!provider || !modelId) return 0;
 
     try {
-      const models = await this.context.ctx.modelRegistry.getAvailable();
+      const models = this.context.ctx.modelRegistry.getAvailable();
       const matched = models.find(
-        (model: unknown) =>
-          (model as { provider: string; id: string }).provider === provider &&
-          (model as { provider: string; id: string }).id === modelId,
+        model => model.provider === provider && model.id === modelId,
       );
       return (
         (matched as { contextWindow?: number } | undefined)?.contextWindow ?? 0
@@ -1870,7 +2030,7 @@ export class WsRpcAdapter {
         sessionPath: sessionPath ?? undefined,
         stats,
       };
-      this.sendEvent(payload as unknown as Record<string, unknown>);
+      this.sendEvent(payload);
     } catch {
       // Ignore transient push failures. Explicit stats RPC reads still work.
     } finally {
@@ -2173,12 +2333,9 @@ export class WsRpcAdapter {
         const modelRegistry = this.selectedSession
           ? this.selectedSession.modelRegistry
           : ctx.modelRegistry;
-        const models = await modelRegistry.getAvailable();
+        const models = modelRegistry.getAvailable();
         const model = models.find(
-          (m: unknown) =>
-            (m as { provider: string; id: string }).provider ===
-              command.provider &&
-            (m as { provider: string; id: string }).id === command.modelId,
+          m => m.provider === command.provider && m.id === command.modelId,
         );
         if (!model) {
           return {
@@ -2191,7 +2348,7 @@ export class WsRpcAdapter {
         }
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          await session.setModel(model as never);
+          await session.setModel(model);
         } else {
           await pi.setModel(model);
         }
@@ -2208,7 +2365,7 @@ export class WsRpcAdapter {
         const modelRegistry = this.selectedSession
           ? this.selectedSession.modelRegistry
           : ctx.modelRegistry;
-        const models = await modelRegistry.getAvailable();
+        const models = modelRegistry.getAvailable();
         return {
           id: correlationId,
           type: "response",
@@ -2236,9 +2393,9 @@ export class WsRpcAdapter {
       case "set_thinking_level": {
         if (this.selectedSessionPath) {
           const session = await this.ensureSelectedSession();
-          session.setThinkingLevel(command.level as never);
+          session.setThinkingLevel(command.level as PiThinkingLevel);
         } else {
-          pi.setThinkingLevel(command.level);
+          pi.setThinkingLevel(command.level as PiThinkingLevel);
         }
         return {
           id: correlationId,
@@ -2931,7 +3088,7 @@ export class WsRpcAdapter {
   /**
    * Create an extension UI context for routing UI requests to this WS client
    */
-  createExtensionUIContext() {
+  createExtensionUIContext(): ExtensionUIContext {
     const createDialogPromise = <T>(
       request: Record<string, unknown>,
       defaultValue: T,
@@ -3086,11 +3243,11 @@ export class WsRpcAdapter {
         this.sendResponse(envelope);
       },
 
-      setWidget: (
-        key: string,
-        widgetLines: string[] | undefined,
-        options?: { placement?: "aboveEditor" | "belowEditor" },
-      ) => {
+      setWidget: (key, content, options) => {
+        if (typeof content === "function") {
+          return;
+        }
+
         const id = crypto.randomUUID();
         const envelope: ServerMessage = {
           type: "extension_ui_request",
@@ -3099,7 +3256,7 @@ export class WsRpcAdapter {
             id,
             method: "setWidget",
             widgetKey: key,
-            widgetLines,
+            widgetLines: content,
             widgetPlacement: options?.placement,
           } as RpcExtensionUIRequest,
         };
@@ -3128,12 +3285,12 @@ export class WsRpcAdapter {
       setHiddenThinkingLabel: () => {}, // Not supported
       setFooter: () => {}, // Not supported
       setHeader: () => {}, // Not supported
-      custom: async () => undefined, // Not supported
+      custom: async <T>() => undefined as T, // Not supported
       pasteToEditor: (text: string) => {
         setEditorText(text);
       },
       setEditorComponent: () => {}, // Not supported
-      theme: {} as unknown, // Not available
+      theme: {} as ExtensionUIContext["theme"], // Not available
       getAllThemes: () => [],
       getTheme: () => undefined,
       setTheme: () => ({ success: false, error: "Not supported" }),

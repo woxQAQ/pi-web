@@ -1,3 +1,7 @@
+import type {
+  ExtensionAPI,
+  ExtensionCommandContext,
+} from "@mariozechner/pi-coding-agent";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
 import { startBridge, type BridgeController } from "../lifecycle.js";
@@ -8,28 +12,53 @@ const waitForAsyncWork = (ms = 100) =>
   new Promise(resolve => setTimeout(resolve, ms));
 
 describe("Bridge Lifecycle", () => {
-  const createMockContext = (): WsRpcAdapterContext => ({
-    pi: {
+  const createMockContext = (): WsRpcAdapterContext => {
+    const sessionManager = {
+      getCwd: vi.fn().mockReturnValue("/test/project"),
+      getSessionDir: vi.fn().mockReturnValue("/test"),
+      getSessionId: vi.fn().mockReturnValue("test-session"),
+      getSessionFile: vi.fn().mockReturnValue("/test/session.json"),
+      getLeafId: vi.fn().mockReturnValue(null),
+      getLeafEntry: vi.fn().mockReturnValue(undefined),
+      getEntry: vi.fn().mockReturnValue(undefined),
+      getLabel: vi.fn().mockReturnValue(undefined),
+      getBranch: vi.fn().mockReturnValue([]),
+      getHeader: vi.fn().mockReturnValue(null),
+      getEntries: vi.fn().mockReturnValue([]),
+      getTree: vi.fn().mockReturnValue([]),
+      getSessionName: vi.fn().mockReturnValue(undefined),
+    };
+
+    const model = {
+      id: "test-model",
+      name: "Test Model",
+      api: "openai-responses",
+      provider: "test",
+      baseUrl: "https://example.com",
+      reasoning: true,
+      input: ["text"] as const,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+      contextWindow: 1000,
+      maxTokens: 1000,
+    };
+
+    const pi = {
       sendUserMessage: vi.fn(),
       setModel: vi.fn().mockResolvedValue(true),
       setThinkingLevel: vi.fn(),
-      getThinkingLevel: vi.fn().mockReturnValue("normal"),
+      getThinkingLevel: vi.fn().mockReturnValue("medium"),
       setSessionName: vi.fn(),
       getSessionName: vi.fn().mockReturnValue(undefined),
       getCommands: vi.fn().mockReturnValue([]),
       on: vi.fn(),
-    },
-    ctx: {
-      sessionManager: {
-        getBranch: vi.fn().mockReturnValue([]),
-        getEntries: vi.fn().mockReturnValue([]),
-        getSessionId: vi.fn().mockReturnValue("test-session"),
-        getSessionFile: vi.fn().mockReturnValue("/test/session.json"),
-      },
-      model: { id: "test-model", provider: "test" },
+    } as unknown as ExtensionAPI;
+
+    const ctx = {
+      sessionManager,
+      model,
       modelRegistry: {
-        getAvailable: vi.fn().mockResolvedValue([]),
-      },
+        getAvailable: vi.fn().mockReturnValue([]),
+      } as unknown as ExtensionCommandContext["modelRegistry"],
       isIdle: vi.fn().mockReturnValue(true),
       signal: undefined,
       abort: vi.fn(),
@@ -41,13 +70,20 @@ describe("Bridge Lifecycle", () => {
         .mockReturnValue({ tokens: 100, contextWindow: 1000, percent: 10 }),
       getSystemPrompt: vi.fn().mockReturnValue("test prompt"),
       cwd: "/test/project",
+      ui: {
+        custom: vi.fn(),
+      },
+      hasUI: true,
       waitForIdle: vi.fn().mockResolvedValue(undefined),
       newSession: vi.fn().mockResolvedValue({ cancelled: false }),
       fork: vi.fn().mockResolvedValue({ cancelled: false }),
       navigateTree: vi.fn().mockResolvedValue({ cancelled: false }),
       switchSession: vi.fn().mockResolvedValue({ cancelled: false }),
-    },
-  });
+      reload: vi.fn().mockResolvedValue(undefined),
+    } as unknown as ExtensionCommandContext;
+
+    return { pi, ctx };
+  };
 
   let mockContext: WsRpcAdapterContext;
   let doneCallback: ReturnType<typeof vi.fn>;

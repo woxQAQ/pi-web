@@ -8,7 +8,11 @@ import AppHeader from "./layout/AppHeader.vue";
 import AppMainContent from "./layout/AppMainContent.vue";
 import AppNotifications from "./layout/AppNotifications.vue";
 import AppSidebar from "./layout/AppSidebar.vue";
-import type { RpcImageContent } from "./shared-types";
+import type {
+  RpcImageContent,
+  RpcPluginStateValue,
+  RpcThinkingLevel,
+} from "./shared-types";
 import { readInitialDebugMode } from "./utils/debugMode";
 import type { RpcModelInfo } from "./utils/models";
 
@@ -122,8 +126,7 @@ watch(connectionStatus, async status => {
       type: "get_plugin_state",
       key: "theme",
     });
-    const savedTheme = (themeRes.data as { value?: unknown } | undefined)
-      ?.value;
+    const savedTheme = (themeRes.data as { value?: RpcPluginStateValue }).value;
     if (themeRes.success && (savedTheme === "dark" || savedTheme === "light")) {
       theme.value = savedTheme;
     }
@@ -134,8 +137,10 @@ watch(connectionStatus, async status => {
         key: "debugMode",
       });
       const savedDebugMode = (
-        debugModeRes.data as { value?: unknown } | undefined
-      )?.value;
+        debugModeRes.data as {
+          value?: RpcPluginStateValue;
+        }
+      ).value;
       if (debugModeRes.success && typeof savedDebugMode === "boolean") {
         debugMode.value = savedDebugMode;
       }
@@ -278,7 +283,7 @@ function handleModelSelect(model: RpcModelInfo) {
   }).catch(() => {});
 }
 
-function handleThinkingLevelSelect(level: string) {
+function handleThinkingLevelSelect(level: RpcThinkingLevel) {
   if (currentThinkingLevel.value === level) {
     return;
   }

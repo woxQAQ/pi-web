@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { buildToolCardModel } from "../utils/toolBlock";
-import type { ImageContentBlock, ToolContentBlock } from "../utils/transcript";
+import type {
+  ImageContentBlock,
+  JsonObject,
+  ToolContentBlock,
+} from "../utils/transcript";
 import DiffView from "./DiffView.vue";
 import HighlightedCode from "./HighlightedCode.vue";
 
@@ -17,25 +21,33 @@ const emit = defineEmits<{
 const model = computed(() => buildToolCardModel(props.block));
 const hasDetails = computed(() => model.value.details.length > 0);
 const showPreview = computed(() => !props.expanded || !hasDetails.value);
-function filePathFromArgs(): string | undefined {
-  const args = props.block.toolArgs;
-  if (!args || typeof args !== "object" || Array.isArray(args))
+
+function asJsonObject(
+  value: ToolContentBlock["toolArgs"] | ToolContentBlock["resultDetails"],
+): JsonObject | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
-  return typeof (args as Record<string, unknown>).path === "string"
-    ? ((args as Record<string, unknown>).path as string)
-    : undefined;
+  }
+  return value;
+}
+
+function stringValue(
+  record: JsonObject | undefined,
+  key: string,
+): string | undefined {
+  const value = record?.[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+function filePathFromArgs(): string | undefined {
+  return stringValue(asJsonObject(props.block.toolArgs), "path");
 }
 
 const readPath = computed(filePathFromArgs);
 const writePath = computed(filePathFromArgs);
 const editDiff = computed(() => {
   if (props.block.toolName !== "edit") return undefined;
-  const details = props.block.resultDetails;
-  if (!details || typeof details !== "object" || Array.isArray(details))
-    return undefined;
-  return typeof (details as Record<string, unknown>).diff === "string"
-    ? ((details as Record<string, unknown>).diff as string)
-    : undefined;
+  return stringValue(asJsonObject(props.block.resultDetails), "diff");
 });
 
 const resultImages = computed(() =>

@@ -1,11 +1,14 @@
 import { ref, readonly, computed, onUnmounted } from "vue";
 import type {
+  ClientMessage,
+  RpcBridgeEvent,
   RpcCommand,
   RpcImageContent,
   RpcResponse,
   RpcSessionState,
   RpcSessionStats,
   RpcSlashCommand,
+  RpcThinkingLevel,
   RpcWorkspaceEntry,
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
@@ -14,7 +17,6 @@ import type {
   RpcTranscriptSnapshotEvent,
   RpcTranscriptUpsertEvent,
   RpcSessionStatsEvent,
-  ClientMessage,
   ServerMessage,
 } from "../shared-types";
 import {
@@ -30,16 +32,7 @@ import { normalizeTranscript } from "../utils/transcript";
 
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
-/** Minimal shape of a message entry from get_messages / message events. */
-export interface TranscriptEntry {
-  transcriptKey?: string;
-  id?: string;
-  role: string;
-  content?: unknown;
-  text?: string;
-  timestamp?: string;
-  [key: string]: unknown;
-}
+export type TranscriptEntry = RpcTranscriptMessage;
 
 export interface SessionEntry {
   id: string;
@@ -111,7 +104,7 @@ const workspaceEntriesLoaded = ref(false);
 const workspaceEntriesLoading = ref(false);
 const availableModels = ref<RpcModelInfo[]>([]);
 const currentModel = ref<RpcModelInfo | null>(null);
-const currentThinkingLevel = ref<string | null>(null);
+const currentThinkingLevel = ref<RpcThinkingLevel | null>(null);
 const isStreaming = ref(false);
 
 // Session stats (context usage + cost)
@@ -194,7 +187,7 @@ function updateCurrentModel(value: unknown) {
   }
 }
 
-function updateAvailableModels(values: unknown[]) {
+function updateAvailableModels(values: readonly unknown[]) {
   availableModels.value = values
     .map(value => normalizeRpcModel(value))
     .filter((model): model is RpcModelInfo => model !== null);
@@ -207,8 +200,20 @@ function updateAvailableModels(values: unknown[]) {
   }
 }
 
-function normalizeThinkingLevel(value: unknown): string | null {
-  return typeof value === "string" && value.trim() ? value : null;
+function normalizeThinkingLevel(value: unknown): RpcThinkingLevel | null {
+  switch (value) {
+    case "normal":
+    case "medium":
+      return "medium";
+    case "off":
+    case "minimal":
+    case "low":
+    case "high":
+    case "xhigh":
+      return value;
+    default:
+      return null;
+  }
 }
 
 function sendEnvelope(msg: ClientMessage) {
@@ -440,7 +445,7 @@ function abortGeneration() {
   return sendCommand({ type: "abort" });
 }
 
-async function setThinkingLevel(level: string) {
+async function setThinkingLevel(level: RpcThinkingLevel) {
   const response = await sendCommand({ type: "set_thinking_level", level });
   if (response.success) {
     currentThinkingLevel.value = normalizeThinkingLevel(level);
@@ -488,7 +493,7 @@ function handleServerMessage(raw: MessageEvent) {
   if (envelope.type === "response") {
     handleResponse(envelope.payload);
   } else if (envelope.type === "event") {
-    handleEvent(envelope.payload as Record<string, unknown>);
+    handleEvent(envelope.payload);
   } else if (envelope.type === "extension_ui_request") {
     handleExtensionUIRequest(envelope.payload as RpcExtensionUIRequest);
   }
@@ -671,7 +676,7 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "get_available_models": {
-        const data = payload.data as { models: unknown[] } | undefined;
+        const data = payload.data;
         if (data) updateAvailableModels(data.models);
         break;
       }
@@ -690,8 +695,8 @@ function handleResponse(payload: RpcResponse) {
   }
 }
 
-function handleEvent(payload: Record<string, unknown>) {
-  const eventType = payload.type as string;
+function handleEvent(payload: RpcBridgeEvent) {
+  const eventType = payload.type;
 
   switch (eventType) {
     case "transcript_snapshot": {
@@ -731,9 +736,7 @@ function handleEvent(payload: Record<string, unknown>) {
       break;
     }
     case "model_select": {
-      const model = normalizeRpcModel(
-        (payload as { model?: unknown }).model ?? payload,
-      );
+      const model = normalizeRpcModel(payload.model ?? payload);
       if (model) {
         currentModel.value = model;
         availableModels.value = upsertModel(availableModels.value, model);

@@ -1,11 +1,21 @@
-export interface TranscriptEntryLike {
-  id?: string;
-  role: string;
-  content?: unknown;
-  text?: string;
-  timestamp?: string;
-  [key: string]: unknown;
-}
+import type {
+  RpcJsonObject,
+  RpcJsonValue,
+  RpcToolArguments,
+  RpcToolResultDetails,
+  RpcTranscriptContent,
+  RpcTranscriptContentBlock,
+  RpcTranscriptImageBlock,
+  RpcTranscriptImageUrlBlock,
+  RpcTranscriptMessage,
+  RpcTranscriptSystemBlock,
+  RpcTranscriptToolResultBlock,
+} from "../shared-types";
+
+export type JsonObject = RpcJsonObject;
+export type JsonValue = RpcJsonValue;
+
+export type TranscriptEntryLike = RpcTranscriptMessage;
 
 export type ToolBlockStatus = "pending" | "success" | "error";
 
@@ -19,11 +29,11 @@ export type ToolResultBlock = TextContentBlock | ImageContentBlock;
 export interface ToolContentBlock {
   kind: "tool";
   toolName: string;
-  toolArgs: unknown;
+  toolArgs: RpcToolArguments | undefined;
   argumentsText: string;
   resultText?: string;
   resultBlocks?: ToolResultBlock[];
-  resultDetails?: unknown;
+  resultDetails?: RpcToolResultDetails;
   toolStatus: ToolBlockStatus;
 }
 
@@ -62,42 +72,25 @@ export type ContentBlock =
   | ImageContentBlock
   | SystemContentBlock;
 
-interface UnknownBlock {
-  type?: string;
-  text?: string;
-  thinking?: string;
-  name?: string;
-  arguments?: unknown;
-  details?: unknown;
-  isError?: boolean;
-  content?: unknown;
-  data?: string;
-  mimeType?: string;
-  url?: string;
-  image_url?: string | { url?: string };
-  summary?: string;
-  tokensBefore?: number;
-  firstKeptEntryId?: string;
-  fromId?: string;
-  provider?: string;
-  modelId?: string;
-  thinkingLevel?: string;
-}
+type TranscriptContentItem = string | RpcTranscriptContentBlock;
+type ToolResultContentItem = NonNullable<
+  RpcTranscriptToolResultBlock["content"]
+>[number];
+type TranscriptImageBlock =
+  | RpcTranscriptImageBlock
+  | RpcTranscriptImageUrlBlock;
 
 export function isErrorMessage(msg: TranscriptEntryLike): boolean {
   if (msg.role !== "assistant") return false;
-  const stopReason = (msg as Record<string, unknown>).stopReason as
-    | string
-    | undefined;
-  return stopReason === "error" || stopReason === "aborted";
+  return msg.stopReason === "error" || msg.stopReason === "aborted";
 }
 
 export function errorMessageText(msg: TranscriptEntryLike): string {
-  return ((msg as Record<string, unknown>).errorMessage as string) ?? "";
+  return msg.errorMessage ?? "";
 }
 
 export function isAbortedMessage(msg: TranscriptEntryLike): boolean {
-  return (msg as Record<string, unknown>).stopReason === "aborted";
+  return msg.stopReason === "aborted";
 }
 
 export function isToolResultMessage(msg: TranscriptEntryLike): boolean {
@@ -114,25 +107,9 @@ export function messageContent(
   const content = msg.content;
   if (typeof content === "string") return content;
   if (typeof msg.text === "string") return msg.text;
-  if (Array.isArray(content)) {
-    return content
-      .map((block: unknown) => {
-        if (typeof block === "string") return block;
-        const typedBlock = block as UnknownBlock;
-        if (typedBlock.type === "text" && typeof typedBlock.text === "string")
-          return typedBlock.text;
-        if (typedBlock.type === "toolResult") {
-          return toolResultText(typedBlock);
-        }
-        if (isSystemBlockType(typedBlock.type)) {
-          return systemBlockText(typedBlock);
-        }
-        return "";
-      })
-      .filter(Boolean)
-      .join("\n");
-  }
-  return "";
+  if (!Array.isArray(content)) return "";
+
+  return content.map(contentItemText).filter(Boolean).join("\n");
 }
 
 export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
@@ -158,91 +135,70 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
       continue;
     }
 
-    const typedBlock = block as UnknownBlock;
-    const type = typedBlock.type;
-
-    if (type === "text" && typeof typedBlock.text === "string") {
-      blocks.push({ kind: "text", text: typedBlock.text });
+    if (isSystemBlock(block)) {
+      blocks.push(systemContentBlock(block));
       continue;
     }
 
-    if (type === "thinking" && typeof typedBlock.thinking === "string") {
-      const thinkingText = typedBlock.thinking.trim();
-      if (thinkingText) {
-        blocks.push({ kind: "thinking", text: thinkingText });
+    switch (block.type) {
+      case "text":
+        blocks.push({ kind: "text", text: block.text });
+        continue;
+      case "thinking": {
+        const thinkingText = block.thinking.trim();
+        if (thinkingText) {
+          blocks.push({ kind: "thinking", text: thinkingText });
+        }
+        continue;
       }
-      continue;
-    }
+      case "toolCall": {
+        const nextToolResult = toolResultBlockFromItem(content[index + 1]);
+        const resultText = nextToolResult
+          ? toolResultText(nextToolResult)
+          : undefined;
+        const resultBlocks = nextToolResult
+          ? toolResultBlocks(nextToolResult)
+          : undefined;
+        const resultDetails = nextToolResult?.details;
+        const resultIsError = nextToolResult?.isError;
 
-    if (isSystemBlockType(type)) {
-      blocks.push(systemContentBlock(typedBlock));
-      continue;
-    }
-
-    if (type === "toolCall") {
-      const nextBlock = content[index + 1];
-      const typedNextBlock =
-        typeof nextBlock === "object" && nextBlock !== null
-          ? (nextBlock as UnknownBlock)
-          : undefined;
-      const resultText =
-        typedNextBlock?.type === "toolResult"
-          ? toolResultText(typedNextBlock)
-          : undefined;
-      const resultBlocks =
-        typedNextBlock?.type === "toolResult"
-          ? toolResultBlocks(typedNextBlock)
-          : undefined;
-      const resultDetails =
-        typedNextBlock?.type === "toolResult"
-          ? typedNextBlock.details
-          : undefined;
-      const resultIsError =
-        typedNextBlock?.type === "toolResult"
-          ? toolResultIsError(typedNextBlock)
-          : undefined;
-
-      blocks.push({
-        kind: "tool",
-        toolName:
-          typeof typedBlock.name === "string" ? typedBlock.name : "unknown",
-        toolArgs: parseToolArguments(typedBlock.arguments),
-        argumentsText: toolArgumentsText(typedBlock.arguments),
-        resultText,
-        resultBlocks,
-        resultDetails,
-        toolStatus: toolStatusFromResult(
+        blocks.push({
+          kind: "tool",
+          toolName: block.name ?? "unknown",
+          toolArgs: parseToolArguments(block.arguments),
+          argumentsText: toolArgumentsText(block.arguments),
           resultText,
           resultBlocks,
-          resultIsError,
-        ),
-      });
-
-      if (typedNextBlock?.type === "toolResult") {
-        index++;
-      }
-      continue;
-    }
-
-    if (type === "toolResult") {
-      blocks.push(...toolResultBlocks(typedBlock));
-      continue;
-    }
-
-    if (type === "image" || type === "image_url") {
-      const src = imageBlockSource(typedBlock);
-      if (src) {
-        blocks.push({
-          kind: "image",
-          src,
-          alt: typedBlock.text || "Image attachment",
-          mimeType:
-            typeof typedBlock.mimeType === "string"
-              ? typedBlock.mimeType
-              : undefined,
+          resultDetails,
+          toolStatus: toolStatusFromResult(
+            resultText,
+            resultBlocks,
+            resultIsError,
+          ),
         });
-      } else {
-        blocks.push({ kind: "text", text: "[image]" });
+
+        if (nextToolResult) {
+          index += 1;
+        }
+        continue;
+      }
+      case "toolResult":
+        blocks.push(...toolResultBlocks(block));
+        continue;
+      case "image":
+      case "image_url": {
+        const src = imageBlockSource(block);
+        if (src) {
+          blocks.push({
+            kind: "image",
+            src,
+            alt: block.text ?? "Image attachment",
+            mimeType: block.mimeType,
+          });
+        } else {
+          blocks.push({ kind: "text", text: "[image]" });
+        }
+        continue;
       }
     }
   }
@@ -295,43 +251,41 @@ function appendToolResultToPreviousAssistant(
 }
 
 function mergeToolResultIntoContent(
-  content: unknown,
+  content: RpcTranscriptContent | undefined,
   toolResultMessage: TranscriptEntryLike,
-): unknown[] | null {
+): TranscriptContentItem[] | null {
   if (!Array.isArray(content)) return null;
 
-  const cloned = content.map(cloneBlock);
+  const cloned = content.map(cloneContentItem);
   const targetIndex = findNextUnmatchedToolCallIndex(cloned);
   if (targetIndex === -1) return null;
 
-  cloned.splice(targetIndex + 1, 0, {
+  const toolResultBlock: RpcTranscriptToolResultBlock = {
     type: "toolResult",
     text: messageContent(toolResultMessage),
-    content: cloneContent(toolResultMessage.content),
+    content: cloneToolResultContent(toolResultMessage.content),
     details: toolResultMessage.details,
-    isError:
-      typeof toolResultMessage.isError === "boolean"
-        ? toolResultMessage.isError
-        : undefined,
-  });
+    isError: toolResultMessage.isError,
+  };
+
+  cloned.splice(targetIndex + 1, 0, toolResultBlock);
   return cloned;
 }
 
-function findNextUnmatchedToolCallIndex(content: unknown[]): number {
+function findNextUnmatchedToolCallIndex(
+  content: TranscriptContentItem[],
+): number {
   const unmatchedToolCallIndexes: number[] = [];
 
   for (let index = 0; index < content.length; index++) {
     const block = content[index];
-    if (typeof block !== "object" || block === null) continue;
-    const typedBlock = block as UnknownBlock;
-    if (typedBlock.type === "toolCall") {
+    if (typeof block === "string") continue;
+
+    if (block.type === "toolCall") {
       unmatchedToolCallIndexes.push(index);
       continue;
     }
-    if (
-      typedBlock.type === "toolResult" &&
-      unmatchedToolCallIndexes.length > 0
-    ) {
+    if (block.type === "toolResult" && unmatchedToolCallIndexes.length > 0) {
       unmatchedToolCallIndexes.shift();
     }
   }
@@ -346,43 +300,86 @@ function cloneMessage(message: TranscriptEntryLike): TranscriptEntryLike {
   };
 }
 
-function cloneContent(content: unknown): unknown {
+function cloneContent(
+  content: RpcTranscriptContent | undefined,
+): RpcTranscriptContent | undefined {
   if (!Array.isArray(content)) return content;
-  return content.map(cloneBlock);
+  return content.map(cloneContentItem);
 }
 
-function cloneBlock(block: unknown): unknown {
-  if (typeof block !== "object" || block === null) return block;
-  return { ...(block as Record<string, unknown>) };
+function cloneContentItem(block: TranscriptContentItem): TranscriptContentItem {
+  if (typeof block === "string") return block;
+  return { ...block };
 }
 
-function isSystemBlockType(type: unknown): type is SystemBlockType {
+function cloneToolResultContent(
+  content: RpcTranscriptContent | undefined,
+): RpcTranscriptToolResultBlock["content"] | undefined {
+  if (!Array.isArray(content)) return undefined;
+
+  return content.flatMap(item => {
+    if (typeof item === "string") return [item];
+
+    switch (item.type) {
+      case "text":
+      case "image":
+      case "image_url":
+        return [{ ...item }];
+      default:
+        return [];
+    }
+  });
+}
+
+function isSystemBlock(
+  block: RpcTranscriptContentBlock,
+): block is RpcTranscriptSystemBlock {
   return (
-    type === "compaction" ||
-    type === "branch_summary" ||
-    type === "model_change" ||
-    type === "thinking_level_change" ||
-    type === "session_info"
+    block.type === "compaction" ||
+    block.type === "branch_summary" ||
+    block.type === "model_change" ||
+    block.type === "thinking_level_change" ||
+    block.type === "session_info"
   );
 }
 
-function systemContentBlock(block: UnknownBlock): SystemContentBlock {
+function contentItemText(block: TranscriptContentItem): string {
+  if (typeof block === "string") return block;
+  if (isSystemBlock(block)) return systemBlockText(block);
+
+  switch (block.type) {
+    case "text":
+      return block.text;
+    case "toolResult":
+      return toolResultText(block);
+    default:
+      return "";
+  }
+}
+
+function toolResultBlockFromItem(
+  block: TranscriptContentItem | undefined,
+): RpcTranscriptToolResultBlock | undefined {
+  if (!block || typeof block === "string" || block.type !== "toolResult") {
+    return undefined;
+  }
+  return block;
+}
+
+function systemContentBlock(
+  block: RpcTranscriptSystemBlock,
+): SystemContentBlock {
   switch (block.type) {
     case "compaction": {
-      const tokensBefore =
-        typeof block.tokensBefore === "number" &&
-        Number.isFinite(block.tokensBefore)
-          ? block.tokensBefore
-          : null;
+      const tokensBefore = Number.isFinite(block.tokensBefore)
+        ? block.tokensBefore
+        : null;
       return {
         kind: "system",
         systemType: "compaction",
         label: "Compaction",
         title: "Context compacted",
-        body:
-          typeof block.summary === "string" && block.summary.trim()
-            ? block.summary.trim()
-            : undefined,
+        body: block.summary.trim() ? block.summary.trim() : undefined,
         meta:
           tokensBefore === null ? undefined : formatTokenCount(tokensBefore),
       };
@@ -393,20 +390,15 @@ function systemContentBlock(block: UnknownBlock): SystemContentBlock {
         systemType: "branch_summary",
         label: "Branch Summary",
         title: "Branch summarized",
-        body:
-          typeof block.summary === "string" && block.summary.trim()
-            ? block.summary.trim()
-            : undefined,
+        body: block.summary.trim() ? block.summary.trim() : undefined,
       };
     case "model_change": {
-      const provider =
-        typeof block.provider === "string" && block.provider.trim()
-          ? block.provider.trim()
-          : undefined;
-      const modelId =
-        typeof block.modelId === "string" && block.modelId.trim()
-          ? block.modelId.trim()
-          : "Unknown model";
+      const provider = block.provider.trim()
+        ? block.provider.trim()
+        : undefined;
+      const modelId = block.modelId.trim()
+        ? block.modelId.trim()
+        : "Unknown model";
       return {
         kind: "system",
         systemType: "model_change",
@@ -416,10 +408,9 @@ function systemContentBlock(block: UnknownBlock): SystemContentBlock {
       };
     }
     case "thinking_level_change": {
-      const level =
-        typeof block.thinkingLevel === "string" && block.thinkingLevel.trim()
-          ? block.thinkingLevel.trim()
-          : "Unknown";
+      const level = block.thinkingLevel.trim()
+        ? block.thinkingLevel.trim()
+        : "Unknown";
       return {
         kind: "system",
         systemType: "thinking_level_change",
@@ -428,10 +419,7 @@ function systemContentBlock(block: UnknownBlock): SystemContentBlock {
       };
     }
     case "session_info": {
-      const name =
-        typeof block.name === "string" && block.name.trim()
-          ? block.name.trim()
-          : "Untitled session";
+      const name = block.name?.trim() ? block.name.trim() : "Untitled session";
       return {
         kind: "system",
         systemType: "session_info",
@@ -439,17 +427,10 @@ function systemContentBlock(block: UnknownBlock): SystemContentBlock {
         title: name,
       };
     }
-    default:
-      return {
-        kind: "system",
-        systemType: "session_info",
-        label: "System",
-        title: "Session updated",
-      };
   }
 }
 
-function systemBlockText(block: UnknownBlock): string {
+function systemBlockText(block: RpcTranscriptSystemBlock): string {
   const contentBlock = systemContentBlock(block);
   return contentBlock.body
     ? `${contentBlock.title}\n${contentBlock.body}`
@@ -462,17 +443,12 @@ function formatTokenCount(count: number): string {
   return `${count} tokens`;
 }
 
-function toolResultText(block: UnknownBlock): string {
+function toolResultText(block: RpcTranscriptToolResultBlock): string {
   if (Array.isArray(block.content)) {
     return block.content
       .map(item => {
         if (typeof item === "string") return item;
-        if (typeof item !== "object" || item === null) return "";
-        const typedItem = item as UnknownBlock;
-        if (typedItem.type === "text" && typeof typedItem.text === "string") {
-          return typedItem.text;
-        }
-        return "";
+        return item.type === "text" ? item.text : "";
       })
       .filter(Boolean)
       .join("\n");
@@ -482,7 +458,9 @@ function toolResultText(block: UnknownBlock): string {
   return JSON.stringify(block, null, 2);
 }
 
-function toolResultBlocks(block: UnknownBlock): ToolResultBlock[] {
+function toolResultBlocks(
+  block: RpcTranscriptToolResultBlock,
+): ToolResultBlock[] {
   if (Array.isArray(block.content)) {
     const blocks: ToolResultBlock[] = [];
     for (const item of block.content) {
@@ -490,24 +468,23 @@ function toolResultBlocks(block: UnknownBlock): ToolResultBlock[] {
         blocks.push({ kind: "text", text: item });
         continue;
       }
-      if (typeof item !== "object" || item === null) continue;
-      const typedItem = item as UnknownBlock;
-      if (typedItem.type === "text" && typeof typedItem.text === "string") {
-        blocks.push({ kind: "text", text: typedItem.text });
-        continue;
-      }
-      if (typedItem.type === "image" || typedItem.type === "image_url") {
-        const src = imageBlockSource(typedItem);
-        if (src) {
-          blocks.push({
-            kind: "image",
-            src,
-            alt: typedItem.text || "Image attachment",
-            mimeType:
-              typeof typedItem.mimeType === "string"
-                ? typedItem.mimeType
-                : undefined,
-          });
+
+      switch (item.type) {
+        case "text":
+          blocks.push({ kind: "text", text: item.text });
+          continue;
+        case "image":
+        case "image_url": {
+          const src = imageBlockSource(item);
+          if (src) {
+            blocks.push({
+              kind: "image",
+              src,
+              alt: item.text ?? "Image attachment",
+              mimeType: item.mimeType,
+            });
+          }
+          continue;
         }
       }
     }
@@ -519,22 +496,25 @@ function toolResultBlocks(block: UnknownBlock): ToolResultBlock[] {
   return text ? [{ kind: "text", text }] : [];
 }
 
-function toolResultIsError(block: UnknownBlock): boolean | undefined {
-  return typeof block.isError === "boolean" ? block.isError : undefined;
+function isJsonObject(value: unknown): value is JsonObject {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function parseToolArguments(args: unknown): unknown {
+function parseToolArguments(
+  args: RpcToolArguments | undefined,
+): RpcToolArguments | undefined {
   if (typeof args !== "string") return args;
   const trimmed = args.trim();
   if (!trimmed) return "";
   try {
-    return JSON.parse(trimmed);
+    const parsed = JSON.parse(trimmed);
+    return isJsonObject(parsed) ? parsed : args;
   } catch {
     return args;
   }
 }
 
-function toolArgumentsText(args: unknown): string {
+function toolArgumentsText(args: RpcToolArguments | undefined): string {
   if (typeof args === "string") return args;
   return JSON.stringify(args ?? "", null, 2);
 }
@@ -551,26 +531,30 @@ function toolStatusFromResult(
   return isError ? "error" : "success";
 }
 
-function imageBlockSource(block: UnknownBlock): string | null {
-  if (typeof block.data === "string" && typeof block.mimeType === "string") {
-    return `data:${block.mimeType};base64,${block.data}`;
+function imageBlockSource(block: TranscriptImageBlock): string | null {
+  switch (block.type) {
+    case "image":
+      if (
+        typeof block.data === "string" &&
+        typeof block.mimeType === "string"
+      ) {
+        return `data:${block.mimeType};base64,${block.data}`;
+      }
+      return typeof block.url === "string" ? block.url : null;
+    case "image_url":
+      if (typeof block.url === "string") {
+        return block.url;
+      }
+      if (typeof block.image_url === "string") {
+        return block.image_url;
+      }
+      if (
+        typeof block.image_url === "object" &&
+        block.image_url !== null &&
+        typeof block.image_url.url === "string"
+      ) {
+        return block.image_url.url;
+      }
+      return null;
   }
-
-  if (typeof block.url === "string") {
-    return block.url;
-  }
-
-  if (typeof block.image_url === "string") {
-    return block.image_url;
-  }
-
-  if (
-    typeof block.image_url === "object" &&
-    block.image_url !== null &&
-    typeof block.image_url.url === "string"
-  ) {
-    return block.image_url.url;
-  }
-
-  return null;
 }

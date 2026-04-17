@@ -12,6 +12,7 @@ import type {
   RpcImageContent,
   RpcSessionStats,
   RpcSlashCommand,
+  RpcThinkingLevel,
   RpcWorkspaceEntry,
 } from "../shared-types";
 import type { RpcModelInfo } from "../utils/models";
@@ -32,7 +33,7 @@ defineProps<{
   ensureWorkspaceEntries: () => Promise<RpcWorkspaceEntry[]>;
   availableModels: readonly RpcModelInfo[];
   currentModel: RpcModelInfo | null;
-  currentThinkingLevel: string | null;
+  currentThinkingLevel: RpcThinkingLevel | null;
   autoCompactionEnabled: boolean;
   sessionStats: RpcSessionStats | null;
   prefillText: string | null;
@@ -56,7 +57,7 @@ const emit = defineEmits<{
   abort: [];
   loadOlderTranscript: [];
   selectModel: [model: RpcModelInfo];
-  selectThinkingLevel: [level: string];
+  selectThinkingLevel: [level: RpcThinkingLevel];
   toggleAutoCompaction: [enabled: boolean];
   reviseMessage: [
     payload: {

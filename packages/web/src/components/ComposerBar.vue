@@ -5,6 +5,7 @@ import type { ConnectionStatus } from "../composables/useBridgeClient";
 import type {
   RpcImageContent,
   RpcSlashCommand,
+  RpcThinkingLevel,
   RpcWorkspaceEntry,
 } from "../shared-types";
 import {
@@ -43,7 +44,7 @@ const props = defineProps<{
   ensureWorkspaceEntries: () => Promise<RpcWorkspaceEntry[]>;
   models: RpcModelInfo[];
   selectedModel: RpcModelInfo | null;
-  thinkingLevel: string | null;
+  thinkingLevel: RpcThinkingLevel | null;
   autoCompactionEnabled: boolean;
   prefillText: string | null;
   revision: {
@@ -65,7 +66,7 @@ const emit = defineEmits<{
   abort: [];
   cancelRevision: [];
   selectModel: [model: RpcModelInfo];
-  selectThinkingLevel: [level: string];
+  selectThinkingLevel: [level: RpcThinkingLevel];
   toggleAutoCompaction: [enabled: boolean];
 }>();
 
@@ -110,10 +111,7 @@ const currentModelText = computed(() => {
     return props.models.length > 0 ? "choose model" : "no models";
   return `${props.selectedModel.provider}/${props.selectedModel.id}`;
 });
-const selectedThinkingLevel = computed(() => {
-  if (props.thinkingLevel === "normal") return "medium";
-  return props.thinkingLevel ?? "off";
-});
+const selectedThinkingLevel = computed(() => props.thinkingLevel ?? "off");
 const selectedThinkingLabel = computed(
   () =>
     THINKING_LEVEL_OPTIONS.find(

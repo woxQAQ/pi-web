@@ -1,4 +1,9 @@
-import type { ToolBlockStatus, ToolContentBlock } from "./transcript";
+import type {
+  JsonObject,
+  JsonValue,
+  ToolBlockStatus,
+  ToolContentBlock,
+} from "./transcript";
 
 export interface ToolCardSection {
   label: string;
@@ -15,7 +20,7 @@ export interface ToolCardModel {
   diffStats?: { added: number; removed: number };
 }
 
-type ToolArgsRecord = Record<string, unknown>;
+type ToolArgsRecord = JsonObject;
 
 const TOOL_LABELS: Record<string, string> = {
   read: "Read file",
@@ -137,7 +142,7 @@ function formatToolMeta(
   toolName: string,
   args: ToolArgsRecord | undefined,
   resultText: string | undefined,
-  resultDetails: unknown,
+  resultDetails: JsonValue | undefined,
   status: ToolBlockStatus,
 ): string | undefined {
   switch (toolName) {
@@ -166,7 +171,7 @@ function formatToolPreview(
   toolName: string,
   args: ToolArgsRecord | undefined,
   resultText: string | undefined,
-  resultDetails: unknown,
+  resultDetails: JsonValue | undefined,
   status: ToolBlockStatus,
 ): string | undefined {
   if (status === "pending") {
@@ -276,10 +281,11 @@ function humanizeToolName(toolName: string): string {
     .join(" ");
 }
 
-function asRecord(value: unknown): ToolArgsRecord | undefined {
-  if (!value || typeof value !== "object" || Array.isArray(value))
+function asRecord(value: JsonValue | undefined): ToolArgsRecord | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return undefined;
-  return value as ToolArgsRecord;
+  }
+  return value;
 }
 
 function stringValue(
@@ -314,14 +320,15 @@ function editDiffStats(
 ): { added: number; removed: number } | undefined {
   const fromDiff = diffStatsFromDiff(diffText);
   if (fromDiff) return fromDiff;
-  if (!Array.isArray(args?.edits)) return undefined;
+  const edits = arrayValue(args, "edits");
+  if (!edits) return undefined;
   let added = 0;
   let removed = 0;
   let sawEdit = false;
 
-  for (const edit of args.edits) {
-    if (!edit || typeof edit !== "object") continue;
-    const record = edit as Record<string, unknown>;
+  for (const edit of edits) {
+    const record = asRecord(edit);
+    if (!record) continue;
     const oldText = typeof record.oldText === "string" ? record.oldText : "";
     const newText = typeof record.newText === "string" ? record.newText : "";
     removed += countLines(oldText);
@@ -339,7 +346,17 @@ function countLines(text: string): number {
   return lines.length;
 }
 
-function blockResultDiff(resultDetails: unknown): string | undefined {
+function arrayValue(
+  args: ToolArgsRecord | undefined,
+  key: string,
+): JsonValue[] | undefined {
+  const value = args?.[key];
+  return Array.isArray(value) ? value : undefined;
+}
+
+function blockResultDiff(
+  resultDetails: JsonValue | undefined,
+): string | undefined {
   const details = asRecord(resultDetails);
   return stringValue(details, "diff");
 }
@@ -369,7 +386,7 @@ function diffStatsFromDiff(
 function buildDiffStats(
   toolName: string,
   args: ToolArgsRecord | undefined,
-  resultDetails: unknown,
+  resultDetails: JsonValue | undefined,
   status: ToolBlockStatus,
 ): { added: number; removed: number } | undefined {
   if (toolName !== "edit" || status !== "success") return undefined;

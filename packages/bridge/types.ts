@@ -5,11 +5,6 @@
  * rpc-types module, which is not exported from the npm package) and
  * bridge-specific types for server configuration, runtime state, and
  * WebSocket client tracking.
- *
- * External complex types (AgentMessage, Model, ThinkingLevel, etc.) are
- * represented as `unknown` because the bridge is a pass-through — it never
- * inspects or constructs these values, only forwards them between the
- * Pi extension API and WebSocket clients.
  */
 
 // ============================================================================
@@ -28,6 +23,152 @@ export interface RpcWorkspaceEntry {
 }
 
 /** Map of RPC command types to their specific payload shapes. */
+export interface RpcModel {
+  id: string;
+  provider: string;
+  name?: string;
+  api?: string;
+  reasoning?: boolean;
+  contextWindow?: number;
+  maxTokens?: number;
+}
+
+export type RpcThinkingLevel =
+  | "off"
+  | "minimal"
+  | "low"
+  | "medium"
+  | "high"
+  | "xhigh";
+
+export type RpcJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | RpcJsonValue[]
+  | { [key: string]: RpcJsonValue };
+
+export type RpcJsonObject = { [key: string]: RpcJsonValue };
+
+export type RpcPluginStateValue = RpcJsonValue;
+
+export type RpcToolArguments = string | RpcJsonObject;
+
+export type RpcToolResultDetails = RpcJsonValue;
+
+export interface RpcCompactionResult {
+  summary: string;
+  firstKeptEntryId: string;
+  tokensBefore: number;
+  details?: unknown;
+}
+
+export interface RpcBashResult {
+  output: string;
+  exitCode: number | undefined;
+  cancelled: boolean;
+  truncated: boolean;
+  fullOutputPath?: string;
+}
+
+export interface RpcAgentTextContent {
+  type: "text";
+  text: string;
+  textSignature?: string;
+}
+
+export interface RpcAgentThinkingContent {
+  type: "thinking";
+  thinking: string;
+  thinkingSignature?: string;
+  redacted?: boolean;
+}
+
+export interface RpcAgentToolCall {
+  type: "toolCall";
+  id: string;
+  name: string;
+  arguments: RpcJsonObject;
+  thoughtSignature?: string;
+}
+
+export interface RpcAgentUsageCost {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  total: number;
+}
+
+export interface RpcAgentUsage {
+  input: number;
+  output: number;
+  cacheRead: number;
+  cacheWrite: number;
+  totalTokens: number;
+  cost: RpcAgentUsageCost;
+}
+
+export type RpcAgentStopReason =
+  | "stop"
+  | "length"
+  | "toolUse"
+  | "error"
+  | "aborted";
+
+export interface RpcAgentUserMessage {
+  role: "user";
+  content: string | Array<RpcAgentTextContent | RpcImageContent>;
+  timestamp: number;
+}
+
+export interface RpcAgentAssistantMessage {
+  role: "assistant";
+  content: Array<
+    RpcAgentTextContent | RpcAgentThinkingContent | RpcAgentToolCall
+  >;
+  api: string;
+  provider: string;
+  model: string;
+  responseId?: string;
+  usage: RpcAgentUsage;
+  stopReason: RpcAgentStopReason;
+  errorMessage?: string;
+  timestamp: number;
+}
+
+export interface RpcAgentToolResultMessage {
+  role: "toolResult";
+  toolCallId: string;
+  toolName: string;
+  content: Array<RpcAgentTextContent | RpcImageContent>;
+  details?: unknown;
+  isError: boolean;
+  timestamp: number;
+}
+
+export type RpcAgentMessage =
+  | RpcAgentUserMessage
+  | RpcAgentAssistantMessage
+  | RpcAgentToolResultMessage;
+
+export interface RpcAgentStartEvent {
+  type: "agent_start";
+}
+
+export interface RpcAgentEndEvent {
+  type: "agent_end";
+  messages?: RpcAgentMessage[];
+}
+
+export interface RpcModelSelectEvent {
+  type: "model_select";
+  model: RpcModel;
+  previousModel?: RpcModel;
+  source: "set" | "cycle" | "restore";
+}
+
 export interface RpcCommandMap {
   /** Prompting */
   prompt: {
@@ -43,20 +184,20 @@ export interface RpcCommandMap {
     message: string;
     images?: RpcImageContent[];
   };
-  abort: unknown;
+  abort: {};
   new_session: { parentSession?: string; limit?: number };
 
   /** State */
-  get_state: unknown;
+  get_state: {};
 
   /** Model */
   set_model: { provider: string; modelId: string };
-  cycle_model: unknown;
-  get_available_models: unknown;
+  cycle_model: {};
+  get_available_models: {};
 
   /** Thinking */
-  set_thinking_level: { level: unknown };
-  cycle_thinking_level: unknown;
+  set_thinking_level: { level: RpcThinkingLevel };
+  cycle_thinking_level: {};
 
   /** Queue modes */
   set_steering_mode: { mode: "all" | "one-at-a-time" };
@@ -68,11 +209,11 @@ export interface RpcCommandMap {
 
   /** Retry */
   set_auto_retry: { enabled: boolean };
-  abort_retry: unknown;
+  abort_retry: {};
 
   /** Bash */
   bash: { command: string };
-  abort_bash: unknown;
+  abort_bash: {};
 
   /** Session */
   export_html: { outputPath?: string };
@@ -85,8 +226,8 @@ export interface RpcCommandMap {
     label?: string;
   };
   fork: { entryId: string };
-  get_fork_messages: unknown;
-  get_last_assistant_text: unknown;
+  get_fork_messages: {};
+  get_last_assistant_text: {};
   set_session_name: { name: string };
 
   /** Messages / Commands */
@@ -96,16 +237,16 @@ export interface RpcCommandMap {
     cursor?: string;
     limit?: number;
   };
-  get_commands: unknown;
+  get_commands: {};
 
   /** Discovery */
-  list_sessions: unknown;
+  list_sessions: {};
   list_tree_entries: { sessionPath?: string };
-  list_workspace_entries: unknown;
+  list_workspace_entries: {};
 
   /** Plugin state persistence */
   get_plugin_state: { key: string };
-  set_plugin_state: { key: string; value: unknown };
+  set_plugin_state: { key: string; value: RpcPluginStateValue };
 }
 
 /** All RPC command types that a browser client can send. */
@@ -127,8 +268,8 @@ export type RpcCommandPayload<T extends RpcCommandType> = Omit<
 // ============================================================================
 
 export interface RpcSessionState {
-  model?: unknown;
-  thinkingLevel: unknown;
+  model?: RpcModel;
+  thinkingLevel: RpcThinkingLevel;
   isStreaming: boolean;
   isCompacting: boolean;
   steeringMode: "all" | "one-at-a-time";
@@ -174,14 +315,127 @@ export interface RpcSessionStats {
   cacheWriteTokens: number;
 }
 
+export type RpcTranscriptRole =
+  | "user"
+  | "assistant"
+  | "toolResult"
+  | "tool"
+  | "system"
+  | "bashExecution"
+  | (string & {});
+
+export interface RpcTranscriptTextBlock {
+  type: "text";
+  text: string;
+  textSignature?: string;
+}
+
+export interface RpcTranscriptThinkingBlock {
+  type: "thinking";
+  thinking: string;
+  thinkingSignature?: string;
+  redacted?: boolean;
+}
+
+export interface RpcTranscriptImageBlock {
+  type: "image";
+  data?: string;
+  mimeType?: string;
+  text?: string;
+  url?: string;
+}
+
+export interface RpcTranscriptImageUrlBlock {
+  type: "image_url";
+  image_url?: string | { url?: string };
+  text?: string;
+  mimeType?: string;
+  url?: string;
+}
+
+export interface RpcTranscriptToolCallBlock {
+  type: "toolCall";
+  id?: string;
+  name?: string;
+  arguments?: RpcToolArguments;
+  thoughtSignature?: string;
+}
+
+export interface RpcTranscriptToolResultBlock {
+  type: "toolResult";
+  text?: string;
+  content?: Array<
+    | string
+    | RpcTranscriptTextBlock
+    | RpcTranscriptImageBlock
+    | RpcTranscriptImageUrlBlock
+  >;
+  details?: RpcToolResultDetails;
+  isError?: boolean;
+}
+
+export interface RpcTranscriptCompactionBlock {
+  type: "compaction";
+  summary: string;
+  tokensBefore: number;
+  firstKeptEntryId: string;
+}
+
+export interface RpcTranscriptBranchSummaryBlock {
+  type: "branch_summary";
+  summary: string;
+  fromId: string;
+}
+
+export interface RpcTranscriptModelChangeBlock {
+  type: "model_change";
+  provider: string;
+  modelId: string;
+}
+
+export interface RpcTranscriptThinkingLevelChangeBlock {
+  type: "thinking_level_change";
+  thinkingLevel: string;
+}
+
+export interface RpcTranscriptSessionInfoBlock {
+  type: "session_info";
+  name?: string;
+}
+
+export type RpcTranscriptSystemBlock =
+  | RpcTranscriptCompactionBlock
+  | RpcTranscriptBranchSummaryBlock
+  | RpcTranscriptModelChangeBlock
+  | RpcTranscriptThinkingLevelChangeBlock
+  | RpcTranscriptSessionInfoBlock;
+
+export type RpcTranscriptContentBlock =
+  | RpcTranscriptTextBlock
+  | RpcTranscriptThinkingBlock
+  | RpcTranscriptImageBlock
+  | RpcTranscriptImageUrlBlock
+  | RpcTranscriptToolCallBlock
+  | RpcTranscriptToolResultBlock
+  | RpcTranscriptSystemBlock;
+
+export type RpcTranscriptContent =
+  | string
+  | Array<string | RpcTranscriptContentBlock>;
+
 export interface RpcTranscriptMessage {
   transcriptKey: string;
   id?: string;
-  role: string;
-  content?: unknown;
+  role: RpcTranscriptRole;
+  content?: RpcTranscriptContent;
   text?: string;
   timestamp?: string;
-  [key: string]: unknown;
+  stopReason?: string;
+  errorMessage?: string;
+  toolCallId?: string;
+  toolName?: string;
+  isError?: boolean;
+  details?: RpcToolResultDetails;
 }
 
 export interface RpcTranscriptPage {
@@ -228,18 +482,22 @@ export interface RpcResponseMap {
     cancelled: boolean;
   };
   get_state: RpcSessionState;
-  set_model: unknown;
-  cycle_model: unknown;
-  get_available_models: { models: unknown[] };
+  set_model: RpcModel;
+  cycle_model: {
+    model: RpcModel;
+    thinkingLevel: RpcThinkingLevel;
+    isScoped: boolean;
+  } | null;
+  get_available_models: { models: RpcModel[] };
   set_thinking_level: void;
-  cycle_thinking_level: unknown;
+  cycle_thinking_level: { level: RpcThinkingLevel } | null;
   set_steering_mode: void;
   set_follow_up_mode: void;
-  compact: unknown;
+  compact: RpcCompactionResult;
   set_auto_compaction: void;
   set_auto_retry: void;
   abort_retry: void;
-  bash: unknown;
+  bash: RpcBashResult;
   abort_bash: void;
   export_html: { path: string };
   switch_session: {
@@ -262,11 +520,11 @@ export interface RpcResponseMap {
   };
   list_tree_entries: { entries: RpcTreeEntry[]; sessionPath?: string };
   list_workspace_entries: { entries: RpcWorkspaceEntry[] };
-  get_plugin_state: { value: unknown };
+  get_plugin_state: { value: RpcPluginStateValue | undefined };
   set_plugin_state: void;
 }
 
-type RpcResponseData<T> = [T] extends [void] ? unknown : { data: T };
+type RpcResponseData<T> = [T] extends [void] ? {} : { data: T };
 
 /** Structured responses sent back to the browser client after command dispatch. */
 export type RpcResponse =
@@ -450,8 +708,17 @@ export type BridgeEvent =
 // ============================================================================
 
 /** Envelope for messages sent from server → browser client. */
+export type RpcBridgeEvent =
+  | RpcTranscriptSnapshotEvent
+  | RpcTranscriptUpsertEvent
+  | RpcSessionStatsEvent
+  | RpcAgentStartEvent
+  | RpcAgentEndEvent
+  | RpcModelSelectEvent
+  | { type: "session_compact" };
+
 export type ServerMessage =
-  | { type: "event"; payload: unknown }
+  | { type: "event"; payload: RpcBridgeEvent }
   | { type: "extension_ui_request"; payload: RpcExtensionUIRequest }
   | { type: "response"; payload: RpcResponse };
 
