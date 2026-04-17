@@ -13,7 +13,6 @@ defineProps<{
   sidebarView: "sessions" | "tree";
   sessionLabel: string;
   sessionPath: string | null;
-  isHistoricalView: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -63,7 +62,6 @@ const emit = defineEmits<{
       :entries="treeEntries"
       :session-label="sessionLabel"
       :session-path="sessionPath"
-      :is-historical-view="isHistoricalView"
       @back="emit('backToSessions')"
       @select="emit('selectTreeEntry', $event)"
       @refresh="emit('refreshTree')"

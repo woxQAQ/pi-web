@@ -12,7 +12,6 @@ const props = defineProps<{
   entries: readonly TreeEntry[];
   sessionLabel: string;
   sessionPath: string | null;
-  isHistoricalView: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -43,16 +42,12 @@ watch(
 const filteredEntries = computed(() =>
   filterTreeEntries(props.entries, filterMode.value, query.value),
 );
-const activePathCount = computed(
-  () => props.entries.filter(entry => entry.isOnActivePath).length,
-);
 
 function displayParts(entry: TreeEntry) {
   return getTreeEntryDisplayParts(entry);
 }
 
 function handleSelect(entryId: string) {
-  if (props.isHistoricalView) return;
   emit("select", entryId);
 }
 </script>
@@ -105,20 +100,6 @@ function handleSelect(entryId: string) {
       </div>
     </div>
 
-    <div class="tree-status">
-      <span class="status-token"
-        >{{ filteredEntries.length }} / {{ entries.length }} entries</span
-      >
-      <span class="status-token">{{ activePathCount }} on path</span>
-      <span v-if="isHistoricalView" class="status-token warning"
-        >Read only</span
-      >
-    </div>
-
-    <p v-if="isHistoricalView" class="tree-note">
-      Browsing a stored session snapshot. Navigation is disabled.
-    </p>
-
     <ol v-if="filteredEntries.length > 0" class="tree-list">
       <li v-for="entry in filteredEntries" :key="entry.id" class="tree-row">
         <button
@@ -129,11 +110,9 @@ function handleSelect(entryId: string) {
               active: entry.isActive,
               'in-path': entry.isOnActivePath,
               dimmed: !entry.isOnActivePath,
-              readonly: isHistoricalView,
             },
           ]"
           type="button"
-          :disabled="isHistoricalView"
           :title="displayParts(entry).title"
           @click="handleSelect(entry.id)"
         >
@@ -228,7 +207,6 @@ function handleSelect(entryId: string) {
 .header-kicker,
 .tree-role,
 .tree-current,
-.status-token,
 .filter-chip {
   font-size: 0.68rem;
   letter-spacing: 0.08em;
@@ -309,38 +287,6 @@ function handleSelect(entryId: string) {
   color: var(--text);
 }
 
-.tree-status {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  padding: 0 6px 8px;
-}
-
-.status-token {
-  display: inline-flex;
-  align-items: center;
-  min-height: 23px;
-  padding: 0 8px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: color-mix(in srgb, var(--panel) 78%, transparent);
-  color: var(--text-subtle);
-}
-
-.status-token.warning {
-  color: var(--error-text);
-  border-color: var(--error-border);
-  background: color-mix(in srgb, var(--error-bg) 80%, transparent);
-}
-
-.tree-note {
-  margin: 0;
-  padding: 0 6px 10px;
-  font-size: 0.73rem;
-  line-height: 1.45;
-  color: var(--text-subtle);
-}
-
 .tree-list {
   list-style: none;
   margin: 0;
@@ -375,10 +321,6 @@ function handleSelect(entryId: string) {
 
 .tree-item:hover {
   background: color-mix(in srgb, var(--panel-2) 72%, transparent);
-}
-
-.tree-item.readonly {
-  cursor: default;
 }
 
 .tree-item.dimmed {

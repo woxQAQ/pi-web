@@ -31,7 +31,6 @@ const {
   treeEntries,
   activeTreeSessionPath,
   liveSessionPath,
-  isHistoricalView,
   commands,
   workspaceEntries,
   workspaceEntriesLoading,
@@ -193,12 +192,6 @@ watch(
   },
 );
 
-watch(isHistoricalView, historical => {
-  if (historical) {
-    pendingRevision.value = null;
-  }
-});
-
 watch(
   () => sessionState.value?.sessionId ?? null,
   sessionId => {
@@ -263,7 +256,6 @@ function handleRefreshTree() {
 }
 
 function handleTreeEntrySelect(entryId: string) {
-  if (isHistoricalView.value) return;
   pendingRevision.value = null;
   sendCommand({ type: "select_tree_entry", entryId }).catch(() => {});
   if (isCompactLayout()) {
@@ -425,7 +417,6 @@ onBeforeUnmount(() => {
         :sidebar-view="sidebarView"
         :session-label="activeSessionLabel"
         :session-path="activeTreeSessionPath"
-        :is-historical-view="isHistoricalView"
         @close-sidebar="sidebarOpen = false"
         @select-session="handleSessionSelect"
         @select-tree-entry="handleTreeEntrySelect"
@@ -458,7 +449,7 @@ onBeforeUnmount(() => {
         :session-stats="sessionStats"
         :prefill-text="prefillText"
         :pending-revision="pendingRevision"
-        :allow-revision="connectionStatus === 'connected' && !isHistoricalView"
+        :allow-revision="connectionStatus === 'connected'"
         @submit="handlePrompt($event)"
         @load-older-transcript="loadOlderTranscriptPage"
         @abort="handleAbort"

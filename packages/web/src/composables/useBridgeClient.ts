@@ -983,13 +983,6 @@ export function useBridgeClient() {
       !disposed &&
       !connectionError.value,
   );
-  const isHistoricalView = computed(() =>
-    Boolean(
-      activeTreeSessionPath.value &&
-      liveSessionPath.value &&
-      activeTreeSessionPath.value !== liveSessionPath.value,
-    ),
-  );
 
   return {
     connectionStatus: readonly(connectionStatus),
@@ -1002,7 +995,6 @@ export function useBridgeClient() {
     treeEntries: readonly(treeEntries),
     activeTreeSessionPath: readonly(activeTreeSessionPath),
     liveSessionPath: readonly(liveSessionPath),
-    isHistoricalView,
     commands: readonly(commands),
     workspaceEntries: readonly(workspaceEntries),
     workspaceEntriesLoading: readonly(workspaceEntriesLoading),

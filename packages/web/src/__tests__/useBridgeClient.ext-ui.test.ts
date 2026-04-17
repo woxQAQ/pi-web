@@ -178,7 +178,6 @@ describe("extension_ui_request handling", () => {
       },
     ]);
     expect(client.liveSessionPath.value).toBe("/tmp/session-2.jsonl");
-    expect(client.isHistoricalView.value).toBe(false);
     expect(ws.send).toHaveBeenCalledTimes(1);
     expect(ws.send).toHaveBeenCalledWith(
       expect.stringContaining('"type":"get_state"'),
