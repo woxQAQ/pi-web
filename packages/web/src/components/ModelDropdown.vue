@@ -261,7 +261,6 @@ onBeforeUnmount(() => {
   background: var(--panel-2);
   border-color: var(--border-strong);
   color: var(--text);
-  transform: translateY(-1px);
 }
 
 .model-trigger:disabled {

@@ -1417,7 +1417,6 @@ resizeTextarea();
     height: 32px;
     border-radius: 10px;
   }
-
 }
 
 .sr-only {
