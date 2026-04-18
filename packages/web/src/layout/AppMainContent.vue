@@ -10,6 +10,7 @@ import type {
 } from "../composables/useBridgeClient";
 import type {
   RpcImageContent,
+  RpcSessionState,
   RpcSessionStats,
   RpcSlashCommand,
   RpcThinkingLevel,
@@ -39,6 +40,7 @@ defineProps<{
   currentThinkingLevel: RpcThinkingLevel | null;
   autoCompactionEnabled: boolean;
   sessionStats: RpcSessionStats | null;
+  sessionState: RpcSessionState | null;
   prefillText: string | null;
   pendingRevision: {
     entryId: string;
@@ -110,7 +112,10 @@ defineExpose({ preserveTranscriptScroll });
       @load-older="emit('loadOlderTranscript')"
       @revise="emit('reviseMessage', $event)"
     />
-    <SessionStatsBar :stats="sessionStats" />
+    <SessionStatsBar
+      :stats="sessionStats"
+      :git-branch="sessionState?.gitBranch ?? null"
+    />
     <ComposerBar
       :connection-status="connectionStatus"
       :is-streaming="isStreaming"

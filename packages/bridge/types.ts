@@ -294,6 +294,7 @@ export interface RpcSessionState {
   sessionFile?: string;
   sessionId: string;
   sessionName?: string;
+  gitBranch?: string;
   autoCompactionEnabled: boolean;
   messageCount: number;
   pendingMessageCount: number;

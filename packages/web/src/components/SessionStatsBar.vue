@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { GitBranch } from "lucide-vue-next";
 import { computed } from "vue";
 import type { RpcSessionStats } from "../shared-types";
 
 const props = defineProps<{
   stats: RpcSessionStats | null;
+  gitBranch?: string | null;
 }>();
 
 const contextPercent = computed(() => {
@@ -49,7 +51,12 @@ const cacheWriteLabel = computed(() => {
   return `W${compactTokens(props.stats.cacheWriteTokens)}`;
 });
 
-const hasVisibleContent = computed(
+const gitBranchLabel = computed(() => {
+  const branch = props.gitBranch?.trim();
+  return branch ? branch : null;
+});
+
+const hasStatsContent = computed(
   () =>
     inputLabel.value != null ||
     outputLabel.value != null ||
@@ -57,6 +64,10 @@ const hasVisibleContent = computed(
     cacheWriteLabel.value != null ||
     contextPercent.value != null ||
     costLabel.value != null,
+);
+
+const hasVisibleContent = computed(
+  () => gitBranchLabel.value != null || hasStatsContent.value,
 );
 
 const barColor = computed(() => {
@@ -68,36 +79,44 @@ const barColor = computed(() => {
 </script>
 
 <template>
-  <div v-if="stats && hasVisibleContent" class="stats-bar">
+  <div v-if="hasVisibleContent" class="stats-bar">
     <div class="stats-inner">
-      <div v-if="inputLabel" class="stat-chip token-chip">
-        <span class="stat-label">{{ inputLabel }}</span>
-      </div>
-      <div v-if="outputLabel" class="stat-chip token-chip">
-        <span class="stat-label">{{ outputLabel }}</span>
-      </div>
-      <div v-if="cacheReadLabel" class="stat-chip token-chip">
-        <span class="stat-label">{{ cacheReadLabel }}</span>
-      </div>
-      <div v-if="cacheWriteLabel" class="stat-chip token-chip">
-        <span class="stat-label">{{ cacheWriteLabel }}</span>
-      </div>
-      <div v-if="costLabel" class="stat-chip cost-chip">
-        <span class="stat-label">{{ costLabel }}</span>
-      </div>
-      <div v-if="contextPercent != null" class="stat-chip context-chip">
-        <div class="context-bar-track">
-          <div
-            class="context-bar-fill"
-            :style="{
-              width: `${contextPercent}%`,
-              background: barColor,
-            }"
-          />
+      <div v-if="gitBranchLabel" class="stats-leading">
+        <div class="stat-chip branch-chip" :title="gitBranchLabel">
+          <GitBranch class="branch-icon" aria-hidden="true" />
+          <span class="stat-label">{{ gitBranchLabel }}</span>
         </div>
-        <span class="stat-label">
-          {{ contextPercent.toFixed(1) }}%/{{ windowLabel }}
-        </span>
+      </div>
+      <div v-if="hasStatsContent" class="stats-trailing">
+        <div v-if="inputLabel" class="stat-chip token-chip">
+          <span class="stat-label">{{ inputLabel }}</span>
+        </div>
+        <div v-if="outputLabel" class="stat-chip token-chip">
+          <span class="stat-label">{{ outputLabel }}</span>
+        </div>
+        <div v-if="cacheReadLabel" class="stat-chip token-chip">
+          <span class="stat-label">{{ cacheReadLabel }}</span>
+        </div>
+        <div v-if="cacheWriteLabel" class="stat-chip token-chip">
+          <span class="stat-label">{{ cacheWriteLabel }}</span>
+        </div>
+        <div v-if="costLabel" class="stat-chip cost-chip">
+          <span class="stat-label">{{ costLabel }}</span>
+        </div>
+        <div v-if="contextPercent != null" class="stat-chip context-chip">
+          <div class="context-bar-track">
+            <div
+              class="context-bar-fill"
+              :style="{
+                width: `${contextPercent}%`,
+                background: barColor,
+              }"
+            />
+          </div>
+          <span class="stat-label">
+            {{ contextPercent.toFixed(1) }}%/{{ windowLabel }}
+          </span>
+        </div>
       </div>
     </div>
   </div>
@@ -116,10 +135,24 @@ const barColor = computed(() => {
 .stats-inner {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 8px;
   width: min(960px, 100%);
   margin: 0 auto;
+}
+
+.stats-leading {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.stats-trailing {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-left: auto;
+  min-width: 0;
 }
 
 .stat-chip {
@@ -137,9 +170,17 @@ const barColor = computed(() => {
   gap: 8px;
 }
 
+.branch-chip,
 .token-chip,
 .cost-chip {
   border-color: color-mix(in srgb, var(--border) 50%, transparent);
+}
+
+.branch-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--text-subtle);
 }
 
 .context-bar-track {
@@ -178,6 +219,13 @@ const barColor = computed(() => {
 
   .stats-inner {
     width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .stats-trailing {
+    width: 100%;
+    margin-left: 0;
     justify-content: flex-start;
     flex-wrap: wrap;
     gap: 6px;

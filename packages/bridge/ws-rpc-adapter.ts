@@ -494,6 +494,26 @@ function listWorkspaceEntries(cwd: string): RpcWorkspaceEntry[] {
   return collectWorkspaceEntries(filePaths);
 }
 
+function getCurrentGitBranch(
+  cwd: string | null | undefined,
+): string | undefined {
+  if (!cwd) return undefined;
+
+  const result = spawnSync("git", ["branch", "--show-current"], {
+    cwd,
+    encoding: "utf8",
+    timeout: 1000,
+    windowsHide: true,
+  });
+
+  if (result.error || result.status !== 0) {
+    return undefined;
+  }
+
+  const branch = result.stdout.trim();
+  return branch.length > 0 ? branch : undefined;
+}
+
 function isTreeSettingsEntry(type: string): boolean {
   return TREE_SETTINGS_ENTRY_TYPES.has(type);
 }
@@ -1275,6 +1295,7 @@ function normalizeThinkingLevel(value: string): RpcThinkingLevel {
 
 function buildStateFromStoredSession(
   sessionManager: SessionManager,
+  fallbackCwd?: string,
 ): RpcSessionState {
   const branch = sessionManager.getBranch();
   const context = sessionManager.buildSessionContext();
@@ -1292,6 +1313,7 @@ function buildStateFromStoredSession(
     sessionName:
       sessionManager.getSessionName() ??
       sessionDisplayName(sessionManager, sessionManager.getSessionFile()),
+    gitBranch: getCurrentGitBranch(sessionManager.getCwd() ?? fallbackCwd),
     autoCompactionEnabled: false,
     messageCount: sessionManager.getEntries()?.length ?? 0,
     pendingMessageCount: 0,
@@ -2130,6 +2152,9 @@ export class WsRpcAdapter {
             this.selectedSession.sessionManager,
             this.selectedSession.sessionFile,
           ),
+        gitBranch: getCurrentGitBranch(
+          this.selectedSession.sessionManager.getCwd() ?? this.context.ctx.cwd,
+        ),
         autoCompactionEnabled: this.selectedSession.autoCompactionEnabled,
         messageCount:
           this.selectedSession.sessionManager.getEntries()?.length ?? 0,
@@ -2144,7 +2169,7 @@ export class WsRpcAdapter {
       const sm =
         this.pendingSessionManager ??
         openSessionManager(this.selectedSessionPath);
-      return buildStateFromStoredSession(sm);
+      return buildStateFromStoredSession(sm, this.context.ctx.cwd);
     }
 
     const { pi, ctx } = this.context;
@@ -2166,6 +2191,7 @@ export class WsRpcAdapter {
         },
         sessionFile,
       ),
+      gitBranch: getCurrentGitBranch(ctx.cwd),
       autoCompactionEnabled: false,
       messageCount: ctx.sessionManager.getEntries()?.length ?? 0,
       pendingMessageCount: ctx.hasPendingMessages() ? 1 : 0,

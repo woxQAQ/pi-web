@@ -449,6 +449,7 @@ onBeforeUnmount(() => {
         :current-thinking-level="currentThinkingLevel"
         :auto-compaction-enabled="sessionState?.autoCompactionEnabled ?? false"
         :session-stats="sessionStats"
+        :session-state="sessionState"
         :prefill-text="prefillText"
         :pending-revision="pendingRevision"
         :allow-revision="connectionStatus === 'connected'"
