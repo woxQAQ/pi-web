@@ -124,17 +124,18 @@ function handleSelect(entryId: string) {
               :class="column"
             ></span>
           </span>
-          <span class="tree-marker" aria-hidden="true"></span>
-          <span class="tree-line">
-            <span class="tree-role">{{ displayParts(entry).roleLabel }}</span>
-            <span v-if="displayParts(entry).labelTag" class="tree-tag">
-              {{ displayParts(entry).labelTag }}
+          <span class="tree-content">
+            <span class="tree-marker" aria-hidden="true"></span>
+            <span class="tree-line">
+              <span class="tree-role">{{ displayParts(entry).roleLabel }}</span>
+              <span v-if="displayParts(entry).labelTag" class="tree-tag">
+                [{{ displayParts(entry).labelTag }}]
+              </span>
+              <span class="tree-preview">{{
+                displayParts(entry).previewText
+              }}</span>
             </span>
-            <span class="tree-preview">{{
-              displayParts(entry).previewText
-            }}</span>
           </span>
-          <span v-if="entry.isActive" class="tree-current">current</span>
         </button>
       </li>
     </ol>
@@ -165,7 +166,7 @@ function handleSelect(entryId: string) {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   gap: 8px;
-  align-items: start;
+  align-items: center;
   padding: 2px 4px 8px;
 }
 
@@ -204,29 +205,20 @@ function handleSelect(entryId: string) {
   min-width: 0;
 }
 
-.header-kicker,
-.tree-role,
-.tree-current {
-  font-size: 0.63rem;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .filter-chip {
-  font-size: 0.6rem;
-  letter-spacing: 0.05em;
+  font-size: 0.56rem;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
 }
 
 .header-kicker {
-  margin: 0 0 2px;
-  color: var(--text-subtle);
+  display: none;
 }
 
 .header-title {
   margin: 0;
-  font-size: 0.82rem;
-  line-height: 1.2;
+  font-size: 0.74rem;
+  line-height: 1;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -236,19 +228,19 @@ function handleSelect(entryId: string) {
 .tree-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 8px;
-  padding: 0 4px 8px;
+  gap: 6px;
+  padding: 0 3px 6px;
 }
 
 .search-input {
-  height: 30px;
+  height: 26px;
   width: 100%;
-  border-radius: 9px;
+  border-radius: 7px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--text);
-  padding: 0 10px;
-  font-size: 0.78rem;
+  padding: 0 8px;
+  font-size: 0.73rem;
   outline: none;
 }
 
@@ -261,7 +253,7 @@ function handleSelect(entryId: string) {
 .filter-row {
   display: flex;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 3px;
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 1px;
@@ -273,13 +265,13 @@ function handleSelect(entryId: string) {
 }
 
 .filter-chip {
-  height: 24px;
+  height: 22px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 7px;
-  border-radius: 7px;
+  padding: 0 6px;
+  border-radius: 6px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-subtle);
@@ -306,7 +298,7 @@ function handleSelect(entryId: string) {
 .tree-list {
   list-style: none;
   margin: 0;
-  padding: 0 2px 0 4px;
+  padding: 0 1px 0 3px;
   overflow-y: auto;
   flex: 1;
 }
@@ -317,14 +309,14 @@ function handleSelect(entryId: string) {
 
 .tree-item {
   width: 100%;
-  min-height: 24px;
+  min-height: 20px;
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr) auto;
-  gap: 6px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px;
   align-items: center;
-  padding: 3px 6px;
+  padding: 2px 4px;
   border: 1px solid transparent;
-  border-radius: 7px;
+  border-radius: 5px;
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
@@ -332,18 +324,30 @@ function handleSelect(entryId: string) {
   color: inherit;
   text-align: left;
   cursor: pointer;
+  transition: opacity 0.12s ease;
+}
+
+.tree-content {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px;
+  align-items: center;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 5px;
   transition:
     background 0.12s ease,
     border-color 0.12s ease,
-    opacity 0.12s ease;
+    box-shadow 0.12s ease;
 }
 
-.tree-item:hover {
+.tree-item:hover .tree-content {
   background: color-mix(in srgb, var(--panel-2) 72%, transparent);
 }
 
 .tree-item.dimmed {
-  opacity: 0.52;
+  opacity: 0.46;
 }
 
 .tree-item.in-path {
@@ -352,19 +356,32 @@ function handleSelect(entryId: string) {
 }
 
 .tree-item.active {
-  background: color-mix(in srgb, var(--panel-3) 56%, transparent);
-  border-color: color-mix(in srgb, var(--border-strong) 60%, transparent);
+  border-color: transparent;
+}
+
+.tree-item.active .tree-content {
+  background: color-mix(
+    in srgb,
+    var(--panel-3) 92%,
+    var(--diff-added-accent) 8%
+  );
+  border-color: color-mix(
+    in srgb,
+    var(--border-strong) 76%,
+    var(--diff-added-accent) 24%
+  );
+  box-shadow: none;
 }
 
 .tree-guides {
   display: inline-flex;
   align-items: stretch;
-  height: 18px;
+  height: 16px;
 }
 
 .track-column {
   position: relative;
-  width: 11px;
+  width: 9px;
   flex-shrink: 0;
 }
 
@@ -381,12 +398,12 @@ function handleSelect(entryId: string) {
 
 .track-column.line::before,
 .track-column.branch::before {
-  top: -8px;
-  bottom: -8px;
+  top: -7px;
+  bottom: -7px;
 }
 
 .track-column.branch-last::before {
-  top: -8px;
+  top: -7px;
   height: calc(50% + 1px);
 }
 
@@ -396,42 +413,55 @@ function handleSelect(entryId: string) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 9px;
+  width: 7px;
   height: 1px;
   background: color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .tree-marker {
-  width: 6px;
-  height: 6px;
+  width: 5px;
+  height: 5px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border-strong) 86%, transparent);
   flex-shrink: 0;
+  transition:
+    background 0.12s ease,
+    box-shadow 0.12s ease,
+    transform 0.12s ease;
 }
 
 .tree-item.in-path .tree-marker {
   background: color-mix(in srgb, var(--text-muted) 84%, var(--text));
 }
 
-.tree-item.active .tree-marker,
 .tree-item.role-user .tree-marker {
   background: var(--text);
+}
+
+.tree-item.active .tree-marker {
+  background: color-mix(in srgb, var(--diff-added-accent) 54%, var(--text));
+  box-shadow: none;
+  transform: none;
 }
 
 .tree-line {
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 6px;
+  gap: 4px;
   overflow: hidden;
   font-family: var(--pi-font-mono);
-  font-size: 0.73rem;
-  line-height: 1.15;
+  font-size: 0.68rem;
+  line-height: 1.05;
 }
 
 .tree-role {
   flex-shrink: 0;
   color: var(--text-subtle);
+}
+
+.tree-role::after {
+  content: ":";
 }
 
 .tree-preview {
@@ -444,22 +474,13 @@ function handleSelect(entryId: string) {
 
 .tree-tag {
   flex-shrink: 0;
-  max-width: 8rem;
+  max-width: 6.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px 5px;
-  border-radius: 999px;
-  border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
-  background: color-mix(in srgb, var(--panel) 90%, transparent);
-  color: var(--text);
-  font-size: 0.62rem;
-  line-height: 1.15;
-}
-
-.tree-current {
-  flex-shrink: 0;
-  color: var(--text-subtle);
+  color: color-mix(in srgb, var(--text-subtle) 78%, var(--text));
+  font-size: 0.61rem;
+  line-height: 1.05;
 }
 
 .tree-item.active .tree-preview,
@@ -467,6 +488,10 @@ function handleSelect(entryId: string) {
 .tree-item.role-user .tree-preview,
 .tree-item.role-user .tree-role {
   color: var(--text);
+}
+
+.tree-item.active .tree-tag {
+  color: color-mix(in srgb, var(--text) 82%, var(--text-subtle));
 }
 
 .tree-item.role-assistant .tree-role {

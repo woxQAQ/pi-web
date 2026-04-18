@@ -6,9 +6,9 @@
   "scripts": {
     "build:web": "vite build packages/web/",
     "check": "tsgo --noEmit",
-    "dev:web": "vite packages/web/",
     "dev:pi": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} pi -e ./packages/bin/index.ts",
     "dev:pi:inspect": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} NODE_OPTIONS='--inspect-brk' pi -e ./packages/bin/index.ts",
+    "dev:web": "vite packages/web/",
     "fmt": "oxfmt",
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",

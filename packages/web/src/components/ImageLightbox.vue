@@ -119,11 +119,10 @@ onBeforeUnmount(() => {
           <ChevronRight aria-hidden="true" />
         </button>
 
-        <div
-          v-if="caption || hasMultipleImages"
-          class="image-lightbox-footer"
-        >
-          <span v-if="caption" class="image-lightbox-caption">{{ caption }}</span>
+        <div v-if="caption || hasMultipleImages" class="image-lightbox-footer">
+          <span v-if="caption" class="image-lightbox-caption">{{
+            caption
+          }}</span>
           <span v-if="hasMultipleImages" class="image-lightbox-counter">
             {{ index + 1 }}/{{ images.length }}
           </span>

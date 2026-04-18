@@ -2576,9 +2576,11 @@ describe("WsRpcAdapter", () => {
         role: "user",
         content: "First prompt",
       });
-      expect(responseCall?.payload.data.treeEntries.find(
-        (entry: { id: string }) => entry.id === targetEntryId,
-      )).toMatchObject({ isActive: true, isOnActivePath: true });
+      expect(
+        responseCall?.payload.data.treeEntries.find(
+          (entry: { id: string }) => entry.id === targetEntryId,
+        ),
+      ).toMatchObject({ isActive: true, isOnActivePath: true });
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
@@ -2714,9 +2716,11 @@ describe("WsRpcAdapter", () => {
         role: "toolResult",
         toolCallId: "tool-1",
       });
-      expect(responseCall?.payload.data.treeEntries.find(
-        (entry: { id: string }) => entry.id === targetEntryId,
-      )).toMatchObject({ isActive: true, isOnActivePath: true });
+      expect(
+        responseCall?.payload.data.treeEntries.find(
+          (entry: { id: string }) => entry.id === targetEntryId,
+        ),
+      ).toMatchObject({ isActive: true, isOnActivePath: true });
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });

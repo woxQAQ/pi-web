@@ -1102,7 +1102,9 @@ function buildExactSelectionTranscriptMessages(
   targetEntryId: string,
 ): RpcTranscriptMessage[] {
   const messages = flattenMessagesForTranscript(branch);
-  const targetIndex = messages.findIndex(message => message.id === targetEntryId);
+  const targetIndex = messages.findIndex(
+    message => message.id === targetEntryId,
+  );
   if (targetIndex === -1) {
     return messages;
   }
