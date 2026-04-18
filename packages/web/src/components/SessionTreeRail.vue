@@ -25,9 +25,9 @@ const filterMode = ref<TreeFilterMode>("default");
 
 const filterOptions: Array<{ mode: TreeFilterMode; label: string }> = [
   { mode: "default", label: "Default" },
-  { mode: "no-tools", label: "No-tools" },
+  { mode: "no-tools", label: "No tools" },
   { mode: "user-only", label: "User" },
-  { mode: "labeled-only", label: "Labeled" },
+  { mode: "labeled-only", label: "Labels" },
   { mode: "all", label: "All" },
 ];
 
@@ -151,7 +151,7 @@ function handleSelect(entryId: string) {
   flex-direction: column;
   min-height: 0;
   height: 100%;
-  padding: 12px 10px 10px;
+  padding: 10px 8px 8px;
   background:
     linear-gradient(
       180deg,
@@ -164,19 +164,19 @@ function handleSelect(entryId: string) {
 .tree-header {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
-  gap: 10px;
+  gap: 8px;
   align-items: start;
-  padding: 4px 6px 12px;
+  padding: 2px 4px 8px;
 }
 
 .nav-button {
-  width: 30px;
-  height: 30px;
+  width: 28px;
+  height: 28px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border-radius: 9px;
+  border-radius: 8px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 82%, transparent);
   color: var(--text-subtle);
@@ -196,8 +196,8 @@ function handleSelect(entryId: string) {
 }
 
 .nav-button svg {
-  width: 15px;
-  height: 15px;
+  width: 14px;
+  height: 14px;
 }
 
 .header-copy {
@@ -207,26 +207,26 @@ function handleSelect(entryId: string) {
 .header-kicker,
 .tree-role,
 .tree-current {
-  font-size: 0.68rem;
+  font-size: 0.63rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .filter-chip {
-  font-size: 0.63rem;
+  font-size: 0.6rem;
   letter-spacing: 0.05em;
   text-transform: uppercase;
 }
 
 .header-kicker {
-  margin: 0 0 4px;
+  margin: 0 0 2px;
   color: var(--text-subtle);
 }
 
 .header-title {
   margin: 0;
-  font-size: 0.88rem;
-  line-height: 1.3;
+  font-size: 0.82rem;
+  line-height: 1.2;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -236,19 +236,19 @@ function handleSelect(entryId: string) {
 .tree-toolbar {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 0 6px 10px;
+  gap: 8px;
+  padding: 0 4px 8px;
 }
 
 .search-input {
-  height: 34px;
+  height: 30px;
   width: 100%;
-  border-radius: 10px;
+  border-radius: 9px;
   border: 1px solid var(--border);
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   color: var(--text);
-  padding: 0 11px;
-  font-size: 0.82rem;
+  padding: 0 10px;
+  font-size: 0.78rem;
   outline: none;
 }
 
@@ -264,7 +264,7 @@ function handleSelect(entryId: string) {
   gap: 4px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding-bottom: 2px;
+  padding-bottom: 1px;
   scrollbar-width: none;
 }
 
@@ -273,13 +273,13 @@ function handleSelect(entryId: string) {
 }
 
 .filter-chip {
-  height: 27px;
+  height: 24px;
   flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0 8px;
-  border-radius: 8px;
+  padding: 0 7px;
+  border-radius: 7px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--text-subtle);
@@ -306,25 +306,25 @@ function handleSelect(entryId: string) {
 .tree-list {
   list-style: none;
   margin: 0;
-  padding: 2px 4px 0 6px;
+  padding: 0 2px 0 4px;
   overflow-y: auto;
   flex: 1;
 }
 
 .tree-row + .tree-row {
-  margin-top: 1px;
+  margin-top: 0;
 }
 
 .tree-item {
   width: 100%;
-  min-height: 28px;
+  min-height: 24px;
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
-  padding: 4px 8px;
+  padding: 3px 6px;
   border: 1px solid transparent;
-  border-radius: 8px;
+  border-radius: 7px;
   appearance: none;
   -webkit-appearance: none;
   background: transparent;
@@ -359,12 +359,12 @@ function handleSelect(entryId: string) {
 .tree-guides {
   display: inline-flex;
   align-items: stretch;
-  height: 22px;
+  height: 18px;
 }
 
 .track-column {
   position: relative;
-  width: 13px;
+  width: 11px;
   flex-shrink: 0;
 }
 
@@ -381,12 +381,12 @@ function handleSelect(entryId: string) {
 
 .track-column.line::before,
 .track-column.branch::before {
-  top: -10px;
-  bottom: -10px;
+  top: -8px;
+  bottom: -8px;
 }
 
 .track-column.branch-last::before {
-  top: -10px;
+  top: -8px;
   height: calc(50% + 1px);
 }
 
@@ -396,14 +396,14 @@ function handleSelect(entryId: string) {
   position: absolute;
   left: 50%;
   top: 50%;
-  width: 11px;
+  width: 9px;
   height: 1px;
   background: color-mix(in srgb, var(--border) 82%, transparent);
 }
 
 .tree-marker {
-  width: 7px;
-  height: 7px;
+  width: 6px;
+  height: 6px;
   border-radius: 999px;
   background: color-mix(in srgb, var(--border-strong) 86%, transparent);
   flex-shrink: 0;
@@ -422,11 +422,11 @@ function handleSelect(entryId: string) {
   min-width: 0;
   display: flex;
   align-items: baseline;
-  gap: 7px;
+  gap: 6px;
   overflow: hidden;
   font-family: var(--pi-font-mono);
-  font-size: 0.77rem;
-  line-height: 1.2;
+  font-size: 0.73rem;
+  line-height: 1.15;
 }
 
 .tree-role {
@@ -444,17 +444,17 @@ function handleSelect(entryId: string) {
 
 .tree-tag {
   flex-shrink: 0;
-  max-width: 8.8rem;
+  max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 999px;
   border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
   background: color-mix(in srgb, var(--panel) 90%, transparent);
   color: var(--text);
-  font-size: 0.67rem;
-  line-height: 1.2;
+  font-size: 0.62rem;
+  line-height: 1.15;
 }
 
 .tree-current {
@@ -482,23 +482,23 @@ function handleSelect(entryId: string) {
 }
 
 .empty-state {
-  margin: 8px 6px 0;
-  padding: 14px 12px;
-  border-radius: 10px;
+  margin: 6px 4px 0;
+  padding: 12px 10px;
+  border-radius: 9px;
   border: 1px dashed var(--border-strong);
   background: color-mix(in srgb, var(--panel) 58%, transparent);
 }
 
 .empty-title {
-  margin: 0 0 4px;
-  font-size: 0.82rem;
+  margin: 0 0 3px;
+  font-size: 0.78rem;
   color: var(--text);
 }
 
 .empty-copy {
   margin: 0;
-  font-size: 0.74rem;
-  line-height: 1.45;
+  font-size: 0.71rem;
+  line-height: 1.4;
   color: var(--text-subtle);
 }
 </style>
