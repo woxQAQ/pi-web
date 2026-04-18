@@ -1,5 +1,11 @@
 <script setup lang="ts">
-import { CornerDownLeft, ImagePlus, Square, X } from "lucide-vue-next";
+import {
+  ChevronDown,
+  CornerDownLeft,
+  ImagePlus,
+  Square,
+  X,
+} from "lucide-vue-next";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
 import type {
@@ -147,9 +153,6 @@ const selectedThinkingLabel = computed(
     THINKING_LEVEL_OPTIONS.find(
       option => option.value === selectedThinkingLevel.value,
     )?.label ?? "Off",
-);
-const thinkingSelectWidth = computed(
-  () => `calc(${selectedThinkingLabel.value.length}ch + 0.25rem)`,
 );
 const normalizedInputText = computed(() =>
   normalizeSubmittedText(inputText.value),
@@ -766,21 +769,20 @@ resizeTextarea();
               :disabled="isDisabled"
               @select="handleModelSelect"
             />
-            <label
-              class="thinking-control"
-              :class="{ disabled: isDisabled }"
-              :style="{
-                '--thinking-select-width': thinkingSelectWidth,
-              }"
-            >
+            <label class="thinking-control" :class="{ disabled: isDisabled }">
               <span class="sr-only">Thinking level</span>
               <span class="thinking-control-label" aria-hidden="true"
                 >Thinking</span
               >
+              <span class="thinking-control-value" aria-hidden="true">
+                {{ selectedThinkingLabel }}
+              </span>
+              <ChevronDown class="thinking-control-caret" aria-hidden="true" />
               <select
                 class="thinking-select"
                 :value="selectedThinkingLevel"
                 :disabled="isDisabled"
+                aria-label="Thinking level"
                 @change="handleThinkingLevelChange"
               >
                 <option
@@ -1191,6 +1193,7 @@ resizeTextarea();
 }
 
 .thinking-control {
+  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -1218,6 +1221,12 @@ resizeTextarea();
   cursor: not-allowed;
 }
 
+.thinking-control-label,
+.thinking-control-value,
+.thinking-control-caret {
+  pointer-events: none;
+}
+
 .thinking-control-label {
   display: inline-flex;
   align-items: center;
@@ -1228,18 +1237,34 @@ resizeTextarea();
   white-space: nowrap;
 }
 
-.thinking-select {
-  width: var(--thinking-select-width, auto);
+.thinking-control-value {
   min-width: 0;
-  padding: 0;
-  border: 0;
-  background: transparent;
   color: var(--text);
   font-family: var(--pi-font-mono);
   font-size: 0.66rem;
   line-height: 1.2;
+  white-space: nowrap;
+}
+
+.thinking-control-caret {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  color: var(--text-subtle);
+}
+
+.thinking-select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  color: transparent;
   outline: none;
   cursor: pointer;
+  opacity: 0;
   appearance: none;
 }
 
@@ -1393,10 +1418,6 @@ resizeTextarea();
     border-radius: 10px;
   }
 
-  .thinking-select {
-    width: var(--thinking-select-width, auto);
-    max-width: 132px;
-  }
 }
 
 .sr-only {
