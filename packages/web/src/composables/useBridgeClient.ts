@@ -9,6 +9,8 @@ import type {
   RpcSessionStats,
   RpcSlashCommand,
   RpcThinkingLevel,
+  RpcTreeEntry,
+  RpcTreeTrackColumn,
   RpcWorkspaceEntry,
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
@@ -40,19 +42,9 @@ export interface SessionEntry {
   path: string;
 }
 
-export type TreeTrackColumn = "blank" | "line" | "branch" | "branch-last";
+export type TreeTrackColumn = RpcTreeTrackColumn;
 
-export interface TreeEntry {
-  id: string;
-  label?: string;
-  type: string;
-  timestamp?: string;
-  parentId?: string | null;
-  depth?: number;
-  trackColumns?: TreeTrackColumn[];
-  isActive?: boolean;
-  isOnActivePath?: boolean;
-}
+export type TreeEntry = RpcTreeEntry;
 
 function readFiniteNumber(value: unknown, fallback = 0): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -353,6 +345,44 @@ function applySessionTranscriptPage(page: RpcTranscriptPage) {
   applyTranscriptPage(page, "replace");
 }
 
+function applySessionSnapshotResponse(
+  data:
+    | {
+        transcript: RpcTranscriptPage;
+        treeEntries?: TreeEntry[];
+        sessionId?: string;
+        sessionName?: string;
+        sessionPath?: string;
+      }
+    | undefined,
+  options?: { refreshState?: boolean },
+): boolean {
+  if (!data?.transcript) {
+    return false;
+  }
+
+  applySessionTranscriptPage(data.transcript);
+  if (data.sessionPath) {
+    activeTreeSessionPath.value = data.sessionPath;
+    liveSessionPath.value = data.sessionPath;
+  }
+  if (Array.isArray(data.treeEntries)) {
+    treeEntries.value = data.treeEntries;
+  }
+  if (data.sessionId) {
+    sessionState.value = {
+      ...sessionState.value,
+      sessionId: data.sessionId,
+      sessionName: data.sessionName,
+      sessionFile: data.sessionPath ?? sessionState.value?.sessionFile,
+    } as RpcSessionState;
+  }
+  if (options?.refreshState) {
+    sendCommand({ type: "get_state" }).catch(() => {});
+  }
+  return true;
+}
+
 async function loadOlderTranscriptPage() {
   if (
     transcriptPageLoading.value ||
@@ -629,27 +659,7 @@ function handleResponse(payload: RpcResponse) {
               sessionPath?: string;
             }
           | undefined;
-        if (data?.transcript) {
-          applySessionTranscriptPage(data.transcript);
-          if (data.sessionPath) {
-            activeTreeSessionPath.value = data.sessionPath;
-            liveSessionPath.value = data.sessionPath;
-          }
-          if (Array.isArray(data.treeEntries)) {
-            treeEntries.value = data.treeEntries;
-          }
-          if (data.sessionId) {
-            sessionState.value = {
-              ...sessionState.value,
-              sessionId: data.sessionId,
-              sessionName: data.sessionName,
-              sessionFile: data.sessionPath ?? sessionState.value?.sessionFile,
-            } as RpcSessionState;
-          }
-          sendCommand({
-            type: "get_state",
-          }).catch(() => {});
-        }
+        applySessionSnapshotResponse(data, { refreshState: true });
         break;
       }
       case "list_tree_entries": {
@@ -678,24 +688,7 @@ function handleResponse(payload: RpcResponse) {
               sessionPath?: string;
             }
           | undefined;
-        if (data?.transcript) {
-          applySessionTranscriptPage(data.transcript);
-          if (data.sessionPath) {
-            activeTreeSessionPath.value = data.sessionPath;
-            liveSessionPath.value = data.sessionPath;
-          }
-          if (Array.isArray(data.treeEntries)) {
-            treeEntries.value = data.treeEntries;
-          }
-          if (data.sessionId) {
-            sessionState.value = {
-              ...sessionState.value,
-              sessionId: data.sessionId,
-              sessionName: data.sessionName,
-              sessionFile: data.sessionPath ?? sessionState.value?.sessionFile,
-            } as RpcSessionState;
-          }
-        } else {
+        if (!applySessionSnapshotResponse(data)) {
           replaceTranscript([], null);
           transcriptHasOlder.value = false;
           transcriptOldestCursor.value = null;
@@ -743,6 +736,19 @@ function handleResponse(payload: RpcResponse) {
       case "get_available_models": {
         const data = payload.data;
         if (data) updateAvailableModels(data.models);
+        break;
+      }
+      case "select_tree_entry": {
+        const data = payload.data as
+          | {
+              transcript: RpcTranscriptPage;
+              treeEntries?: TreeEntry[];
+              sessionId?: string;
+              sessionName?: string;
+              sessionPath?: string;
+            }
+          | undefined;
+        applySessionSnapshotResponse(data, { refreshState: true });
         break;
       }
       case "navigate_tree": {
@@ -977,13 +983,6 @@ export function useBridgeClient() {
       !disposed &&
       !connectionError.value,
   );
-  const isHistoricalView = computed(() =>
-    Boolean(
-      activeTreeSessionPath.value &&
-      liveSessionPath.value &&
-      activeTreeSessionPath.value !== liveSessionPath.value,
-    ),
-  );
 
   return {
     connectionStatus: readonly(connectionStatus),
@@ -996,7 +995,6 @@ export function useBridgeClient() {
     treeEntries: readonly(treeEntries),
     activeTreeSessionPath: readonly(activeTreeSessionPath),
     liveSessionPath: readonly(liveSessionPath),
-    isHistoricalView,
     commands: readonly(commands),
     workspaceEntries: readonly(workspaceEntries),
     workspaceEntriesLoading: readonly(workspaceEntriesLoading),

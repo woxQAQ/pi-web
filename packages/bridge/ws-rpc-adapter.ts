@@ -337,8 +337,18 @@ interface TreeRowGutter {
   show: boolean;
 }
 
-const HIDDEN_TREE_ENTRY_TYPES = new Set([
-  "label",
+interface TreeEntryPresentation {
+  role: Exclude<RpcTreeEntry["role"], undefined>;
+  labelTag?: string;
+  previewText: string;
+  searchText: string;
+  isSettingsEntry: boolean;
+  isLabeled: boolean;
+  isToolOnlyAssistant: boolean;
+}
+
+const TREE_HARD_HIDDEN_ENTRY_TYPES = new Set(["label"]);
+const TREE_SETTINGS_ENTRY_TYPES = new Set([
   "custom",
   "model_change",
   "thinking_level_change",
@@ -484,6 +494,187 @@ function listWorkspaceEntries(cwd: string): RpcWorkspaceEntry[] {
   return collectWorkspaceEntries(filePaths);
 }
 
+function isTreeSettingsEntry(type: string): boolean {
+  return TREE_SETTINGS_ENTRY_TYPES.has(type);
+}
+
+function getTreeEntryRole(
+  entry:
+    | SessionEntry
+    | ({ role?: string; type?: string } & Record<string, unknown>),
+): Exclude<RpcTreeEntry["role"], undefined> {
+  const entryType = typeof entry.type === "string" ? entry.type : undefined;
+
+  if (entryType === "message") {
+    const messageRole =
+      typeof (entry as { message?: { role?: string } }).message?.role ===
+      "string"
+        ? (entry as { message: { role: string } }).message.role
+        : typeof (entry as { role?: string }).role === "string"
+          ? (entry as { role: string }).role
+          : undefined;
+
+    if (messageRole === "user") return "user";
+    if (messageRole === "assistant") return "assistant";
+    if (messageRole === "toolResult" || messageRole === "bashExecution") {
+      return "tool";
+    }
+    return "other";
+  }
+
+  if (
+    entryType === "custom" ||
+    entryType === "model_change" ||
+    entryType === "thinking_level_change" ||
+    entryType === "session_info" ||
+    entryType === "compaction" ||
+    entryType === "branch_summary"
+  ) {
+    return "meta";
+  }
+
+  return "other";
+}
+
+function isToolOnlyAssistantEntry(
+  entry:
+    | SessionEntry
+    | ({ role?: string; content?: unknown; text?: string } & Record<
+        string,
+        unknown
+      >),
+): boolean {
+  if (entry.type !== "message") return false;
+
+  const message = (
+    entry as SessionEntry & {
+      message?: {
+        role?: string;
+        content?: unknown;
+        text?: string;
+        stopReason?: string;
+        errorMessage?: string;
+      };
+    }
+  ).message;
+
+  if (!message || message.role !== "assistant") return false;
+  if (collapseWhitespace(extractMessageText(message))) return false;
+  if (message.stopReason === "aborted") return false;
+  return !message.errorMessage;
+}
+
+function buildTreePreviewText(
+  entry:
+    | SessionEntry
+    | ({ role?: string; content?: unknown; text?: string } & Record<
+        string,
+        unknown
+      >),
+): string {
+  if ((entry as { type?: string }).type === "message" && "message" in entry) {
+    const message = (
+      entry as SessionEntry & {
+        message: {
+          role?: string;
+          content?: unknown;
+          text?: string;
+          stopReason?: string;
+          errorMessage?: string;
+          toolName?: string;
+          command?: string;
+        };
+      }
+    ).message;
+    const content = collapseWhitespace(extractMessageText(message));
+
+    switch (message.role) {
+      case "user":
+        return content || "user";
+      case "assistant":
+        if (content) return content;
+        if (message.stopReason === "aborted") return "(aborted)";
+        if (message.errorMessage) {
+          return collapseWhitespace(message.errorMessage);
+        }
+        return "(no content)";
+      case "toolResult":
+        return message.toolName
+          ? `[tool: ${message.toolName}]`
+          : "[tool result]";
+      case "bashExecution":
+        return message.command
+          ? `[bash]: ${collapseWhitespace(message.command)}`
+          : "[bash]";
+      default:
+        return describeMessage(message);
+    }
+  }
+
+  if (typeof (entry as { role?: string }).role === "string") {
+    const role = (entry as { role: string }).role;
+    const content = collapseWhitespace(
+      extractMessageText(entry as { content?: unknown; text?: string }),
+    );
+    if (role === "user") return content || "user";
+    if (role === "assistant") return content || "assistant";
+    return content ? `${role}: ${content}` : `[${role}]`;
+  }
+
+  return describeSessionEntry(entry as SessionEntry);
+}
+
+function buildTreeSearchText(
+  entryLabel: string,
+  previewText: string,
+  entryType: string,
+  role: Exclude<RpcTreeEntry["role"], undefined>,
+  labelTag?: string,
+): string {
+  return [labelTag, previewText, entryLabel, entryType, role]
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length > 0,
+    )
+    .join(" ");
+}
+
+function buildTreeEntryPresentation(
+  entry:
+    | SessionEntry
+    | ({ role?: string; content?: unknown; text?: string } & Record<
+        string,
+        unknown
+      >),
+  entryLabel: string,
+  labelTag?: string,
+): TreeEntryPresentation {
+  const entryType =
+    typeof (entry as { type?: string }).type === "string"
+      ? (entry as { type: string }).type
+      : typeof (entry as { role?: string }).role === "string"
+        ? (entry as { role: string }).role
+        : "unknown";
+  const role = getTreeEntryRole(entry);
+  const previewText = buildTreePreviewText(entry);
+
+  return {
+    role,
+    labelTag,
+    previewText,
+    searchText: buildTreeSearchText(
+      entryLabel,
+      previewText,
+      entryType,
+      role,
+      labelTag,
+    ),
+    isSettingsEntry: isTreeSettingsEntry(entryType),
+    isLabeled: Boolean(labelTag),
+    isToolOnlyAssistant: isToolOnlyAssistantEntry(entry),
+  };
+}
+
 function buildVisibleTree(
   nodes: readonly SessionTreeNodeLike[],
   activeLeafId: string | null,
@@ -495,7 +686,7 @@ function buildVisibleTree(
     const containsActiveLeaf =
       node.entry.id === activeLeafId ||
       visibleChildren.some(child => child.containsActiveLeaf);
-    const hidden = HIDDEN_TREE_ENTRY_TYPES.has(node.entry.type);
+    const hidden = TREE_HARD_HIDDEN_ENTRY_TYPES.has(node.entry.type);
 
     if (hidden) {
       visibleNodes.push(...visibleChildren);
@@ -564,10 +755,17 @@ function flattenVisibleTree(
     const children = orderTreeChildren(node.children);
     const hasActiveChild = children.some(child => child.containsActiveLeaf);
 
+    const entryLabel = formatTreeEntryLabel(node);
+    const presentation = buildTreeEntryPresentation(
+      node.entry,
+      entryLabel,
+      node.label,
+    );
+
     entries.push({
       id: node.entry.id,
       parentId,
-      label: formatTreeEntryLabel(node),
+      label: entryLabel,
       type: node.entry.type,
       timestamp: node.entry.timestamp,
       depth: displayIndent,
@@ -579,6 +777,13 @@ function flattenVisibleTree(
       ),
       isActive: node.containsActiveLeaf && !hasActiveChild,
       isOnActivePath: node.containsActiveLeaf,
+      role: presentation.role,
+      labelTag: presentation.labelTag,
+      previewText: presentation.previewText,
+      searchText: presentation.searchText,
+      isSettingsEntry: presentation.isSettingsEntry,
+      isLabeled: presentation.isLabeled,
+      isToolOnlyAssistant: presentation.isToolOnlyAssistant,
     });
 
     const multipleChildren = children.length > 1;
@@ -654,43 +859,54 @@ function buildTreeEntriesFromSession(
 function buildTreeEntriesFromBranch(
   branch: readonly unknown[],
 ): RpcTreeEntry[] {
-  return branch
-    .filter(entry => {
-      const typedEntry = entry as { type?: string; id?: string };
-      if (!typedEntry.id) return false;
-      if (typedEntry.type && HIDDEN_TREE_ENTRY_TYPES.has(typedEntry.type))
-        return false;
-      return true;
-    })
-    .map((entry, index) => {
-      const typedEntry = entry as
-        | SessionEntry
-        | ({ role?: string; content?: unknown; text?: string } & Record<
-            string,
-            unknown
-          >);
-      const type =
-        typeof typedEntry.type === "string"
-          ? typedEntry.type
-          : ((typedEntry as { role?: string }).role ?? "unknown");
-      return {
-        id: String((typedEntry as { id: string }).id),
-        parentId:
-          index === 0
-            ? null
-            : String((branch[index - 1] as { id?: string }).id ?? ""),
-        label: formatFallbackTreeEntryLabel(typedEntry),
-        type,
-        timestamp:
-          typeof (typedEntry as { timestamp?: string }).timestamp === "string"
-            ? (typedEntry as { timestamp: string }).timestamp
-            : undefined,
-        depth: 0,
-        trackColumns: [],
-        isActive: index === branch.length - 1,
-        isOnActivePath: true,
-      };
-    });
+  const visibleEntries = branch.filter(entry => {
+    const typedEntry = entry as { type?: string; id?: string };
+    if (!typedEntry.id) return false;
+    if (typedEntry.type && TREE_HARD_HIDDEN_ENTRY_TYPES.has(typedEntry.type)) {
+      return false;
+    }
+    return true;
+  });
+
+  return visibleEntries.map((entry, index) => {
+    const typedEntry = entry as
+      | SessionEntry
+      | ({ role?: string; content?: unknown; text?: string } & Record<
+          string,
+          unknown
+        >);
+    const type =
+      typeof typedEntry.type === "string"
+        ? typedEntry.type
+        : ((typedEntry as { role?: string }).role ?? "unknown");
+    const entryLabel = formatFallbackTreeEntryLabel(typedEntry);
+    const presentation = buildTreeEntryPresentation(typedEntry, entryLabel);
+
+    return {
+      id: String((typedEntry as { id: string }).id),
+      parentId:
+        index === 0
+          ? null
+          : String((visibleEntries[index - 1] as { id?: string }).id ?? ""),
+      label: entryLabel,
+      type,
+      timestamp:
+        typeof (typedEntry as { timestamp?: string }).timestamp === "string"
+          ? (typedEntry as { timestamp: string }).timestamp
+          : undefined,
+      depth: 0,
+      trackColumns: [],
+      isActive: index === visibleEntries.length - 1,
+      isOnActivePath: true,
+      role: presentation.role,
+      labelTag: presentation.labelTag,
+      previewText: presentation.previewText,
+      searchText: presentation.searchText,
+      isSettingsEntry: presentation.isSettingsEntry,
+      isLabeled: presentation.isLabeled,
+      isToolOnlyAssistant: presentation.isToolOnlyAssistant,
+    };
+  });
 }
 
 function buildTreeEntriesForSessionPath(sessionPath: string): RpcTreeEntry[] {
@@ -852,6 +1068,79 @@ function flattenMessagesForTranscript(
   }
 
   return filterBootstrapTranscriptMessages(messages);
+}
+
+function trimAssistantContentToToolCall(
+  content: RpcTranscriptMessage["content"],
+  toolCallId: string,
+): {
+  content: RpcTranscriptMessage["content"];
+  found: boolean;
+} {
+  if (!Array.isArray(content)) {
+    return { content, found: false };
+  }
+
+  const trimmed: typeof content = [];
+  for (const block of content) {
+    trimmed.push(block);
+    if (
+      typeof block === "object" &&
+      block !== null &&
+      block.type === "toolCall" &&
+      block.id === toolCallId
+    ) {
+      return { content: trimmed, found: true };
+    }
+  }
+
+  return { content, found: false };
+}
+
+function buildExactSelectionTranscriptMessages(
+  branch: readonly unknown[],
+  targetEntryId: string,
+): RpcTranscriptMessage[] {
+  const messages = flattenMessagesForTranscript(branch);
+  const targetIndex = messages.findIndex(
+    message => message.id === targetEntryId,
+  );
+  if (targetIndex === -1) {
+    return messages;
+  }
+
+  const targetMessage = messages[targetIndex];
+  if (
+    targetMessage.role !== "toolResult" ||
+    typeof targetMessage.toolCallId !== "string" ||
+    !targetMessage.toolCallId
+  ) {
+    return messages;
+  }
+
+  for (let index = targetIndex - 1; index >= 0; index -= 1) {
+    const candidate = messages[index];
+    if (candidate.role !== "assistant") {
+      continue;
+    }
+
+    const trimmed = trimAssistantContentToToolCall(
+      candidate.content,
+      targetMessage.toolCallId,
+    );
+    if (!trimmed.found) {
+      return messages;
+    }
+
+    const nextMessages = [...messages];
+    nextMessages[index] = {
+      ...candidate,
+      content: trimmed.content,
+    };
+    return nextMessages;
+  }
+
+  return messages;
 }
 
 function filterBootstrapTranscriptMessages(
@@ -2105,6 +2394,37 @@ export class WsRpcAdapter {
     };
   }
 
+  private buildSelectTreeEntryResponse(
+    correlationId: string,
+    sessionManager: SessionManager,
+    sessionPath: string,
+    targetEntryId: string,
+  ): RpcResponse {
+    const transcript = buildTranscriptPage(
+      buildExactSelectionTranscriptMessages(
+        sessionManager.getBranch(),
+        targetEntryId,
+      ),
+      sessionPath,
+    );
+    this.resetTranscriptSync(transcript.messages, sessionPath);
+
+    return {
+      id: correlationId,
+      type: "response",
+      command: "select_tree_entry",
+      success: true,
+      data: {
+        transcript,
+        treeEntries: buildTreeEntriesFromSession(sessionManager),
+        sessionId: sessionManager.getSessionId(),
+        sessionName: sessionDisplayName(sessionManager, sessionPath),
+        sessionPath,
+        cancelled: false,
+      },
+    };
+  }
+
   /**
    * Handle incoming WebSocket message
    */
@@ -2163,7 +2483,8 @@ export class WsRpcAdapter {
         response.success &&
         (command.type === "get_state" ||
           command.type === "switch_session" ||
-          command.type === "new_session")
+          command.type === "new_session" ||
+          command.type === "select_tree_entry")
       ) {
         this.queueSessionStatsEvent(this.currentTranscriptSessionPath());
       }
@@ -2873,6 +3194,68 @@ export class WsRpcAdapter {
           success: true,
           data: { commands: rpcCommands },
         };
+      }
+
+      // =================================================================
+      // Select Tree Entry (exact sidebar selection)
+      // =================================================================
+
+      case "select_tree_entry": {
+        let session: AgentSession;
+
+        if (this.selectedSessionPath) {
+          session = await this.ensureSelectedSession();
+        } else {
+          const liveSessionFile = ctx.sessionManager.getSessionFile();
+          if (!liveSessionFile || !fs.existsSync(liveSessionFile)) {
+            return {
+              id: correlationId,
+              type: "response" as const,
+              command: "select_tree_entry" as const,
+              success: false as const,
+              error: "No session file available",
+            };
+          }
+
+          this.disposeSelectedSession();
+          this.selectedSessionPath = liveSessionFile;
+          session = await this.ensureSelectedSession({
+            skipInitialSnapshot: true,
+          });
+        }
+
+        const targetEntry = session.sessionManager.getEntry(command.entryId);
+        if (!targetEntry) {
+          return {
+            id: correlationId,
+            type: "response" as const,
+            command: "select_tree_entry" as const,
+            success: false as const,
+            error: "Tree entry not found",
+          };
+        }
+
+        session.sessionManager.branch(command.entryId);
+        const sessionPath =
+          session.sessionFile ??
+          session.sessionManager.getSessionFile() ??
+          this.selectedSessionPath;
+        if (!sessionPath) {
+          return {
+            id: correlationId,
+            type: "response" as const,
+            command: "select_tree_entry" as const,
+            success: false as const,
+            error: "No session file available",
+          };
+        }
+
+        return this.buildSelectTreeEntryResponse(
+          correlationId,
+          session.sessionManager,
+          sessionPath,
+          command.entryId,
+        );
       }
 
       // =================================================================

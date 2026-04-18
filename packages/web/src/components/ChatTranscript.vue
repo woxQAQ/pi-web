@@ -19,6 +19,7 @@ import {
   isToolResultMessage,
   messageContent,
 } from "../utils/transcript";
+import ImageLightbox from "./ImageLightbox.vue";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
 import ToolCard from "./ToolCard.vue";
 
@@ -95,6 +96,8 @@ const busyIndicatorLabel = computed(() =>
     ? "Compacting context"
     : "Assistant is responding",
 );
+const lightboxImages = ref<ImageContentBlock[]>([]);
+const lightboxIndex = ref(0);
 
 function messageStableKey(msg: TranscriptEntry, index: number): string {
   return msg.transcriptKey ?? msg.id ?? `message:${index}`;
@@ -156,6 +159,32 @@ function toolResultImages(msg: TranscriptEntry): ImageContentBlock[] {
   return contentBlocks(msg).filter(
     (block): block is ImageContentBlock => block.kind === "image",
   );
+}
+
+function openImageLightbox(
+  images: readonly ImageContentBlock[],
+  index: number = 0,
+) {
+  if (images.length === 0) return;
+  lightboxImages.value = [...images];
+  lightboxIndex.value = Math.min(Math.max(index, 0), images.length - 1);
+}
+
+function closeImageLightbox() {
+  lightboxImages.value = [];
+  lightboxIndex.value = 0;
+}
+
+function showPreviousLightboxImage() {
+  if (lightboxImages.value.length <= 1) return;
+  lightboxIndex.value =
+    (lightboxIndex.value + lightboxImages.value.length - 1) %
+    lightboxImages.value.length;
+}
+
+function showNextLightboxImage() {
+  if (lightboxImages.value.length <= 1) return;
+  lightboxIndex.value = (lightboxIndex.value + 1) % lightboxImages.value.length;
 }
 
 function messageIdLabel(msg: TranscriptEntry): string {
@@ -423,12 +452,19 @@ defineExpose({ preserveScroll });
                 :key="`${image.src}-${imageIndex}`"
                 class="message-image-block"
               >
-                <img
-                  class="message-image"
-                  :src="image.src"
-                  :alt="image.alt"
-                  loading="lazy"
-                />
+                <button
+                  type="button"
+                  class="message-image-button"
+                  :aria-label="`Open image ${imageIndex + 1}`"
+                  @click="openImageLightbox(toolResultImages(msg), imageIndex)"
+                >
+                  <img
+                    class="message-image"
+                    :src="image.src"
+                    :alt="image.alt"
+                    loading="lazy"
+                  />
+                </button>
               </figure>
             </div>
             <pre
@@ -522,12 +558,19 @@ defineExpose({ preserveScroll });
                 v-else-if="block.kind === 'image'"
                 class="message-image-block"
               >
-                <img
-                  class="message-image"
-                  :src="block.src"
-                  :alt="block.alt"
-                  loading="lazy"
-                />
+                <button
+                  type="button"
+                  class="message-image-button"
+                  aria-label="Open image"
+                  @click="openImageLightbox([block])"
+                >
+                  <img
+                    class="message-image"
+                    :src="block.src"
+                    :alt="block.alt"
+                    loading="lazy"
+                  />
+                </button>
               </figure>
 
               <MarkdownRenderer
@@ -557,6 +600,15 @@ defineExpose({ preserveScroll });
       <span class="dot"></span>
       <span class="dot"></span>
     </div>
+
+    <ImageLightbox
+      :open="lightboxImages.length > 0"
+      :images="lightboxImages"
+      :index="lightboxIndex"
+      @close="closeImageLightbox"
+      @previous="showPreviousLightboxImage"
+      @next="showNextLightboxImage"
+    />
   </div>
 </template>
 
@@ -861,6 +913,14 @@ defineExpose({ preserveScroll });
   margin: 0;
 }
 
+.message-image-button {
+  display: block;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: zoom-in;
+}
+
 .message-image {
   display: block;
   max-width: min(100%, 420px);
@@ -870,6 +930,17 @@ defineExpose({ preserveScroll });
   background: color-mix(in srgb, var(--panel) 88%, transparent);
   box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
   object-fit: contain;
+  transition:
+    transform 0.16s ease,
+    box-shadow 0.16s ease,
+    border-color 0.16s ease;
+}
+
+.message-image-button:hover .message-image,
+.message-image-button:focus-visible .message-image {
+  transform: translateY(-1px) scale(1.01);
+  border-color: var(--border-strong);
+  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.16);
 }
 
 .thinking-toggle {

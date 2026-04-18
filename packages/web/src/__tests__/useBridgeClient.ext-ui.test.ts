@@ -178,7 +178,73 @@ describe("extension_ui_request handling", () => {
       },
     ]);
     expect(client.liveSessionPath.value).toBe("/tmp/session-2.jsonl");
-    expect(client.isHistoricalView.value).toBe(false);
+    expect(ws.send).toHaveBeenCalledTimes(1);
+    expect(ws.send).toHaveBeenCalledWith(
+      expect.stringContaining('"type":"get_state"'),
+    );
+  });
+
+  it("updates transcript and tree entries from select_tree_entry responses", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+    ws.send.mockClear();
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "select_tree_entry",
+        success: true,
+        data: {
+          transcript: {
+            sessionPath: "/tmp/session-2.jsonl",
+            messages: [
+              {
+                id: "node-1",
+                transcriptKey: "node-1",
+                role: "assistant",
+                content: [{ type: "text", text: "Selected node" }],
+              },
+            ],
+            hasOlder: false,
+            hasNewer: false,
+          },
+          treeEntries: [
+            {
+              id: "node-1",
+              label: "assistant: Selected node",
+              type: "message",
+              depth: 0,
+              isActive: true,
+            },
+          ],
+          sessionId: "session-2",
+          sessionName: "Session 2",
+          sessionPath: "/tmp/session-2.jsonl",
+          cancelled: false,
+        },
+      },
+    });
+
+    expect(client.transcript.value).toEqual([
+      {
+        id: "node-1",
+        transcriptKey: "node-1",
+        role: "assistant",
+        content: [{ type: "text", text: "Selected node" }],
+      },
+    ]);
+    expect(client.treeEntries.value).toEqual([
+      {
+        id: "node-1",
+        label: "assistant: Selected node",
+        type: "message",
+        depth: 0,
+        isActive: true,
+      },
+    ]);
+    expect(client.liveSessionPath.value).toBe("/tmp/session-2.jsonl");
     expect(ws.send).toHaveBeenCalledTimes(1);
     expect(ws.send).toHaveBeenCalledWith(
       expect.stringContaining('"type":"get_state"'),

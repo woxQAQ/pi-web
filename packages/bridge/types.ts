@@ -234,6 +234,7 @@ export interface RpcCommandMap {
   /** Session */
   export_html: { outputPath?: string };
   switch_session: { sessionPath: string; limit?: number };
+  select_tree_entry: { entryId: string };
   navigate_tree: {
     entryId: string;
     summarize?: boolean;
@@ -317,6 +318,13 @@ export interface RpcTreeEntry {
   trackColumns?: RpcTreeTrackColumn[];
   isActive?: boolean;
   isOnActivePath?: boolean;
+  role?: "user" | "assistant" | "tool" | "meta" | "other";
+  labelTag?: string;
+  previewText?: string;
+  searchText?: string;
+  isSettingsEntry?: boolean;
+  isLabeled?: boolean;
+  isToolOnlyAssistant?: boolean;
 }
 
 export interface RpcSessionStats {
@@ -517,6 +525,14 @@ export interface RpcResponseMap {
   abort_bash: void;
   export_html: { path: string };
   switch_session: {
+    transcript: RpcTranscriptPage;
+    treeEntries: RpcTreeEntry[];
+    sessionId: string;
+    sessionName: string;
+    sessionPath: string;
+    cancelled: boolean;
+  };
+  select_tree_entry: {
     transcript: RpcTranscriptPage;
     treeEntries: RpcTreeEntry[];
     sessionId: string;

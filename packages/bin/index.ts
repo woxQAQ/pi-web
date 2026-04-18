@@ -51,10 +51,20 @@ async function webBridgeHandler(
   let finishWebMode: (() => void) | undefined;
 
   try {
-    bridgeController = await startBridge(config, adapterContext, () => {
-      terminalView?.requestExit();
-      finishWebMode?.();
-    });
+    bridgeController = await startBridge(
+      config,
+      adapterContext,
+      () => {
+        terminalView?.requestExit();
+        finishWebMode?.();
+      },
+      {
+        // Ctrl+C is already handled by the Pi custom view + stdin bridge-exit
+        // detection. Avoid registering another process-level SIGINT handler here,
+        // which can leave Pi in a bad state after exiting /web.
+        captureSigint: false,
+      },
+    );
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
     await ctx.ui.custom<void>((_tui, _theme, _kb, done) => {
