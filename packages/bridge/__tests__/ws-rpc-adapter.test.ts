@@ -2861,4 +2861,289 @@ describe("WsRpcAdapter", () => {
       expect(lastCall.payload.error).toContain("not found");
     });
   });
+
+  describe("responsibility boundaries", () => {
+    it("releases the active detached session before switching to another stored session", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-runtime-"));
+      const firstManager = SessionManager.create(tmpDir, tmpDir);
+      firstManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "First session" }],
+        timestamp: Date.now(),
+      });
+      const secondManager = SessionManager.create(tmpDir, tmpDir);
+      secondManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Second session" }],
+        timestamp: Date.now(),
+      });
+
+      const firstSessionFile = firstManager.getSessionFile();
+      const secondSessionFile = secondManager.getSessionFile();
+      if (!firstSessionFile || !secondSessionFile) {
+        throw new Error("expected persisted session files");
+      }
+
+      const persistSession = (sessionManager: SessionManager, sessionFile: string) => {
+        const header = {
+          type: "session",
+          version: 3,
+          id: sessionManager.getSessionId(),
+          timestamp: new Date().toISOString(),
+          cwd: tmpDir,
+        };
+        fs.writeFileSync(
+          sessionFile,
+          [
+            JSON.stringify(header),
+            ...sessionManager.getEntries().map(entry => JSON.stringify(entry)),
+          ].join("\n"),
+        );
+      };
+      persistSession(firstManager, firstSessionFile);
+      persistSession(secondManager, secondSessionFile);
+
+      const firstPromptSpy = vi.fn().mockResolvedValue(undefined);
+      const firstDisposeSpy = vi.fn();
+      const firstUnsubscribeSpy = vi.fn();
+      const firstSubscribeSpy = vi.fn().mockReturnValue(firstUnsubscribeSpy);
+      createAgentSessionMock.mockResolvedValueOnce({
+        session: {
+          sessionFile: firstSessionFile,
+          sessionId: firstManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: firstSubscribeSpy,
+          prompt: firstPromptSpy,
+          dispose: firstDisposeSpy,
+          sessionManager: firstManager,
+        },
+      });
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "switch-first",
+              type: "switch_session",
+              sessionPath: firstSessionFile,
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 10));
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "prompt-first",
+              type: "prompt",
+              message: "Activate first detached session",
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 20));
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "switch-second",
+              type: "switch_session",
+              sessionPath: secondSessionFile,
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(firstSubscribeSpy).toHaveBeenCalledTimes(1);
+      expect(firstUnsubscribeSpy).toHaveBeenCalledTimes(1);
+      expect(firstDisposeSpy).toHaveBeenCalledTimes(1);
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("resets transcript key allocation after switching transcript baselines", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-transcript-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Selected transcript" }],
+        timestamp: Date.now(),
+      });
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      fs.writeFileSync(
+        sessionFile,
+        [
+          JSON.stringify({
+            type: "session",
+            version: 3,
+            id: sessionManager.getSessionId(),
+            timestamp: new Date().toISOString(),
+            cwd: tmpDir,
+          }),
+          ...sessionManager.getEntries().map(entry => JSON.stringify(entry)),
+        ].join("\n"),
+      );
+
+      const subscribeSpy = vi.fn().mockReturnValue(() => {});
+      createAgentSessionMock.mockResolvedValueOnce({
+        session: {
+          sessionFile,
+          sessionId: sessionManager.getSessionId(),
+          isStreaming: false,
+          bindExtensions: vi.fn().mockResolvedValue(undefined),
+          subscribe: subscribeSpy,
+          prompt: vi.fn().mockResolvedValue(undefined),
+          sessionManager,
+        },
+      });
+
+      const messageStartHandler = (
+        context.pi.on as ReturnType<typeof vi.fn>
+      ).mock.calls.find(call => call[0] === "message_start")?.[1];
+      messageStartHandler?.({
+        message: { role: "assistant", content: "Live before switch" },
+      });
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "switch-selected",
+              type: "switch_session",
+              sessionPath: sessionFile,
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 10));
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "prompt-selected",
+              type: "prompt",
+              message: "Activate selected transcript session",
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 20));
+
+      const selectedSessionEventHandler = subscribeSpy.mock.calls[0]?.[0] as
+        | ((event: object) => void)
+        | undefined;
+      selectedSessionEventHandler?.({
+        type: "message_start",
+        message: { role: "assistant", content: "Selected after switch" },
+      });
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const transcriptUpserts = sendCalls.filter(
+        call => call.type === "event" && call.payload.type === "transcript_upsert",
+      );
+      const liveUpsert = transcriptUpserts.find(
+        call => call.payload.message.content === "Live before switch",
+      );
+      const selectedUpsert = transcriptUpserts.find(
+        call => call.payload.message.content === "Selected after switch",
+      );
+
+      expect(liveUpsert?.payload.message.transcriptKey).toBe("live:1");
+      expect(selectedUpsert?.payload.message.transcriptKey).toBe("live:1");
+      expect(selectedUpsert?.payload.sessionPath).toBe(sessionFile);
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("coalesces queued stats pushes to the latest pending session path", async () => {
+      await new Promise(r => setTimeout(r, 10));
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      let resolveFirstStats: ((value: any) => void) | undefined;
+      const firstStats = new Promise(resolve => {
+        resolveFirstStats = resolve;
+      });
+
+      const buildStatsSpy = vi
+        .spyOn(adapter as never, "buildSessionStats" as never)
+        .mockReturnValueOnce(firstStats as never)
+        .mockResolvedValueOnce({
+          tokens: 42,
+          contextWindow: 100,
+          percent: 42,
+          messageCount: 7,
+          cost: 0,
+          inputTokens: 1,
+          outputTokens: 2,
+          cacheReadTokens: 3,
+          cacheWriteTokens: 4,
+        } as never);
+
+      (adapter as any).sessionStatsPusher.queue("session-a");
+      await Promise.resolve();
+      (adapter as any).sessionStatsPusher.queue("session-b");
+      (adapter as any).sessionStatsPusher.queue("session-c");
+
+      resolveFirstStats?.({
+        tokens: 10,
+        contextWindow: 100,
+        percent: 10,
+        messageCount: 1,
+        cost: 0,
+        inputTokens: 0,
+        outputTokens: 0,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      });
+      await new Promise(r => setTimeout(r, 10));
+
+      expect(buildStatsSpy).toHaveBeenNthCalledWith(1, "session-a");
+      expect(buildStatsSpy).toHaveBeenNthCalledWith(2, "session-c");
+
+      const statsEvents = (
+        ws.send as ReturnType<typeof vi.fn>
+      ).mock.calls
+        .map(call => JSON.parse(call[0] as string))
+        .filter(
+          call => call.type === "event" && call.payload.type === "session_stats",
+        );
+      expect(statsEvents).toHaveLength(2);
+      expect(statsEvents.map(call => call.payload.sessionPath)).toEqual([
+        "session-a",
+        "session-c",
+      ]);
+    });
+  });
 });
