@@ -386,6 +386,26 @@ function openSessionManager(sessionPath: string): SessionManager {
   return SessionManager.open(sessionPath, path.dirname(sessionPath));
 }
 
+function sessionTimestampSortValue(timestamp?: string): number {
+  const parsed =
+    typeof timestamp === "string" && timestamp.trim().length > 0
+      ? Date.parse(timestamp)
+      : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function compareSessionsByRecency(
+  left: { timestamp?: string; path: string },
+  right: { timestamp?: string; path: string },
+): number {
+  const timestampDelta =
+    sessionTimestampSortValue(right.timestamp) -
+    sessionTimestampSortValue(left.timestamp);
+  if (timestampDelta !== 0) return timestampDelta;
+
+  return right.path.localeCompare(left.path);
+}
+
 function normalizeWorkspacePath(filePath: string): string {
   return filePath.split(path.sep).join("/");
 }
@@ -1663,6 +1683,7 @@ function collapseWhitespace(value: string): string {
 
 class SessionRuntime {
   private binding: SessionBinding = { kind: "live" };
+  private readonly sessionManagersByPath = new Map<string, SessionManager>();
 
   constructor(
     private readonly context: WsRpcAdapterContext,
@@ -1685,6 +1706,14 @@ class SessionRuntime {
     return this.binding.kind === "detached_pending"
       ? this.binding.sessionManager
       : null;
+  }
+
+  getCachedSessionManager(sessionPath: string): SessionManager | null {
+    return this.sessionManagersByPath.get(sessionPath) ?? null;
+  }
+
+  getCachedSessionManagers(): SessionManager[] {
+    return [...this.sessionManagersByPath.values()];
   }
 
   currentDetachedSessionPath(): string | null {
@@ -1816,6 +1845,7 @@ class SessionRuntime {
       throw new Error("Selected session file not found");
     }
 
+    this.cacheSessionManager(sessionManager);
     this.binding = {
       kind: "detached_pending",
       path: sessionFile,
@@ -1857,7 +1887,9 @@ class SessionRuntime {
 
     this.disposeDetachedSelection();
 
-    const sessionManager = openSessionManager(sessionPath);
+    const sessionManager =
+      this.getCachedSessionManager(sessionPath) ?? openSessionManager(sessionPath);
+    this.cacheSessionManager(sessionManager);
     this.binding = {
       kind: "detached_pending",
       path: sessionPath,
@@ -1907,6 +1939,7 @@ class SessionRuntime {
       this.onDetachedSessionEvent(event);
     });
 
+    this.cacheSessionManager(created.session.sessionManager);
     this.binding = {
       kind: "detached_active",
       path: sessionPath,
@@ -1926,10 +1959,12 @@ class SessionRuntime {
         throw new Error("No session file available");
       }
       this.disposeDetachedSelection();
+      const sessionManager = openSessionManager(liveSessionPath);
+      this.cacheSessionManager(sessionManager);
       this.binding = {
         kind: "detached_pending",
         path: liveSessionPath,
-        sessionManager: openSessionManager(liveSessionPath),
+        sessionManager,
       };
     }
 
@@ -1959,10 +1994,20 @@ class SessionRuntime {
     };
   }
 
+  private cacheSessionManager(sessionManager: SessionManager): void {
+    const sessionFile = sessionManager.getSessionFile();
+    if (!sessionFile) return;
+    this.sessionManagersByPath.set(sessionFile, sessionManager);
+  }
+
   private disposeDetachedSelection(): void {
     if (this.binding.kind === "detached_active") {
+      this.cacheSessionManager(this.binding.session.sessionManager);
       this.binding.unsubscribe();
       this.binding.session.dispose();
+    }
+    if (this.binding.kind === "detached_pending") {
+      this.cacheSessionManager(this.binding.sessionManager);
     }
     this.binding = { kind: "live" };
   }
@@ -2733,13 +2778,14 @@ export class WsRpcAdapter {
     const selectedSessionPath =
       this.sessionRuntime.currentDetachedSessionPath();
     const detachedSession = this.sessionRuntime.getDetachedSession();
-    const pendingSessionManager =
-      this.sessionRuntime.getPendingSessionManager();
     const liveSessionPath = ctx.sessionManager.getSessionFile();
     const resolvedTargetPath =
       targetPath === undefined
         ? (selectedSessionPath ?? liveSessionPath ?? null)
         : targetPath;
+    const cachedSessionManager = resolvedTargetPath
+      ? this.sessionRuntime.getCachedSessionManager(resolvedTargetPath)
+      : null;
 
     if (
       detachedSession &&
@@ -2752,12 +2798,11 @@ export class WsRpcAdapter {
 
     if (resolvedTargetPath && resolvedTargetPath !== liveSessionPath) {
       try {
-        const storedSessionManager =
-          pendingSessionManager?.getSessionFile() === resolvedTargetPath
-            ? pendingSessionManager
-            : fs.existsSync(resolvedTargetPath)
-              ? openSessionManager(resolvedTargetPath)
-              : null;
+        const storedSessionManager = cachedSessionManager
+          ? cachedSessionManager
+          : fs.existsSync(resolvedTargetPath)
+            ? openSessionManager(resolvedTargetPath)
+            : null;
 
         if (storedSessionManager) {
           const branch = storedSessionManager.getBranch();
@@ -3390,7 +3435,10 @@ export class WsRpcAdapter {
       case "switch_session": {
         try {
           const sessionPath = command.sessionPath as string;
-          if (!sessionPath || !fs.existsSync(sessionPath)) {
+          const cachedSessionManager = sessionPath
+            ? this.sessionRuntime.getCachedSessionManager(sessionPath)
+            : null;
+          if (!sessionPath || (!cachedSessionManager && !fs.existsSync(sessionPath))) {
             return {
               id: correlationId,
               type: "response",
@@ -3719,22 +3767,14 @@ export class WsRpcAdapter {
             });
           };
 
-          // Include a newly created detached session before it is visible on disk.
-          const pendingSessionManager =
-            this.sessionRuntime.getPendingSessionManager();
-          if (pendingSessionManager) {
-            appendSession(
-              pendingSessionManager,
-              pendingSessionManager.getSessionFile(),
-            );
+          for (const sessionManager of this.sessionRuntime.getCachedSessionManagers()) {
+            appendSession(sessionManager, sessionManager.getSessionFile());
           }
 
           if (sessionDir && fs.existsSync(sessionDir)) {
             const files = fs
               .readdirSync(sessionDir)
-              .filter((f: string) => f.endsWith(".jsonl"))
-              .sort()
-              .reverse(); // newest first
+              .filter((f: string) => f.endsWith(".jsonl"));
 
             for (const file of files) {
               const filePath = path.join(sessionDir, file);
@@ -3745,6 +3785,9 @@ export class WsRpcAdapter {
               }
             }
           }
+
+          sessions.sort(compareSessionsByRecency);
+
           return {
             id: correlationId,
             type: "response" as const,

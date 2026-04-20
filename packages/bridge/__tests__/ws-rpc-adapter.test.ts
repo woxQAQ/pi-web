@@ -1595,7 +1595,7 @@ describe("WsRpcAdapter", () => {
   });
 
   describe("discovery commands", () => {
-    it("should handle list_sessions command", async () => {
+    it("should list sessions with the newest one first", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-sessions-"));
       const currentSessionFile = path.join(tmpDir, "current-session.jsonl");
       const olderSessionFile = path.join(tmpDir, "older-session.jsonl");
@@ -1666,16 +1666,16 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.success).toBe(true);
       expect(response.payload.data.sessions).toEqual([
         {
-          id: "older-id",
-          name: "Older first prompt",
-          path: olderSessionFile,
-          timestamp: "2025-01-01T00:00:00Z",
-        },
-        {
           id: "current-id",
           name: "Current first prompt",
           path: currentSessionFile,
           timestamp: "2025-01-02T00:00:00Z",
+        },
+        {
+          id: "older-id",
+          name: "Older first prompt",
+          path: olderSessionFile,
+          timestamp: "2025-01-01T00:00:00Z",
         },
       ]);
 
@@ -1750,6 +1750,140 @@ describe("WsRpcAdapter", () => {
         id: "live-id",
         path: liveSessionFile,
       });
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("should switch back to a pending new session after switching away", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-pending-"));
+      const liveSessionFile = path.join(tmpDir, "live-session.jsonl");
+      fs.writeFileSync(
+        liveSessionFile,
+        [
+          JSON.stringify({
+            type: "session",
+            id: "live-id",
+            timestamp: "2025-01-02T00:00:00Z",
+            cwd: tmpDir,
+          }),
+          JSON.stringify({
+            type: "message",
+            id: "live-msg-1",
+            parentId: null,
+            timestamp: new Date().toISOString(),
+            message: {
+              role: "user",
+              content: "Current session",
+              timestamp: Date.now(),
+            },
+          }),
+        ].join("\n") + "\n",
+      );
+      (
+        context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
+      ).mockReturnValue(liveSessionFile);
+
+      const newSessionCommand: RpcCommand = {
+        id: "cmd-new",
+        type: "new_session",
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({ type: "command", payload: newSessionCommand }),
+        ),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const newSessionResponse = [...sendCalls]
+        .reverse()
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload.command === "new_session" &&
+            call.payload.success,
+        );
+      const pendingSessionPath = newSessionResponse?.payload.data.sessionPath;
+
+      expect(typeof pendingSessionPath).toBe("string");
+      expect(fs.existsSync(pendingSessionPath)).toBe(false);
+
+      const switchToLiveCommand: RpcCommand = {
+        id: "cmd-switch-live",
+        type: "switch_session",
+        sessionPath: liveSessionFile,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({ type: "command", payload: switchToLiveCommand }),
+        ),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const listCommand: RpcCommand = { id: "cmd-list", type: "list_sessions" };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: listCommand })),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const switchBackCommand: RpcCommand = {
+        id: "cmd-switch-back",
+        type: "switch_session",
+        sessionPath: pendingSessionPath,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({ type: "command", payload: switchBackCommand }),
+        ),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const responses = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const listResponse = [...responses]
+        .reverse()
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload.command === "list_sessions" &&
+            call.payload.success,
+        );
+      const switchBackResponse = [...responses]
+        .reverse()
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload.command === "switch_session" &&
+            call.payload.id === "cmd-switch-back",
+        );
+
+      expect(listResponse?.payload.data.sessions).toEqual([
+        expect.objectContaining({ path: pendingSessionPath }),
+        expect.objectContaining({ path: liveSessionFile }),
+      ]);
+      expect(switchBackResponse?.payload.success).toBe(true);
+      expect(switchBackResponse?.payload.data.sessionPath).toBe(
+        pendingSessionPath,
+      );
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
