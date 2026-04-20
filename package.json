@@ -14,8 +14,8 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "prepare": "npm run build:web",
-    "test": "vitest run --reporter=verbose",
-    "test:watch": "vitest --reporter=verbose"
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "ws": "^8.18.0"
