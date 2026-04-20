@@ -322,13 +322,23 @@ onBeforeUnmount(() => {
     </button>
 
     <div v-if="isOpen" class="git-menu">
-      <div class="git-menu-header">
-        <div class="git-menu-copy">
-          <span class="git-menu-title">Switch or create branch</span>
-          <span v-if="repoState" class="git-menu-meta">{{
-            repoState.repoRoot
-          }}</span>
-        </div>
+      <!-- <div v-if="repoState?.detached" class="git-note">
+        HEAD is detached. Switching to a branch will reattach it.
+      </div>
+      <div v-else-if="repoState?.isDirty" class="git-note git-note-warning">
+        Working tree has local changes. Git may refuse some switches.
+      </div> -->
+      <div class="git-search-row">
+        <label class="git-search">
+          <input
+            ref="searchInputRef"
+            v-model="searchText"
+            class="git-search-input"
+            type="text"
+            placeholder="Find or create branch"
+            @keydown="handleSearchKeydown"
+          />
+        </label>
         <button
           class="git-refresh"
           :type="'button'"
@@ -343,23 +353,6 @@ onBeforeUnmount(() => {
           />
         </button>
       </div>
-
-      <div v-if="repoState?.detached" class="git-note">
-        HEAD is detached. Switching to a branch will reattach it.
-      </div>
-      <div v-else-if="repoState?.isDirty" class="git-note git-note-warning">
-        Working tree has local changes. Git may refuse some switches.
-      </div>
-      <label class="git-search">
-        <input
-          ref="searchInputRef"
-          v-model="searchText"
-          class="git-search-input"
-          type="text"
-          placeholder="Find or create branch"
-          @keydown="handleSearchKeydown"
-        />
-      </label>
 
       <button
         v-if="repoState && canCreateBranch"
@@ -497,10 +490,10 @@ onBeforeUnmount(() => {
   position: absolute;
   left: 0;
   bottom: calc(100% + 10px);
-  width: min(320px, calc(100vw - 24px));
+  width: min(332px, calc(100vw - 48px));
   padding: 8px;
   border: 1px solid var(--border-strong);
-  border-radius: 16px;
+  border-radius: 14px;
   background: linear-gradient(
     180deg,
     color-mix(in srgb, var(--panel) 97%, transparent),
@@ -508,50 +501,28 @@ onBeforeUnmount(() => {
   );
   box-shadow: var(--shadow);
   backdrop-filter: blur(18px);
-  z-index: 20;
+  z-index: 18;
 }
 
-.git-menu-header {
+.git-search-row {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 4px 4px 8px;
-}
-
-.git-menu-copy {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.git-menu-title {
-  font-family: var(--pi-font-sans);
-  font-size: 0.74rem;
-  color: var(--text);
-}
-
-.git-menu-meta {
-  font-family: var(--pi-font-mono);
-  font-size: 0.64rem;
-  color: var(--text-subtle);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 6px;
 }
 
 .git-refresh {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 34px;
+  height: 34px;
   border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 82%, transparent);
-  background: transparent;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
   color: var(--text-subtle);
   cursor: pointer;
+  flex-shrink: 0;
 }
 
 .git-refresh:hover:not(:disabled),
@@ -576,25 +547,34 @@ onBeforeUnmount(() => {
 }
 
 .git-search {
-  display: block;
-  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  height: 34px;
+  padding: 0 9px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+}
+
+.git-search:focus-within {
+  border-color: var(--border-strong);
+  background: var(--panel);
 }
 
 .git-search-input {
   width: 100%;
-  height: 32px;
-  padding: 0 11px;
-  border-radius: 10px;
-  border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-  background: color-mix(in srgb, var(--panel) 82%, transparent);
+  border: none;
+  background: transparent;
   color: var(--text);
   font-family: var(--pi-font-mono);
-  font-size: 0.68rem;
+  font-size: 0.78rem;
+  outline: none;
 }
 
-.git-search-input:focus {
-  outline: none;
-  border-color: var(--border-strong);
+.git-search-input::placeholder {
+  color: var(--text-subtle);
 }
 
 .git-create,
@@ -656,10 +636,11 @@ onBeforeUnmount(() => {
 
 .git-list {
   margin: 0;
-  padding: 0;
+  padding: 0 6px 0 0;
   list-style: none;
   max-height: 280px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 
 .git-list:focus {
@@ -667,7 +648,7 @@ onBeforeUnmount(() => {
 }
 
 .git-list-item + .git-list-item {
-  margin-top: 4px;
+  margin-top: 3px;
 }
 
 .git-option {
@@ -676,9 +657,9 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   width: 100%;
-  padding: 8px 10px;
+  padding: 5px 10px;
   border: 1px solid transparent;
-  border-radius: 11px;
+  border-radius: 10px;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -714,18 +695,24 @@ onBeforeUnmount(() => {
 
 .git-option-name {
   font-family: var(--pi-font-mono);
-  font-size: 0.7rem;
+  font-size: 0.8rem;
   color: var(--text);
 }
 
 .git-option-meta {
   font-family: var(--pi-font-sans);
-  font-size: 0.63rem;
+  font-size: 0.62rem;
   color: var(--text-subtle);
 }
 
 .git-option-check {
   color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .git-menu {
+    width: min(296px, calc(100vw - 24px));
+  }
 }
 
 .spin {
