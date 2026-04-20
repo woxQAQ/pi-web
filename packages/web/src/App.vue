@@ -15,11 +15,7 @@ import AppMainContent from "./layout/AppMainContent.vue";
 import AppNotifications from "./layout/AppNotifications.vue";
 import AppRightSidebar from "./layout/AppRightSidebar.vue";
 import AppSidebar from "./layout/AppSidebar.vue";
-import type {
-  RpcImageContent,
-  RpcPluginStateValue,
-  RpcThinkingLevel,
-} from "./shared-types";
+import type { RpcImageContent, RpcThinkingLevel } from "./shared-types";
 import { readInitialDebugMode } from "./utils/debugMode";
 import type { RpcModelInfo } from "./utils/models";
 import { parseCompactSlashCommand } from "./utils/slashCommands";
@@ -148,46 +144,10 @@ const debugModeLabel = computed(() =>
   debugMode.value ? "Disable debug mode" : "Enable debug mode",
 );
 
-let preferencesLoaded = false;
-watch(connectionStatus, async status => {
-  if (status !== "connected" || preferencesLoaded) return;
-  preferencesLoaded = true;
-  try {
-    const themeRes = await sendCommand({
-      type: "get_plugin_state",
-      key: "theme",
-    });
-    const savedTheme = (themeRes.data as { value?: RpcPluginStateValue }).value;
-    if (themeRes.success && (savedTheme === "dark" || savedTheme === "light")) {
-      theme.value = savedTheme;
-    }
-
-    if (debugModeAvailable) {
-      const debugModeRes = await sendCommand({
-        type: "get_plugin_state",
-        key: "debugMode",
-      });
-      const savedDebugMode = (
-        debugModeRes.data as {
-          value?: RpcPluginStateValue;
-        }
-      ).value;
-      if (debugModeRes.success && typeof savedDebugMode === "boolean") {
-        debugMode.value = savedDebugMode;
-      }
-    }
-  } catch {
-    // Server unavailable, keep cached values.
-  }
-});
-
 watch(theme, value => {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(THEME_CACHE_KEY, value);
   }
-  sendCommand({ type: "set_plugin_state", key: "theme", value }).catch(
-    () => {},
-  );
 });
 
 watch(debugMode, value => {
@@ -195,9 +155,6 @@ watch(debugMode, value => {
   if (typeof window !== "undefined") {
     window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
   }
-  sendCommand({ type: "set_plugin_state", key: "debugMode", value }).catch(
-    () => {},
-  );
 });
 
 watch(connectionStatus, status => {

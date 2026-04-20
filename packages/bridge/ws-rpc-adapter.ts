@@ -16,7 +16,6 @@ import {
 } from "@mariozechner/pi-coding-agent";
 import type { WebSocket } from "ws";
 import type { BridgeEventBus } from "./bridge-event-bus.js";
-import { getPluginState, setPluginState } from "./plugin-state.js";
 import type {
   BridgeConfig,
   BridgeEvent,
@@ -3856,32 +3855,6 @@ export class WsRpcAdapter {
           command: "list_workspace_entries" as const,
           success: true as const,
           data: { entries: this.workspaceEntriesCache },
-        };
-      }
-
-      /* ====================================================================
-       * Plugin settings persistence
-       * Shared state: plugin-state store only, independent of sessions.
-       * ================================================================== */
-
-      case "get_plugin_state": {
-        const value = getPluginState(command.key);
-        return {
-          id: correlationId,
-          type: "response" as const,
-          command: "get_plugin_state" as const,
-          success: true as const,
-          data: { value },
-        };
-      }
-
-      case "set_plugin_state": {
-        setPluginState(command.key, command.value);
-        return {
-          id: correlationId,
-          type: "response" as const,
-          command: "set_plugin_state" as const,
-          success: true as const,
         };
       }
 

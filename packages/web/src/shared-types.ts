@@ -27,7 +27,6 @@ export type {
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
   RpcImageContent,
-  RpcPluginStateValue,
   RpcResponse,
   RpcSessionState,
   RpcSessionStats,

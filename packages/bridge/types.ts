@@ -51,8 +51,6 @@ export type RpcJsonValue =
 
 export type RpcJsonObject = { [key: string]: RpcJsonValue };
 
-export type RpcPluginStateValue = RpcJsonValue;
-
 export type RpcToolArguments = string | RpcJsonObject;
 
 export type RpcToolResultDetails = RpcJsonValue;
@@ -260,10 +258,6 @@ export interface RpcCommandMap {
   list_sessions: {};
   list_tree_entries: { sessionPath?: string };
   list_workspace_entries: {};
-
-  /** Plugin state persistence */
-  get_plugin_state: { key: string };
-  set_plugin_state: { key: string; value: RpcPluginStateValue };
 }
 
 /** All RPC command types that a browser client can send. */
@@ -553,8 +547,6 @@ export interface RpcResponseMap {
   };
   list_tree_entries: { entries: RpcTreeEntry[]; sessionPath?: string };
   list_workspace_entries: { entries: RpcWorkspaceEntry[] };
-  get_plugin_state: { value: RpcPluginStateValue | undefined };
-  set_plugin_state: void;
 }
 
 type RpcResponseData<T> = [T] extends [void] ? {} : { data: T };
@@ -678,7 +670,7 @@ export interface BridgeConfig {
 /** Sensible defaults for bridge configuration. */
 export const DEFAULT_BRIDGE_CONFIG: BridgeConfig = {
   host: "0.0.0.0",
-  port: 8080,
+  port: 7036,
   portMax: 0,
   uiRequestTimeout: 60_000,
   clientBufferSize: 256,
