@@ -81,7 +81,11 @@ function preserveTranscriptScroll() {
   chatTranscriptRef.value?.preserveScroll();
 }
 
-defineExpose({ preserveTranscriptScroll });
+function scrollToTranscriptEntry(entryId: string): boolean {
+  return chatTranscriptRef.value?.scrollToMessageId(entryId) ?? false;
+}
+
+defineExpose({ preserveTranscriptScroll, scrollToTranscriptEntry });
 </script>
 
 <template>

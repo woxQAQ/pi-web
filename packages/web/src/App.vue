@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import ExtensionDialog from "./components/ExtensionDialog.vue";
 import ReconnectBanner from "./components/ReconnectBanner.vue";
 import { useBridgeClient } from "./composables/useBridgeClient";
@@ -286,11 +293,62 @@ function handleRefreshTree() {
   sendCommand({ type: "list_tree_entries", sessionPath }).catch(() => {});
 }
 
-function handleTreeEntrySelect(entryId: string) {
+async function revealTreeEntryInTranscript(entryId: string): Promise<boolean> {
+  if (mainContentRef.value?.scrollToTranscriptEntry(entryId)) {
+    return true;
+  }
+
+  try {
+    await sendCommand({ type: "get_messages", direction: "latest", limit: 40 });
+    await nextTick();
+    if (mainContentRef.value?.scrollToTranscriptEntry(entryId)) {
+      return true;
+    }
+  } catch {
+    // Keep the current transcript window if refreshing fails.
+  }
+
+  const MAX_HISTORY_PAGES = 50;
+  for (
+    let page = 0;
+    page < MAX_HISTORY_PAGES && transcriptHasOlder.value;
+    page += 1
+  ) {
+    await loadOlderTranscriptPage();
+    await nextTick();
+    if (mainContentRef.value?.scrollToTranscriptEntry(entryId)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+async function handleTreeEntrySelect(entryId: string) {
   pendingRevision.value = null;
-  sendCommand({ type: "select_tree_entry", entryId }).catch(() => {});
-  if (isCompactLayout()) {
-    outlineSidebarOpen.value = false;
+
+  const entry = treeEntries.value.find(candidate => candidate.id === entryId);
+  if (entry?.isOnActivePath) {
+    const revealed = await revealTreeEntryInTranscript(entryId);
+    if (revealed) {
+      if (isCompactLayout()) {
+        outlineSidebarOpen.value = false;
+      }
+      return;
+    }
+  }
+
+  try {
+    const response = await sendCommand({ type: "select_tree_entry", entryId });
+    if (response.success) {
+      await nextTick();
+      mainContentRef.value?.scrollToTranscriptEntry(entryId);
+      if (isCompactLayout()) {
+        outlineSidebarOpen.value = false;
+      }
+    }
+  } catch {
+    // Keep the current outline state on failure.
   }
 }
 

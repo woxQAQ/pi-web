@@ -38,6 +38,7 @@ describe("normalizeTranscript", () => {
       toolArgs: { command: "pwd" },
       argumentsText: '{"command":"pwd"}',
       resultText: "stdout: /repo",
+      resultSourceMessageId: "t1",
       toolStatus: "success",
     });
   });
@@ -68,6 +69,7 @@ describe("normalizeTranscript", () => {
       toolName: "edit",
       resultText: "Successfully replaced 1 block(s) in a.ts.",
       resultDetails: { diff },
+      resultSourceMessageId: "t1",
     });
   });
 
@@ -93,12 +95,14 @@ describe("normalizeTranscript", () => {
       toolName: "read",
       toolArgs: { path: "a.txt" },
       resultText: "A",
+      resultSourceMessageId: "t1",
     });
     expect(blocks[1]).toMatchObject({
       kind: "tool",
       toolName: "read",
       toolArgs: { path: "b.txt" },
       resultText: "B",
+      resultSourceMessageId: "t2",
     });
   });
 
