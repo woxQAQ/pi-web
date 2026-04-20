@@ -96,12 +96,6 @@ const activeSessionLabel = computed(() => {
     "Untitled session"
   );
 });
-const networkUrl = computed(() => {
-  if (typeof window === "undefined") return "";
-  const h = window.location.host;
-  if (h.startsWith("localhost") || h.startsWith("127.")) return "";
-  return h;
-});
 const sidebarOpen = ref(false);
 const outlineSidebarOpen = ref(false);
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
@@ -441,9 +435,6 @@ onBeforeUnmount(() => {
       :show-debug-toggle="debugModeAvailable"
       :debug-mode="debugMode"
       :debug-mode-label="debugModeLabel"
-      :active-session-label="activeSessionLabel"
-      :network-url="networkUrl"
-      :connection-status="connectionStatus"
       @toggle-sidebar="toggleSessionSidebar"
       @toggle-theme="toggleTheme"
       @toggle-debug-mode="toggleDebugMode"

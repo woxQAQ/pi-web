@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { Bug, Menu, Moon, Sun } from "lucide-vue-next";
-import type { ConnectionStatus } from "../composables/useBridgeClient";
 
 defineProps<{
   theme: "dark" | "light";
@@ -8,9 +7,6 @@ defineProps<{
   showDebugToggle: boolean;
   debugMode: boolean;
   debugModeLabel: string;
-  activeSessionLabel: string;
-  networkUrl: string;
-  connectionStatus: ConnectionStatus;
 }>();
 
 const emit = defineEmits<{
@@ -22,22 +18,19 @@ const emit = defineEmits<{
 
 <template>
   <header class="app-header">
-    <button
-      class="hamburger"
-      aria-label="Toggle sidebar"
-      @click="emit('toggleSidebar')"
-    >
-      <Menu class="hamburger-icon" aria-hidden="true" />
-    </button>
-    <div class="header-brand">
-      <h1 class="app-title">Pi</h1>
-    </div>
-    <div class="header-session">
-      <span class="session-kicker">session</span>
-      <span class="session-name">{{ activeSessionLabel }}</span>
+    <div class="header-leading">
+      <button
+        class="hamburger"
+        aria-label="Toggle sidebar"
+        @click="emit('toggleSidebar')"
+      >
+        <Menu class="hamburger-icon" aria-hidden="true" />
+      </button>
+      <div class="header-brand">
+        <h1 class="app-title">Pi</h1>
+      </div>
     </div>
     <div class="header-status">
-      <span v-if="networkUrl" class="network-url">{{ networkUrl }}</span>
       <button
         v-if="showDebugToggle"
         class="debug-toggle"
@@ -60,29 +53,15 @@ const emit = defineEmits<{
         <Sun v-if="theme === 'dark'" class="theme-icon" aria-hidden="true" />
         <Moon v-else class="theme-icon" aria-hidden="true" />
       </button>
-      <span
-        class="connection-indicator"
-        :class="connectionStatus"
-        :title="`Connection: ${connectionStatus}`"
-      >
-        <span class="indicator-dot"></span>
-        {{
-          connectionStatus === "connected"
-            ? "Connected"
-            : connectionStatus === "connecting"
-              ? "Syncing..."
-              : "Offline"
-        }}
-      </span>
     </div>
   </header>
 </template>
 
 <style scoped>
 .app-header {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 16px;
   height: 48px;
   padding: 0 16px;
@@ -92,6 +71,13 @@ const emit = defineEmits<{
   z-index: 20;
 }
 
+.header-leading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
 .hamburger {
   display: none;
   align-items: center;
@@ -99,7 +85,6 @@ const emit = defineEmits<{
   width: 32px;
   height: 32px;
   padding: 0;
-  margin-left: -6px;
   background: none;
   border: none;
   color: var(--text-muted);
@@ -114,7 +99,6 @@ const emit = defineEmits<{
 .header-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
 }
 
 .app-title {
@@ -126,39 +110,13 @@ const emit = defineEmits<{
   color: var(--text);
 }
 
-.header-session {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  min-width: 0;
-}
-
-.session-kicker {
-  font-size: 0.68rem;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-subtle);
-  white-space: nowrap;
-}
-
-.session-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 0.82rem;
-  color: var(--text-muted);
-}
-
 .header-status {
   display: flex;
   align-items: center;
   gap: 10px;
-  justify-self: end;
+  flex-shrink: 0;
 }
 
-.network-url,
-.connection-indicator,
 .debug-toggle,
 .theme-toggle {
   display: inline-flex;
@@ -171,10 +129,6 @@ const emit = defineEmits<{
   background: var(--panel);
   font-size: 0.72rem;
   color: var(--text-subtle);
-}
-
-.debug-toggle,
-.theme-toggle {
   cursor: pointer;
   transition:
     background 0.15s ease,
@@ -214,93 +168,22 @@ const emit = defineEmits<{
   height: 16px;
 }
 
-.connection-indicator.connected,
-.connection-indicator.connecting,
-.connection-indicator.disconnected {
-  color: var(--text-muted);
-}
-
-.indicator-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  flex-shrink: 0;
-  opacity: 0.9;
-}
-
-.connection-indicator.disconnected .indicator-dot {
-  opacity: 0.45;
-}
-
-.connection-indicator.connecting .indicator-dot {
-  animation: sync-pulse 1.2s ease-in-out infinite;
-}
-
-@keyframes sync-pulse {
-  0%,
-  100% {
-    transform: scale(0.85);
-    opacity: 0.45;
-  }
-  50% {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
 @media (max-width: 900px) {
   .hamburger {
     display: flex;
-    grid-area: hamburger;
-    margin-left: 0;
   }
 
   .app-header {
-    grid-template-columns: auto minmax(0, 1fr);
-    grid-template-areas:
-      "hamburger session"
-      "status status";
-    gap: 8px 12px;
     height: auto;
     padding: calc(env(safe-area-inset-top) + 8px) 12px 10px;
   }
 
-  .header-brand {
-    display: none;
-  }
-
-  .header-session {
-    grid-area: session;
-    min-width: 0;
-    gap: 8px;
-  }
-
   .header-status {
-    grid-area: status;
-    width: 100%;
-    justify-self: stretch;
-    justify-content: flex-start;
     gap: 8px;
-    overflow-x: auto;
-    padding-bottom: 2px;
-    scrollbar-width: none;
   }
 
-  .header-status::-webkit-scrollbar {
-    display: none;
-  }
-
-  .session-kicker,
-  .network-url,
   .debug-label {
     display: none;
-  }
-
-  .debug-toggle,
-  .theme-toggle,
-  .connection-indicator {
-    flex-shrink: 0;
   }
 
   .debug-toggle {
@@ -311,7 +194,11 @@ const emit = defineEmits<{
 @media (max-width: 640px) {
   .app-header {
     padding-inline: 10px;
-    gap: 8px 10px;
+    gap: 10px;
+  }
+
+  .header-leading {
+    gap: 10px;
   }
 
   .hamburger,
@@ -320,12 +207,7 @@ const emit = defineEmits<{
     height: 30px;
   }
 
-  .session-name {
-    font-size: 0.78rem;
-  }
-
-  .debug-toggle,
-  .connection-indicator {
+  .debug-toggle {
     height: 28px;
     padding: 0 9px;
     font-size: 0.68rem;
