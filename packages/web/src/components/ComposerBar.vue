@@ -29,6 +29,7 @@ import {
   getWorkspaceMentionSuggestions,
   type WorkspaceMentionSuggestion,
 } from "../utils/workspaceMentions";
+import { getNextThinkingLevel } from "../utils/thinkingLevels";
 import CommandPalette from "./CommandPalette.vue";
 import ModelDropdown from "./ModelDropdown.vue";
 import ThinkingLevelDropdown from "./ThinkingLevelDropdown.vue";
@@ -473,6 +474,11 @@ function handleThinkingLevelSelect(level: RpcThinkingLevel) {
   emit("selectThinkingLevel", level);
 }
 
+function handleCycleThinkingLevel() {
+  if (isDisabled.value) return;
+  handleThinkingLevelSelect(getNextThinkingLevel(props.thinkingLevel));
+}
+
 function handleAutoCompactionChange(event: Event) {
   emit(
     "toggleAutoCompaction",
@@ -578,6 +584,19 @@ function handleInputCompositionEnd() {
 
 function handleInputKeydown(e: KeyboardEvent) {
   const composing = isInputComposing(e);
+
+  if (
+    e.key === "Tab" &&
+    e.shiftKey &&
+    !e.altKey &&
+    !e.ctrlKey &&
+    !e.metaKey &&
+    !composing
+  ) {
+    e.preventDefault();
+    handleCycleThinkingLevel();
+    return;
+  }
 
   if (
     showCommandPalette.value &&

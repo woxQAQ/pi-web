@@ -34,6 +34,7 @@ export interface ToolContentBlock {
   resultText?: string;
   resultBlocks?: ToolResultBlock[];
   resultDetails?: RpcToolResultDetails;
+  resultSourceMessageId?: string;
   toolStatus: ToolBlockStatus;
 }
 
@@ -125,7 +126,14 @@ export type TranscriptDisplayItem =
   | TranscriptMessageDisplayItem
   | TranscriptSessionEventDisplayItem;
 
-type TranscriptContentItem = string | RpcTranscriptContentBlock;
+interface TranscriptToolResultBlockWithSource
+  extends RpcTranscriptToolResultBlock {
+  sourceMessageId?: string;
+}
+
+type TranscriptContentItem =
+  | string
+  | (RpcTranscriptContentBlock & { sourceMessageId?: string });
 type ToolResultContentItem = NonNullable<
   RpcTranscriptToolResultBlock["content"]
 >[number];
@@ -214,6 +222,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
           : undefined;
         const resultDetails = nextToolResult?.details;
         const resultIsError = nextToolResult?.isError;
+        const resultSourceMessageId = nextToolResult?.sourceMessageId;
 
         blocks.push({
           kind: "tool",
@@ -223,6 +232,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
           resultText,
           resultBlocks,
           resultDetails,
+          resultSourceMessageId,
           toolStatus: toolStatusFromResult(
             resultText,
             resultBlocks,
@@ -520,12 +530,16 @@ function mergeToolResultIntoContent(
   const targetIndex = findNextUnmatchedToolCallIndex(cloned);
   if (targetIndex === -1) return null;
 
-  const toolResultBlock: RpcTranscriptToolResultBlock = {
+  const toolResultBlock: TranscriptToolResultBlockWithSource = {
     type: "toolResult",
     text: messageContent(toolResultMessage),
     content: cloneToolResultContent(toolResultMessage.content),
     details: toolResultMessage.details,
     isError: toolResultMessage.isError,
+    sourceMessageId:
+      typeof toolResultMessage.id === "string" && toolResultMessage.id
+        ? toolResultMessage.id
+        : undefined,
   };
 
   cloned.splice(targetIndex + 1, 0, toolResultBlock);
@@ -708,11 +722,11 @@ function contentItemText(block: TranscriptContentItem): string {
 
 function toolResultBlockFromItem(
   block: TranscriptContentItem | undefined,
-): RpcTranscriptToolResultBlock | undefined {
+): TranscriptToolResultBlockWithSource | undefined {
   if (!block || typeof block === "string" || block.type !== "toolResult") {
     return undefined;
   }
-  return block;
+  return block as TranscriptToolResultBlockWithSource;
 }
 
 function systemContentBlock(

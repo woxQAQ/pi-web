@@ -60,6 +60,7 @@ let savedScrollHeight = 0;
 let topLoadArmed = true;
 let pendingHistoryAnchor: { scrollTop: number; scrollHeight: number } | null =
   null;
+const TREE_ENTRY_SELECTOR = "[data-tree-entry-id], [data-tree-entry-ids]";
 
 const TOP_LOAD_THRESHOLD = 120;
 
@@ -75,6 +76,30 @@ function restoreScroll() {
   const delta = container.value.scrollHeight - savedScrollHeight;
   container.value.scrollTop = savedScrollTop + delta;
   wasDisconnected = false;
+}
+
+function scrollToMessageId(messageId: string): boolean {
+  const root = container.value;
+  if (!root || !messageId) return false;
+
+  const target = [...root.querySelectorAll<HTMLElement>(TREE_ENTRY_SELECTOR)].find(
+    element => {
+      if (element.dataset.treeEntryId === messageId) {
+        return true;
+      }
+
+      return (
+        element.dataset.treeEntryIds
+          ?.split(/\s+/)
+          .filter(Boolean)
+          .includes(messageId) ?? false
+      );
+    },
+  );
+  if (!target) return false;
+
+  target.scrollIntoView({ block: "center", behavior: "smooth" });
+  return true;
 }
 
 function roleClass(role: string): "user" | "assistant" | "tool" | "system" {
@@ -396,7 +421,7 @@ watch(
   },
 );
 
-defineExpose({ preserveScroll });
+defineExpose({ preserveScroll, scrollToMessageId });
 </script>
 
 <template>
@@ -430,7 +455,11 @@ defineExpose({ preserveScroll });
       v-for="(item, index) in displayItems"
       :key="displayItemKey(item, index)"
     >
-      <div v-if="item.kind === 'session_event'" class="session-event-row">
+      <div
+        v-if="item.kind === 'session_event'"
+        class="session-event-row"
+        :data-tree-entry-ids="item.sourceMessageIds.join(' ') || undefined"
+      >
         <div class="session-event-line" aria-hidden="true"></div>
         <div class="session-event-body">
           <span class="session-event-label">{{ item.label }}</span>
@@ -457,7 +486,12 @@ defineExpose({ preserveScroll });
       </div>
 
       <template v-else>
-        <div v-if="isToolResultMessage(item.message)" class="message-row tool">
+        <div
+          v-if="isToolResultMessage(item.message)"
+          class="message-row tool"
+          :data-message-id="item.message.id ?? undefined"
+          :data-tree-entry-id="item.message.id ?? undefined"
+        >
           <div class="message-meta">
             <span class="message-role">{{ roleLabel(item.message.role) }}</span>
           </div>
@@ -553,6 +587,8 @@ defineExpose({ preserveScroll });
           v-else-if="isErrorMessage(item.message)"
           class="message-row"
           :class="roleClass(item.message.role)"
+          :data-message-id="item.message.id ?? undefined"
+          :data-tree-entry-id="item.message.id ?? undefined"
         >
           <div class="message-content" :class="roleClass(item.message.role)">
             <div v-if="showMessageIds" class="message-debug-id">
@@ -574,7 +610,13 @@ defineExpose({ preserveScroll });
           </div>
         </div>
 
-        <div v-else class="message-row" :class="roleClass(item.message.role)">
+        <div
+          v-else
+          class="message-row"
+          :class="roleClass(item.message.role)"
+          :data-message-id="item.message.id ?? undefined"
+          :data-tree-entry-id="item.message.id ?? undefined"
+        >
           <div class="message-stack" :class="roleClass(item.message.role)">
             <div
               class="message-content"
@@ -637,23 +679,27 @@ defineExpose({ preserveScroll });
                   />
                 </div>
 
-                <ToolCard
+                <div
                   v-else-if="block.kind === 'tool'"
                   class="tool-card-block"
-                  :block="block"
-                  :expanded="
-                    isToolBlockExpanded(
-                      messageStableKey(item.message, item.messageIndex),
-                      bIdx,
-                    )
-                  "
-                  @toggle="
-                    toggleToolBlock(
-                      messageStableKey(item.message, item.messageIndex),
-                      bIdx,
-                    )
-                  "
-                />
+                  :data-tree-entry-id="block.resultSourceMessageId"
+                >
+                  <ToolCard
+                    :block="block"
+                    :expanded="
+                      isToolBlockExpanded(
+                        messageStableKey(item.message, item.messageIndex),
+                        bIdx,
+                      )
+                    "
+                    @toggle="
+                      toggleToolBlock(
+                        messageStableKey(item.message, item.messageIndex),
+                        bIdx,
+                      )
+                    "
+                  />
+                </div>
 
                 <figure
                   v-else-if="block.kind === 'image'"

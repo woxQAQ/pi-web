@@ -2,18 +2,10 @@
 import { Check, ChevronDown } from "lucide-vue-next";
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import type { RpcThinkingLevel } from "../shared-types";
-
-const THINKING_LEVEL_OPTIONS: readonly {
-  value: RpcThinkingLevel;
-  label: string;
-}[] = [
-  { value: "off", label: "Off" },
-  { value: "minimal", label: "Minimal" },
-  { value: "low", label: "Low" },
-  { value: "medium", label: "Medium" },
-  { value: "high", label: "High" },
-  { value: "xhigh", label: "XHigh" },
-];
+import {
+  DEFAULT_THINKING_LEVEL,
+  THINKING_LEVEL_OPTIONS,
+} from "../utils/thinkingLevels";
 
 const props = defineProps<{
   value: RpcThinkingLevel | null;
@@ -30,7 +22,7 @@ const listRef = ref<HTMLElement | null>(null);
 const isOpen = ref(false);
 const highlightedIndex = ref(0);
 
-const selectedLevel = computed(() => props.value ?? "off");
+const selectedLevel = computed(() => props.value ?? DEFAULT_THINKING_LEVEL);
 const selectedLabel = computed(
   () =>
     THINKING_LEVEL_OPTIONS.find(option => option.value === selectedLevel.value)
@@ -207,6 +199,8 @@ onBeforeUnmount(() => {
       :aria-expanded="isOpen"
       aria-haspopup="listbox"
       aria-label="Thinking level"
+      aria-keyshortcuts="Shift+Tab"
+      title="Thinking level · Shift+Tab"
       @click="toggleDropdown"
       @keydown="handleTriggerKeydown"
     >
