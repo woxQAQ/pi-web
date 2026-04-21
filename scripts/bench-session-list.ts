@@ -15,6 +15,8 @@ import { WsRpcAdapter, type WsRpcAdapterContext } from "../packages/bridge/ws-rp
 const WORKSPACE_COUNT = 8;
 const SESSIONS_PER_WORKSPACE = 60;
 const MESSAGES_PER_SESSION = 18;
+const LARGE_SESSION_EVERY = 6;
+const LARGE_TRAILING_MESSAGES = 220;
 const REPEATS = Number.parseInt(process.env.SESSION_LIST_REPEATS ?? "7", 10);
 
 type Handler = (...args: unknown[]) => void;
@@ -46,12 +48,16 @@ function isoFromIndex(index: number): string {
   return new Date(Date.UTC(2026, 0, 1, 0, index, 0)).toISOString();
 }
 
+function isLargeSession(sessionIndex: number): boolean {
+  return sessionIndex % LARGE_SESSION_EVERY === 0;
+}
+
 function writeSessionFile(
   filePath: string,
   workspacePath: string,
   workspaceIndex: number,
   sessionIndex: number,
-): void {
+): number {
   const id = `session-${workspaceIndex}-${sessionIndex}`;
   const createdAt = isoFromIndex(workspaceIndex * SESSIONS_PER_WORKSPACE + sessionIndex);
   const entries: unknown[] = [
@@ -65,7 +71,10 @@ function writeSessionFile(
   ];
 
   let parentId: string | null = null;
-  for (let messageIndex = 0; messageIndex < MESSAGES_PER_SESSION; messageIndex += 1) {
+  const messageCount = isLargeSession(sessionIndex)
+    ? LARGE_TRAILING_MESSAGES
+    : MESSAGES_PER_SESSION;
+  for (let messageIndex = 0; messageIndex < messageCount; messageIndex += 1) {
     const entryId = `${id}-message-${messageIndex}`;
     const role = messageIndex % 2 === 0 ? "user" : "assistant";
     entries.push({
@@ -81,7 +90,9 @@ function writeSessionFile(
             : [
                 {
                   type: "text",
-                  text: `Assistant response ${messageIndex} for ${id}`,
+                  text: `Assistant response ${messageIndex} for ${id}. ${"Detailed trace ".repeat(
+                    isLargeSession(sessionIndex) ? 36 : 1,
+                  )}`,
                 },
               ],
         timestamp: Date.parse(createdAt) + messageIndex,
@@ -109,12 +120,21 @@ function writeSessionFile(
     parentId = entryId;
   }
 
-  fs.writeFileSync(filePath, `${entries.map(entry => JSON.stringify(entry)).join("\n")}\n`);
+  const content = `${entries.map(entry => JSON.stringify(entry)).join("\n")}\n`;
+  fs.writeFileSync(filePath, content);
+  return Buffer.byteLength(content);
 }
 
-function createCorpus(): { root: string; liveSessionFile: string } {
+function createCorpus(): {
+  root: string;
+  liveSessionFile: string;
+  totalBytes: number;
+  largeSessionCount: number;
+} {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-session-list-bench-"));
   let liveSessionFile = "";
+  let totalBytes = 0;
+  let largeSessionCount = 0;
 
   for (let workspaceIndex = 0; workspaceIndex < WORKSPACE_COUNT; workspaceIndex += 1) {
     const workspacePath = path.join(root, `workspace-${workspaceIndex}`);
@@ -127,14 +147,15 @@ function createCorpus(): { root: string; liveSessionFile: string } {
         sessionDir,
         `2026-01-01T00-${String(sessionIndex).padStart(2, "0")}-00-000Z_session-${workspaceIndex}-${sessionIndex}.jsonl`,
       );
-      writeSessionFile(filePath, workspacePath, workspaceIndex, sessionIndex);
+      totalBytes += writeSessionFile(filePath, workspacePath, workspaceIndex, sessionIndex);
+      if (isLargeSession(sessionIndex)) largeSessionCount += 1;
       if (workspaceIndex === 0 && sessionIndex === SESSIONS_PER_WORKSPACE - 1) {
         liveSessionFile = filePath;
       }
     }
   }
 
-  return { root, liveSessionFile };
+  return { root, liveSessionFile, totalBytes, largeSessionCount };
 }
 
 function createContext(liveSessionFile: string): WsRpcAdapterContext {
@@ -245,7 +266,7 @@ function median(values: number[]): number {
 }
 
 async function main(): Promise<void> {
-  const { root, liveSessionFile } = createCorpus();
+  const { root, liveSessionFile, totalBytes, largeSessionCount } = createCorpus();
   process.env.PI_WEB_SESSIONS_ROOT = root;
 
   try {
@@ -265,6 +286,8 @@ async function main(): Promise<void> {
     console.log(`METRIC worst_ms=${worstMs.toFixed(3)}`);
     console.log(`METRIC session_count=${sessionCount}`);
     console.log(`METRIC entries_per_session=${entriesPerSession}`);
+    console.log(`METRIC large_session_count=${largeSessionCount}`);
+    console.log(`METRIC total_session_bytes=${totalBytes}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
     delete process.env.PI_WEB_SESSIONS_ROOT;
