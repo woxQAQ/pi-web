@@ -36,11 +36,57 @@ const displayLabel = computed(() => {
 });
 const isBusy = computed(() => props.loading || props.switching);
 const normalizedQuery = computed(() => searchText.value.trim());
-const filteredBranches = computed(() => {
+
+/** Merge local and remote branches that share the same shortName. */
+const mergedBranches = computed((): RpcGitBranch[] => {
   if (!props.repoState) return [];
+
+  const byShortName = new Map<
+    string,
+    { local?: RpcGitBranch; remotes: RpcGitBranch[] }
+  >();
+
+  for (const branch of props.repoState.branches) {
+    const group = byShortName.get(branch.shortName) ?? { remotes: [] };
+    if (branch.kind === "local") {
+      group.local = branch;
+    } else {
+      group.remotes.push(branch);
+    }
+    byShortName.set(branch.shortName, group);
+  }
+
+  const result: RpcGitBranch[] = [];
+  const seen = new Set<string>();
+
+  // Preserve original order (current first, then local, then remote)
+  for (const branch of props.repoState.branches) {
+    const group = byShortName.get(branch.shortName);
+    if (!group || seen.has(branch.shortName)) continue;
+    seen.add(branch.shortName);
+
+    if (group.local) {
+      const remoteNames = group.remotes
+        .map(r => r.remoteName)
+        .filter((n): n is string => Boolean(n));
+      const uniqueRemoteNames = [...new Set(remoteNames)];
+      result.push({
+        ...group.local,
+        remoteName:
+          uniqueRemoteNames.join(", ") || group.local.remoteName,
+      });
+    } else if (group.remotes.length > 0) {
+      result.push(group.remotes[0]);
+    }
+  }
+
+  return result;
+});
+
+const filteredBranches = computed(() => {
   const query = normalizedQuery.value.toLowerCase();
-  if (!query) return props.repoState.branches;
-  return props.repoState.branches.filter(branch => {
+  if (!query) return mergedBranches.value;
+  return mergedBranches.value.filter(branch => {
     const haystack = [branch.name, branch.shortName, branch.remoteName]
       .filter(Boolean)
       .join(" ")
@@ -50,8 +96,8 @@ const filteredBranches = computed(() => {
 });
 const exactBranchMatch = computed(() => {
   const query = normalizedQuery.value;
-  if (!query || !props.repoState) return null;
-  return props.repoState.branches.find(branch => branch.name === query) ?? null;
+  if (!query) return null;
+  return mergedBranches.value.find(branch => branch.name === query) ?? null;
 });
 const canCreateBranch = computed(() => {
   const query = normalizedQuery.value;
@@ -69,8 +115,8 @@ const triggerTitle = computed(() => {
   return displayLabel.value;
 });
 const showSearch = computed(() =>
-  props.repoState?.branches.length
-    ? props.repoState.branches.length > 8 || searchText.value.length > 0
+  mergedBranches.value.length
+    ? mergedBranches.value.length > 8 || searchText.value.length > 0
     : searchText.value.length > 0,
 );
 
