@@ -510,22 +510,20 @@ function listStoredSessionFiles(): string[] {
   return sessionFiles;
 }
 
-function readStoredSessionMetadata(
-  sessionPath: string,
-): StoredSessionMetadata | null {
-  let content: string;
-  try {
-    content = fs.readFileSync(sessionPath, "utf8");
-  } catch {
-    return null;
-  }
+const STORED_SESSION_METADATA_HEAD_BYTES = 32 * 1024;
 
+function parseStoredSessionMetadataContent(
+  sessionPath: string,
+  content: string,
+): { metadata: StoredSessionMetadata; foundFirstUser: boolean } | null {
   let lineStart = 0;
   let firstLine: string | undefined;
   while (lineStart <= content.length) {
     const lineEnd = content.indexOf("\n", lineStart);
     const rawLine =
-      lineEnd === -1 ? content.slice(lineStart) : content.slice(lineStart, lineEnd);
+      lineEnd === -1
+        ? content.slice(lineStart)
+        : content.slice(lineStart, lineEnd);
     lineStart = lineEnd === -1 ? content.length + 1 : lineEnd + 1;
     const line = rawLine.trim();
     if (line) {
@@ -560,7 +558,9 @@ function readStoredSessionMetadata(
   while (lineStart <= content.length) {
     const lineEnd = content.indexOf("\n", lineStart);
     const rawLine =
-      lineEnd === -1 ? content.slice(lineStart) : content.slice(lineStart, lineEnd);
+      lineEnd === -1
+        ? content.slice(lineStart)
+        : content.slice(lineStart, lineEnd);
     lineStart = lineEnd === -1 ? content.length + 1 : lineEnd + 1;
     const line = rawLine.trim();
     if (!line) continue;
@@ -601,13 +601,54 @@ function readStoredSessionMetadata(
   }
 
   return {
-    id: header.id,
-    name: firstUserText ?? explicitName,
-    path: sessionPath,
-    timestamp:
-      typeof header.timestamp === "string" ? header.timestamp : undefined,
-    cwd: typeof header.cwd === "string" ? header.cwd : undefined,
+    metadata: {
+      id: header.id,
+      name: firstUserText ?? explicitName,
+      path: sessionPath,
+      timestamp:
+        typeof header.timestamp === "string" ? header.timestamp : undefined,
+      cwd: typeof header.cwd === "string" ? header.cwd : undefined,
+    },
+    foundFirstUser: Boolean(firstUserText),
   };
+}
+
+function readStoredSessionMetadata(
+  sessionPath: string,
+): StoredSessionMetadata | null {
+  let fd: number | undefined;
+  try {
+    fd = fs.openSync(sessionPath, "r");
+    const buffer = Buffer.allocUnsafe(STORED_SESSION_METADATA_HEAD_BYTES);
+    const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
+    fs.closeSync(fd);
+    fd = undefined;
+
+    let head = buffer.toString("utf8", 0, bytesRead);
+    const isCompleteFile = bytesRead < buffer.length;
+    if (!isCompleteFile) {
+      const lastNewline = head.lastIndexOf("\n");
+      if (lastNewline === -1) return null;
+      head = head.slice(0, lastNewline + 1);
+    }
+
+    const parsedHead = parseStoredSessionMetadataContent(sessionPath, head);
+    if (parsedHead && (parsedHead.foundFirstUser || isCompleteFile)) {
+      return parsedHead.metadata;
+    }
+
+    const content = fs.readFileSync(sessionPath, "utf8");
+    return parseStoredSessionMetadataContent(sessionPath, content)?.metadata ?? null;
+  } catch {
+    if (fd !== undefined) {
+      try {
+        fs.closeSync(fd);
+      } catch {
+        // Ignore close failures for unreadable session files.
+      }
+    }
+    return null;
+  }
 }
 
 function normalizeWorkspacePath(filePath: string): string {
