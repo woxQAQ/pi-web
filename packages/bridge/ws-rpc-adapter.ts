@@ -140,6 +140,10 @@ interface WorkspaceSessionEntry {
   workspacePath?: string;
 }
 
+interface SessionListRow extends WorkspaceSessionEntry {
+  activitySortValue: number;
+}
+
 interface WorkspaceMetadata {
   workspaceId: string;
   workspaceName: string;
@@ -4287,7 +4291,7 @@ export class WsRpcAdapter {
 
       case "list_sessions": {
         try {
-          const sessions: WorkspaceSessionEntry[] = [];
+          const sessions: SessionListRow[] = [];
           const seenSessionPaths = new Set<string>();
           const liveSessionFile = ctx.sessionManager.getSessionFile();
 
@@ -4302,6 +4306,7 @@ export class WsRpcAdapter {
               entry.path,
             );
             seenSessionPaths.add(entry.path);
+            const timestamp = normalizeSessionTimestamp(entry.timestamp);
             sessions.push({
               id: entry.id,
               name: entry.name ?? path.basename(entry.path, ".jsonl"),
@@ -4310,8 +4315,9 @@ export class WsRpcAdapter {
                 entry.path === liveSessionFile
                   ? !ctx.isIdle()
                   : this.sessionRuntime.isSessionRunning(entry.path),
-              timestamp: normalizeSessionTimestamp(entry.timestamp),
-              updatedAt: normalizeSessionTimestamp(entry.timestamp),
+              timestamp,
+              updatedAt: timestamp,
+              activitySortValue: sessionTimestampSortValue(timestamp),
               ...workspace,
             });
           };
@@ -4361,14 +4367,22 @@ export class WsRpcAdapter {
             );
           }
 
-          sessions.sort(compareSessionsByRecency);
+          sessions.sort((left, right) => {
+            const timestampDelta =
+              right.activitySortValue - left.activitySortValue;
+            if (timestampDelta !== 0) return timestampDelta;
+            return right.path.localeCompare(left.path);
+          });
+          const responseSessions = sessions.map(
+            ({ activitySortValue: _activitySortValue, ...session }) => session,
+          );
 
           return {
             id: correlationId,
             type: "response" as const,
             command: "list_sessions" as const,
             success: true as const,
-            data: { sessions },
+            data: { sessions: responseSessions },
           };
         } catch {
           return {
