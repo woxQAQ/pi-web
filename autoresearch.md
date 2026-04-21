@@ -38,3 +38,6 @@ Reduce the time for the web bridge to answer the first `list_sessions` RPC durin
 - Kept: combined timestamp normalization and sort-key parsing lowers median to 5.762ms.
 - Discarded on the original small/medium corpus: canonical timestamp regex fast path, array path collection without a Set, workspace metadata caching, head-only reads, avoiding `trim()`, comparator hoisting, live running-state caching, direct timestamp parsing, display-text shortcuts, and string-content inlining all regressed the primary metric.
 - Workload broadened after run 23 to include long historical transcripts. This avoids overfitting to tiny JSONL files and re-tests whether bounded metadata reads are worthwhile for real slow startup cases.
+- Mixed long-transcript baseline: 13.092ms median with 480 sessions, 80 long sessions, and 13.3MB total JSONL.
+- Kept on mixed corpus: bounded metadata head reads improved median to 9.651ms, then tuning the head size to 2KB improved median to 5.936ms.
+- Discarded on mixed corpus: 1KB and 1536-byte head sizes, shared head buffer, parser wrapper removal, direct live-file duplicate checks, unbounded async reads, avoiding head slicing, and array path collection all regressed.

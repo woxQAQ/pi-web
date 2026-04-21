@@ -512,6 +512,40 @@ function listStoredSessionFiles(): string[] {
 
 const STORED_SESSION_METADATA_HEAD_BYTES = 2 * 1024;
 
+function hasOddTrailingBackslashes(value: string, quoteIndex: number): boolean {
+  let count = 0;
+  for (let index = quoteIndex - 1; index >= 0; index -= 1) {
+    if (value[index] !== "\\") break;
+    count += 1;
+  }
+  return count % 2 === 1;
+}
+
+function extractGeneratedUserContent(line: string): string | null {
+  const roleIndex = line.indexOf('"role":"user"');
+  if (roleIndex === -1) return null;
+
+  const contentKey = '"content":"';
+  const contentIndex = line.indexOf(contentKey, roleIndex);
+  if (contentIndex === -1) return null;
+
+  const valueStart = contentIndex + contentKey.length - 1;
+  for (let index = valueStart + 1; index < line.length; index += 1) {
+    if (line[index] !== '"' || hasOddTrailingBackslashes(line, index)) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(line.slice(valueStart, index + 1)) as unknown;
+      return typeof parsed === "string" ? parsed : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 function parseStoredSessionMetadataContent(
   sessionPath: string,
   content: string,
@@ -564,6 +598,15 @@ function parseStoredSessionMetadataContent(
     lineStart = lineEnd === -1 ? content.length + 1 : lineEnd + 1;
     const line = rawLine.trim();
     if (!line) continue;
+
+    const fastUserContent = extractGeneratedUserContent(line);
+    if (fastUserContent !== null) {
+      const text = collapseWhitespace(fastUserContent);
+      if (text) {
+        firstUserText = text;
+        break;
+      }
+    }
 
     let entry: {
       type?: unknown;
