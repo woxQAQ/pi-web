@@ -511,7 +511,7 @@ function listStoredSessionFiles(): string[] {
 }
 
 const STORED_SESSION_METADATA_HEAD_BYTES = 512;
-const STORED_SESSION_METADATA_RETRY_HEAD_BYTES = 4 * 1024;
+const STORED_SESSION_METADATA_RETRY_HEAD_BYTES = 5 * 1024;
 
 function hasOddTrailingBackslashes(value: string, quoteIndex: number): boolean {
   let count = 0;
