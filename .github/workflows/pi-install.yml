@@ -1,0 +1,48 @@
+name: Pi Install
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  install:
+    name: pi install (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install pi-coding-agent
+        run: npm install --global @mariozechner/pi-coding-agent
+
+      - name: Show Pi version
+        run: pi --version
+
+      - name: Install pi-web from GitHub
+        run: pi install git:https://github.com/woxQAQ/pi-web
