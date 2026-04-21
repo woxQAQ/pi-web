@@ -1390,7 +1390,9 @@ describe("extension_ui_request handling", () => {
     const dequeueRequest = ws.send.mock.calls
       .map(
         ([message]: [string]) =>
-          JSON.parse(message) as { payload?: { type?: string; id?: string; index?: number } },
+          JSON.parse(message) as {
+            payload?: { type?: string; id?: string; index?: number };
+          },
       )
       .find(message => message.payload?.type === "dequeue_follow_up_message");
 

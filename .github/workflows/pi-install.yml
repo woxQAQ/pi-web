@@ -45,6 +45,11 @@ jobs:
 
       - name: Install pi-web from GitHub
         env:
-          PI_INSTALL_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
-          PI_INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: pi install git:https://github.com/${{ env.PI_INSTALL_REPO }}@${{ env.PI_INSTALL_REF }}
+          PI_INSTALL_REPO:
+            ${{ github.event.pull_request.head.repo.full_name ||
+            github.repository }}
+          PI_INSTALL_REF:
+            ${{ github.event.pull_request.head.sha || github.sha }}
+        run:
+          pi install git:https://github.com/${{ env.PI_INSTALL_REPO }}@${{
+          env.PI_INSTALL_REF }}

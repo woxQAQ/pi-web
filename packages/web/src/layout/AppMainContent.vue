@@ -130,10 +130,7 @@ defineExpose({ preserveTranscriptScroll, scrollToTranscriptEntry });
       @load-older="emit('loadOlderTranscript')"
       @revise="emit('reviseMessage', $event)"
     />
-    <div
-      v-if="queuedUserMessages.length > 0"
-      class="queued-messages-strip"
-    >
+    <div v-if="queuedUserMessages.length > 0" class="queued-messages-strip">
       <div
         v-for="(queued, qIdx) in queuedUserMessages"
         :key="`queued:${queued.timestamp}:${qIdx}`"

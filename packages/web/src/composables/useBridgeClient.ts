@@ -735,7 +735,9 @@ function sendPrompt(
   });
 }
 
-async function dequeueQueuedMessage(index: number): Promise<RpcQueuedMessage | null> {
+async function dequeueQueuedMessage(
+  index: number,
+): Promise<RpcQueuedMessage | null> {
   if (!Number.isInteger(index) || index < 0) return null;
 
   try {
@@ -1593,7 +1595,9 @@ export function useBridgeClient() {
     gitRepoLoading: readonly(gitRepoLoading),
     gitBranchSwitching: readonly(gitBranchSwitching),
     // Pending messages
-    pendingMessageCount: computed(() => sessionState.value?.pendingMessageCount ?? 0),
+    pendingMessageCount: computed(
+      () => sessionState.value?.pendingMessageCount ?? 0,
+    ),
     queuedUserMessages: readonly(queuedUserMessages),
     // Reconnect diagnostics
     isReconnecting,

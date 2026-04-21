@@ -591,7 +591,10 @@ defineExpose({ preserveScroll, scrollToMessageId });
           :data-tree-entry-id="item.message.id ?? undefined"
         >
           <div class="message-content" :class="roleClass(item.message.role)">
-            <div class="error-block" :class="{ aborted: isAbortedMessage(item.message) }">
+            <div
+              class="error-block"
+              :class="{ aborted: isAbortedMessage(item.message) }"
+            >
               <div class="error-block-header">
                 <div class="error-block-heading">
                   <span class="error-label">{{
@@ -602,8 +605,13 @@ defineExpose({ preserveScroll, scrollToMessageId });
                   </span>
                 </div>
               </div>
-              <div v-if="errorMessageText(item.message)" class="error-block-body">
-                <span class="error-message">{{ errorMessageText(item.message) }}</span>
+              <div
+                v-if="errorMessageText(item.message)"
+                class="error-block-body"
+              >
+                <span class="error-message">{{
+                  errorMessageText(item.message)
+                }}</span>
               </div>
             </div>
           </div>
