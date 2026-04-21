@@ -127,6 +127,33 @@ interface SessionSummary {
   sessionName: string;
 }
 
+interface WorkspaceSessionEntry {
+  id: string;
+  name: string;
+  path: string;
+  isRunning?: boolean;
+  timestamp?: string;
+  updatedAt?: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspacePath?: string;
+}
+
+interface WorkspaceMetadata {
+  workspaceId: string;
+  workspaceName: string;
+  workspacePath: string;
+}
+
+interface SessionListManager {
+  getHeader: () => { id: string; timestamp: string; cwd?: string } | null;
+  getCwd: () => string | undefined;
+  getSessionFile: () => string | undefined;
+  getSessionName: () => string | undefined;
+  getEntries: () => unknown[];
+  getSessionId: () => string;
+}
+
 /* ============================================================================
  * Event and payload shaping
  * ========================================================================== */
@@ -394,15 +421,41 @@ function sessionTimestampSortValue(timestamp?: string): number {
 }
 
 function compareSessionsByRecency(
-  left: { timestamp?: string; path: string },
-  right: { timestamp?: string; path: string },
+  left: { timestamp?: string; updatedAt?: string; path: string },
+  right: { timestamp?: string; updatedAt?: string; path: string },
 ): number {
   const timestampDelta =
-    sessionTimestampSortValue(right.timestamp) -
-    sessionTimestampSortValue(left.timestamp);
+    sessionTimestampSortValue(right.updatedAt ?? right.timestamp) -
+    sessionTimestampSortValue(left.updatedAt ?? left.timestamp);
   if (timestampDelta !== 0) return timestampDelta;
 
   return right.path.localeCompare(left.path);
+}
+
+function workspaceDisplayName(workspacePath: string): string {
+  const baseName = path.basename(workspacePath);
+  return baseName || workspacePath || "Unknown workspace";
+}
+
+function workspaceMetadata(
+  workspacePath: string | undefined,
+  sessionPath: string,
+): WorkspaceMetadata {
+  const fallbackPath = path.dirname(sessionPath);
+  const normalizedWorkspacePath = workspacePath?.trim() || fallbackPath;
+
+  return {
+    workspaceId: normalizedWorkspacePath,
+    workspaceName: workspaceDisplayName(normalizedWorkspacePath),
+    workspacePath: normalizedWorkspacePath,
+  };
+}
+
+function normalizeSessionDate(
+  value: Date | string | undefined,
+): string | undefined {
+  if (value instanceof Date) return value.toISOString();
+  return typeof value === "string" && value ? value : undefined;
 }
 
 function normalizeWorkspacePath(filePath: string): string {
@@ -4096,58 +4149,64 @@ export class WsRpcAdapter {
 
       case "list_sessions": {
         try {
-          const sessions: Array<{
-            id: string;
-            name: string;
-            path: string;
-            isRunning?: boolean;
-            timestamp?: string;
-          }> = [];
+          const sessions: WorkspaceSessionEntry[] = [];
           const seenSessionPaths = new Set<string>();
-          const currentSessionFile =
-            this.sessionRuntime.currentTranscriptSessionPath() ??
-            ctx.sessionManager.getSessionFile();
-          const sessionDir = currentSessionFile
-            ? path.dirname(currentSessionFile)
-            : undefined;
+          const liveSessionFile = ctx.sessionManager.getSessionFile();
 
-          const appendSession = (
-            sessionManager: SessionManager,
+          const appendSessionManager = (
+            sessionManager: SessionListManager,
             sessionPath?: string,
+            fallbackWorkspacePath?: string,
           ) => {
             if (!sessionPath || seenSessionPaths.has(sessionPath)) return;
             const header = sessionManager.getHeader();
             if (!header) return;
+
+            const workspace = workspaceMetadata(
+              sessionManager.getCwd() || header.cwd || fallbackWorkspacePath,
+              sessionPath,
+            );
             seenSessionPaths.add(sessionPath);
             sessions.push({
               id: header.id,
               name: sessionDisplayName(sessionManager, sessionPath),
               path: sessionPath,
               isRunning:
-                sessionPath === ctx.sessionManager.getSessionFile()
+                sessionPath === liveSessionFile
                   ? !ctx.isIdle()
                   : this.sessionRuntime.isSessionRunning(sessionPath),
               timestamp: header.timestamp,
+              updatedAt: header.timestamp,
+              ...workspace,
             });
           };
 
-          for (const sessionManager of this.sessionRuntime.getCachedSessionManagers()) {
-            appendSession(sessionManager, sessionManager.getSessionFile());
+          for (const info of await SessionManager.listAll()) {
+            if (seenSessionPaths.has(info.path)) continue;
+            const workspace = workspaceMetadata(info.cwd, info.path);
+            seenSessionPaths.add(info.path);
+            sessions.push({
+              id: info.id,
+              name:
+                info.name?.trim() ||
+                info.firstMessage ||
+                path.basename(info.path, ".jsonl"),
+              path: info.path,
+              isRunning: this.sessionRuntime.isSessionRunning(info.path),
+              timestamp: normalizeSessionDate(info.created),
+              updatedAt: normalizeSessionDate(info.modified),
+              ...workspace,
+            });
           }
 
-          if (sessionDir && fs.existsSync(sessionDir)) {
-            const files = fs
-              .readdirSync(sessionDir)
-              .filter((f: string) => f.endsWith(".jsonl"));
+          appendSessionManager(ctx.sessionManager, liveSessionFile, ctx.cwd);
 
-            for (const file of files) {
-              const filePath = path.join(sessionDir, file);
-              try {
-                appendSession(openSessionManager(filePath), filePath);
-              } catch {
-                // Skip malformed session files
-              }
-            }
+          for (const sessionManager of this.sessionRuntime.getCachedSessionManagers()) {
+            appendSessionManager(
+              sessionManager,
+              sessionManager.getSessionFile(),
+              ctx.cwd,
+            );
           }
 
           sessions.sort(compareSessionsByRecency);
@@ -4165,15 +4224,7 @@ export class WsRpcAdapter {
             type: "response" as const,
             command: "list_sessions" as const,
             success: true as const,
-            data: {
-              sessions: [] as Array<{
-                id: string;
-                name: string;
-                path: string;
-                isRunning?: boolean;
-                timestamp?: string;
-              }>,
-            },
+            data: { sessions: [] as WorkspaceSessionEntry[] },
           };
         }
       }

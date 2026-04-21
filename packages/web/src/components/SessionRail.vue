@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from "vue";
-import { Pencil, Trash2 } from "lucide-vue-next";
+import { ChevronRight, Pencil, Search, Trash2, X } from "lucide-vue-next";
+import { computed, nextTick, ref, watch } from "vue";
 import type { SessionEntry } from "../composables/useBridgeClient";
 
 const props = defineProps<{
@@ -15,29 +15,196 @@ const emit = defineEmits<{
   delete: [sessionPath: string];
 }>();
 
-/* ------------------------------------------------------------------
- * Context menu
- * ---------------------------------------------------------------- */
+const RECENT_SESSION_LIMIT = 10;
+const UNKNOWN_WORKSPACE_ID = "unknown-workspace";
+const MENU_WIDTH = 136;
+const MENU_HEIGHT = 80;
+
+interface WorkspaceGroup {
+  id: string;
+  name: string;
+  path: string;
+  sessions: SessionEntry[];
+  latestActivity: number;
+  isExpanded: boolean;
+  isActive: boolean;
+  hasRunningSession: boolean;
+  query: string;
+  recentSessions: SessionEntry[];
+  remainingSessions: SessionEntry[];
+  filteredRemainingSessions: SessionEntry[];
+}
+
 interface MenuState {
   visible: boolean;
   sessionPath: string | null;
   x: number;
   y: number;
-  flipX: boolean;
-  flipY: boolean;
 }
 
+const expandedWorkspaceIds = ref<Set<string>>(new Set());
+const activeOlderWorkspaceId = ref<string | null>(null);
+const workspaceQueries = ref<Record<string, string>>({});
+const editingPath = ref<string | null>(null);
+const editingName = ref("");
+const editInputRef = ref<HTMLInputElement | null>(null);
 const menu = ref<MenuState>({
   visible: false,
   sessionPath: null,
   x: 0,
   y: 0,
-  flipX: false,
-  flipY: false,
 });
 
-const MENU_WIDTH = 136;
-const MENU_HEIGHT = 80; // approx
+function sessionActivityValue(session: SessionEntry): number {
+  const parsed = Date.parse(session.updatedAt ?? session.timestamp ?? "");
+  return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
+}
+
+function getWorkspaceId(session: SessionEntry): string {
+  return session.workspaceId ?? session.workspacePath ?? UNKNOWN_WORKSPACE_ID;
+}
+
+function getWorkspacePath(session: SessionEntry): string {
+  return session.workspacePath ?? "Unknown workspace";
+}
+
+function getWorkspaceName(session: SessionEntry): string {
+  if (session.workspaceName) return session.workspaceName;
+  const workspacePath = getWorkspacePath(session);
+  const parts = workspacePath.split(/[\\/]/).filter(Boolean);
+  return parts.at(-1) ?? workspacePath;
+}
+
+function compareSessionsByActivity(
+  left: SessionEntry,
+  right: SessionEntry,
+): number {
+  const activityDelta =
+    sessionActivityValue(right) - sessionActivityValue(left);
+  if (activityDelta !== 0) return activityDelta;
+  return right.path.localeCompare(left.path);
+}
+
+function sessionMatchesQuery(session: SessionEntry, query: string): boolean {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return true;
+
+  return [
+    session.name,
+    session.path,
+    session.workspaceName,
+    session.workspacePath,
+  ]
+    .filter((value): value is string => typeof value === "string")
+    .some(value => value.toLowerCase().includes(normalizedQuery));
+}
+
+const workspaceGroups = computed<WorkspaceGroup[]>(() => {
+  const groups = new Map<
+    string,
+    {
+      id: string;
+      name: string;
+      path: string;
+      sessions: SessionEntry[];
+      latestActivity: number;
+    }
+  >();
+
+  for (const session of props.sessions) {
+    const id = getWorkspaceId(session);
+    const existing = groups.get(id);
+    const activity = sessionActivityValue(session);
+
+    if (existing) {
+      existing.sessions.push(session);
+      existing.latestActivity = Math.max(existing.latestActivity, activity);
+      continue;
+    }
+
+    groups.set(id, {
+      id,
+      name: getWorkspaceName(session),
+      path: getWorkspacePath(session),
+      sessions: [session],
+      latestActivity: activity,
+    });
+  }
+
+  return Array.from(groups.values())
+    .map(group => {
+      const sessions = [...group.sessions].sort(compareSessionsByActivity);
+      const query = workspaceQueries.value[group.id] ?? "";
+      const remainingSessions = sessions.slice(RECENT_SESSION_LIMIT);
+
+      return {
+        ...group,
+        sessions,
+        isExpanded: expandedWorkspaceIds.value.has(group.id),
+        isActive: sessions.some(
+          session => session.path === props.activeSessionPath,
+        ),
+        hasRunningSession: sessions.some(session =>
+          props.runningSessionPaths.includes(session.path),
+        ),
+        query,
+        recentSessions: sessions.slice(0, RECENT_SESSION_LIMIT),
+        remainingSessions,
+        filteredRemainingSessions: remainingSessions.filter(session =>
+          sessionMatchesQuery(session, query),
+        ),
+      };
+    })
+    .sort((left, right) => {
+      const activityDelta = right.latestActivity - left.latestActivity;
+      if (activityDelta !== 0) return activityDelta;
+      return left.name.localeCompare(right.name);
+    });
+});
+
+const activeOlderWorkspace = computed(
+  () =>
+    workspaceGroups.value.find(
+      workspace => workspace.id === activeOlderWorkspaceId.value,
+    ) ?? null,
+);
+
+const menuPanelStyle = computed(() => ({
+  left: `${menu.value.x}px`,
+  top: `${menu.value.y}px`,
+}));
+
+function expandWorkspace(workspaceId: string) {
+  if (expandedWorkspaceIds.value.has(workspaceId)) return;
+  expandedWorkspaceIds.value = new Set([
+    ...expandedWorkspaceIds.value,
+    workspaceId,
+  ]);
+}
+
+function toggleWorkspace(workspaceId: string) {
+  const next = new Set(expandedWorkspaceIds.value);
+  if (next.has(workspaceId)) {
+    next.delete(workspaceId);
+  } else {
+    next.add(workspaceId);
+  }
+  expandedWorkspaceIds.value = next;
+}
+
+function openOlderSessions(workspaceId: string) {
+  workspaceQueries.value[workspaceId] ??= "";
+  activeOlderWorkspaceId.value = workspaceId;
+}
+
+function closeOlderSessions() {
+  activeOlderWorkspaceId.value = null;
+  closeMenu();
+}
+
+function isSessionRunning(sessionPath: string): boolean {
+  return props.runningSessionPaths.includes(sessionPath);
+}
 
 function openMenu(event: MouseEvent, sessionPath: string) {
   event.preventDefault();
@@ -45,40 +212,22 @@ function openMenu(event: MouseEvent, sessionPath: string) {
 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
-  let mx = event.clientX + 4;
-  let my = event.clientY + 4;
-  const flipX = mx + MENU_WIDTH > vw;
-  const flipY = my + MENU_HEIGHT > vh;
-  if (flipX) mx = event.clientX - MENU_WIDTH - 4;
-  if (flipY) my = event.clientY - MENU_HEIGHT - 4;
+  let x = event.clientX + 4;
+  let y = event.clientY + 4;
+  if (x + MENU_WIDTH > vw) x = event.clientX - MENU_WIDTH - 4;
+  if (y + MENU_HEIGHT > vh) y = event.clientY - MENU_HEIGHT - 4;
 
   menu.value = {
     visible: true,
     sessionPath,
-    x: mx,
-    y: my,
-    flipX,
-    flipY,
+    x,
+    y,
   };
 }
 
 function closeMenu() {
   menu.value.visible = false;
 }
-
-watch(
-  () => props.sessions.map(s => s.path).join(","),
-  () => {
-    closeMenu();
-  },
-);
-
-/* ------------------------------------------------------------------
- * Rename inline
- * ---------------------------------------------------------------- */
-const editingPath = ref<string | null>(null);
-const editingName = ref("");
-const editInputRef = ref<HTMLInputElement | null>(null);
 
 function startRename(sessionPath: string) {
   const session = props.sessions.find(s => s.path === sessionPath);
@@ -106,113 +255,266 @@ function cancelRename() {
   editingName.value = "";
 }
 
-/* ------------------------------------------------------------------
- * Delete
- * ---------------------------------------------------------------- */
 function handleDelete(sessionPath: string) {
   closeMenu();
   if (!confirm("Delete this session? This cannot be undone.")) return;
   emit("delete", sessionPath);
 }
 
-function handleClick(sessionPath: string) {
+function handleSessionSelect(sessionPath: string, closeModal = false) {
   if (editingPath.value === sessionPath) return;
   emit("select", sessionPath);
+  if (closeModal) closeOlderSessions();
 }
 
-/* ------------------------------------------------------------------
- * Menu position style (fixed overlay + positioned panel)
- * ---------------------------------------------------------------- */
-const menuPanelStyle = computed(() => ({
-  left: `${menu.value.x}px`,
-  top: `${menu.value.y}px`,
-}));
+watch(
+  () => props.sessions.map(session => session.path).join(","),
+  () => {
+    closeMenu();
+  },
+);
+
+watch(
+  () => [props.sessions, props.activeSessionPath] as const,
+  ([sessions, activeSessionPath]) => {
+    const activeSession = activeSessionPath
+      ? sessions.find(session => session.path === activeSessionPath)
+      : undefined;
+
+    if (activeSession) {
+      expandWorkspace(getWorkspaceId(activeSession));
+      return;
+    }
+
+    if (sessions.length > 0 && expandedWorkspaceIds.value.size === 0) {
+      expandWorkspace(getWorkspaceId(sessions[0]));
+    }
+  },
+  { immediate: true },
+);
 </script>
 
 <template>
   <div class="session-rail" @click="closeMenu">
     <div class="rail-header">
-      <span class="rail-title">Sessions</span>
+      <span class="rail-title">Workspaces</span>
       <div class="rail-actions">
         <slot name="header-actions"></slot>
       </div>
     </div>
 
-    <ul v-if="sessions.length > 0" class="rail-list">
-      <li
-        v-for="s in sessions"
-        :key="s.id"
-        class="rail-item"
+    <div v-if="workspaceGroups.length > 0" class="rail-list">
+      <section
+        v-for="workspace in workspaceGroups"
+        :key="workspace.id"
+        class="workspace-group"
         :class="{
-          active: s.path === activeSessionPath,
-          running: runningSessionPaths.includes(s.path),
+          expanded: workspace.isExpanded,
+          active: workspace.isActive,
+          running: workspace.hasRunningSession,
         }"
-        :title="s.path"
-        @click="handleClick(s.path)"
-        @contextmenu.prevent="openMenu($event, s.path)"
       >
-        <span class="item-indicator"></span>
-
-        <template v-if="editingPath === s.path">
-          <input
-            ref="editInputRef"
-            v-model="editingName"
-            class="item-input"
-            type="text"
-            @keydown.enter.prevent="confirmRename"
-            @keydown.esc.prevent="cancelRename"
-            @blur="confirmRename"
-            @click.stop
-          />
-        </template>
-        <template v-else>
-          <span class="item-label">{{ s.name }}</span>
-        </template>
-
-        <span
-          v-if="runningSessionPaths.includes(s.path)"
-          class="item-status"
-          role="status"
-          aria-label="Agent running"
-          title="Agent running"
+        <button
+          class="workspace-row"
+          type="button"
+          :aria-expanded="workspace.isExpanded"
+          :title="workspace.path"
+          @click="toggleWorkspace(workspace.id)"
         >
-          <span class="item-status-dot" aria-hidden="true"></span>
-        </span>
-      </li>
-    </ul>
-    <p v-else class="rail-empty">No sessions</p>
+          <ChevronRight class="workspace-caret" aria-hidden="true" />
+          <span class="workspace-copy">
+            <span class="workspace-name">{{ workspace.name }}</span>
+            <span class="workspace-path">{{ workspace.path }}</span>
+          </span>
+          <span class="workspace-count">{{ workspace.sessions.length }}</span>
+          <span
+            v-if="workspace.hasRunningSession"
+            class="workspace-running"
+            role="status"
+            aria-label="Agent running in workspace"
+            title="Agent running in workspace"
+          ></span>
+        </button>
 
-    <!-- Global overlay so clicking anywhere dismisses the menu -->
-    <div
-      v-if="menu.visible"
-      class="menu-overlay"
-      @click.stop="closeMenu"
-      @contextmenu.prevent.stop="closeMenu"
+        <div v-if="workspace.isExpanded" class="session-list">
+          <div
+            v-for="s in workspace.recentSessions"
+            :key="s.path"
+            class="rail-item"
+            role="button"
+            tabindex="0"
+            :class="{
+              active: s.path === activeSessionPath,
+              running: isSessionRunning(s.path),
+            }"
+            :title="s.path"
+            @click="handleSessionSelect(s.path)"
+            @keydown.enter.prevent="handleSessionSelect(s.path)"
+            @contextmenu.prevent="openMenu($event, s.path)"
+          >
+            <span class="item-indicator"></span>
+            <input
+              v-if="editingPath === s.path"
+              ref="editInputRef"
+              v-model="editingName"
+              class="item-input"
+              type="text"
+              @keydown.enter.prevent="confirmRename"
+              @keydown.esc.prevent="cancelRename"
+              @blur="confirmRename"
+              @click.stop
+            />
+            <span v-else class="item-label">{{ s.name }}</span>
+            <span
+              v-if="isSessionRunning(s.path)"
+              class="item-status"
+              role="status"
+              aria-label="Agent running"
+              title="Agent running"
+            >
+              <span class="item-status-dot" aria-hidden="true"></span>
+            </span>
+          </div>
+
+          <div
+            v-if="workspace.remainingSessions.length > 0"
+            class="older-sessions"
+          >
+            <button
+              class="older-toggle"
+              type="button"
+              aria-haspopup="dialog"
+              @click="openOlderSessions(workspace.id)"
+            >
+              <span>
+                Show {{ workspace.remainingSessions.length }} older sessions
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <p v-else class="rail-empty">No workspaces</p>
+  </div>
+
+  <div
+    v-if="activeOlderWorkspace"
+    class="older-modal-overlay"
+    @click.self="closeOlderSessions"
+  >
+    <section
+      class="older-modal"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="`${activeOlderWorkspace.name} older sessions`"
+      @keydown.escape="closeOlderSessions"
     >
-      <div
-        class="menu-panel"
-        :class="{ show: menu.visible }"
-        :style="menuPanelStyle"
-        @click.stop
-      >
+      <header class="older-modal-header">
+        <div class="older-modal-title-block">
+          <span class="older-modal-kicker">Older sessions</span>
+          <h2 class="older-modal-title">{{ activeOlderWorkspace.name }}</h2>
+          <p class="older-modal-path">{{ activeOlderWorkspace.path }}</p>
+        </div>
         <button
-          class="menu-item"
+          class="older-modal-close"
           type="button"
-          @click="startRename(menu.sessionPath!)"
+          aria-label="Close older sessions"
+          @click="closeOlderSessions"
         >
-          <Pencil class="menu-icon" aria-hidden="true" />
-          <span>Rename</span>
+          <X aria-hidden="true" />
         </button>
-        <div class="menu-divider"></div>
-        <button
-          class="menu-item danger"
-          type="button"
-          @click="handleDelete(menu.sessionPath!)"
+      </header>
+
+      <label class="modal-session-search">
+        <Search aria-hidden="true" />
+        <input
+          v-model="workspaceQueries[activeOlderWorkspace.id]"
+          type="search"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="Search older sessions"
+          autofocus
+        />
+      </label>
+
+      <div class="older-modal-list">
+        <div
+          v-for="s in activeOlderWorkspace.filteredRemainingSessions"
+          :key="s.path"
+          class="modal-session-item"
+          role="button"
+          tabindex="0"
+          :class="{
+            active: s.path === activeSessionPath,
+            running: isSessionRunning(s.path),
+          }"
+          :title="s.path"
+          @click="handleSessionSelect(s.path, true)"
+          @keydown.enter.prevent="handleSessionSelect(s.path, true)"
+          @contextmenu.prevent="openMenu($event, s.path)"
         >
-          <Trash2 class="menu-icon" aria-hidden="true" />
-          <span>Delete</span>
-        </button>
+          <span class="item-indicator"></span>
+          <span class="modal-session-copy">
+            <input
+              v-if="editingPath === s.path"
+              ref="editInputRef"
+              v-model="editingName"
+              class="item-input modal-item-input"
+              type="text"
+              @keydown.enter.prevent="confirmRename"
+              @keydown.esc.prevent="cancelRename"
+              @blur="confirmRename"
+              @click.stop
+            />
+            <span v-else class="modal-session-name">{{ s.name }}</span>
+            <span class="modal-session-path">{{ s.path }}</span>
+          </span>
+          <span
+            v-if="isSessionRunning(s.path)"
+            class="item-status"
+            role="status"
+            aria-label="Agent running"
+            title="Agent running"
+          >
+            <span class="item-status-dot" aria-hidden="true"></span>
+          </span>
+        </div>
+
+        <p
+          v-if="activeOlderWorkspace.filteredRemainingSessions.length === 0"
+          class="modal-empty"
+        >
+          No matching sessions
+        </p>
       </div>
+    </section>
+  </div>
+
+  <div
+    v-if="menu.visible"
+    class="menu-overlay"
+    @click.stop="closeMenu"
+    @contextmenu.prevent.stop="closeMenu"
+  >
+    <div class="menu-panel show" :style="menuPanelStyle" @click.stop>
+      <button
+        class="menu-item"
+        type="button"
+        @click="startRename(menu.sessionPath!)"
+      >
+        <Pencil class="menu-icon" aria-hidden="true" />
+        <span>Rename</span>
+      </button>
+      <div class="menu-divider"></div>
+      <button
+        class="menu-item danger"
+        type="button"
+        @click="handleDelete(menu.sessionPath!)"
+      >
+        <Trash2 class="menu-icon" aria-hidden="true" />
+        <span>Delete</span>
+      </button>
     </div>
   </div>
 </template>
@@ -250,10 +552,120 @@ const menuPanelStyle = computed(() => ({
 }
 
 .rail-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
   overflow-y: auto;
+  padding: 0 0 8px;
+}
+
+.workspace-group {
+  border-radius: 10px;
+}
+
+.workspace-group.active {
+  background: color-mix(in srgb, var(--panel-2) 64%, transparent);
+}
+
+.workspace-row,
+.rail-item,
+.older-toggle {
+  width: 100%;
+  border: 0;
+  font: inherit;
+  text-align: left;
+}
+
+.workspace-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 42px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.workspace-row:hover {
+  background: var(--panel-2);
+  color: var(--text);
+}
+
+.workspace-group.active > .workspace-row {
+  color: var(--text);
+}
+
+.workspace-caret {
+  width: 14px;
+  height: 14px;
+  color: var(--text-subtle);
+  flex-shrink: 0;
+  transition: transform 0.14s ease;
+}
+
+.workspace-group.expanded .workspace-caret {
+  transform: rotate(90deg);
+}
+
+.workspace-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.workspace-name,
+.workspace-path,
+.item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.workspace-path {
+  font-size: 0.68rem;
+  color: var(--text-subtle);
+}
+
+.workspace-count {
+  min-width: 24px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.workspace-running {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--diff-added-accent);
+  flex-shrink: 0;
+}
+
+.session-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 0 6px 20px;
 }
 
 .rail-item {
@@ -263,14 +675,15 @@ const menuPanelStyle = computed(() => ({
   height: 32px;
   padding: 0 10px;
   border-radius: 8px;
+  background: transparent;
   color: var(--text-muted);
   cursor: pointer;
   font-size: 0.82rem;
+  position: relative;
+  user-select: none;
   transition:
     background 0.12s ease,
     color 0.12s ease;
-  position: relative;
-  user-select: none;
 }
 
 .rail-item:hover {
@@ -301,20 +714,18 @@ const menuPanelStyle = computed(() => ({
 .item-label {
   flex: 1 1 auto;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .item-input {
   flex: 1 1 auto;
   min-width: 0;
-  height: 22px;
+  height: 24px;
   padding: 0 6px;
   border: 1px solid var(--border-strong);
-  border-radius: 5px;
+  border-radius: 6px;
   background: var(--panel);
   color: var(--text);
+  font: inherit;
   font-size: 0.82rem;
   outline: none;
 }
@@ -346,6 +757,31 @@ const menuPanelStyle = computed(() => ({
     session-running-ping 1.8s ease-out infinite;
 }
 
+.older-sessions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 2px;
+}
+
+.older-toggle {
+  height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  font-size: 0.74rem;
+  transition:
+    background 0.12s ease,
+    color 0.12s ease;
+}
+
+.older-toggle:hover {
+  background: var(--panel-2);
+  color: var(--text-muted);
+}
+
 .rail-empty {
   margin: 0;
   padding: 8px 10px;
@@ -353,36 +789,215 @@ const menuPanelStyle = computed(() => ({
   color: var(--text-subtle);
 }
 
-@keyframes session-running-blink {
-  0%,
-  100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.38;
-    transform: scale(0.86);
-  }
+.older-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--overlay);
 }
 
-@keyframes session-running-ping {
-  0% {
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--diff-added-accent) 34%, transparent);
-  }
-  75% {
-    box-shadow: 0 0 0 6px
-      color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
-  }
-  100% {
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
-  }
+.older-modal {
+  width: min(720px, 100%);
+  max-height: min(720px, calc(100vh - 48px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: 16px;
+  background: var(--bg-elevated);
+  color: var(--text);
+  box-shadow: var(--shadow);
 }
 
-/* ------------------------------------------------------------------
- * Context menu
- * ---------------------------------------------------------------- */
+.older-modal-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.older-modal-title-block {
+  min-width: 0;
+}
+
+.older-modal-kicker {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.older-modal-title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  font-size: 1rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.older-modal-path {
+  margin: 4px 0 0;
+  overflow: hidden;
+  color: var(--text-subtle);
+  font-size: 0.78rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.older-modal-close {
+  width: 30px;
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.older-modal-close:hover {
+  background: var(--panel-2);
+  color: var(--text-muted);
+}
+
+.older-modal-close svg {
+  width: 16px;
+  height: 16px;
+}
+
+.modal-session-search {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 52px;
+  margin: 18px 18px;
+  padding: 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: var(--text-subtle);
+  background: var(--panel);
+}
+
+.modal-session-search:focus-within {
+  border-color: var(--border-strong);
+}
+
+.modal-session-search svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.modal-session-search input {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  border: 0;
+  outline: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 1rem;
+}
+
+.modal-session-search input::placeholder {
+  color: var(--text-subtle);
+}
+
+.older-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0 14px 16px;
+}
+
+.modal-session-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  user-select: none;
+}
+
+.modal-session-item:hover {
+  background: var(--panel-2);
+}
+
+.modal-session-item.active {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+.modal-session-item.active .item-indicator {
+  background: var(--text);
+}
+
+.modal-session-item.running .item-indicator {
+  background: var(--diff-added-accent);
+}
+
+.modal-session-copy {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.modal-session-name,
+.modal-session-path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal-session-name {
+  font-size: 0.86rem;
+}
+
+.modal-session-path {
+  color: var(--text-subtle);
+  font-size: 0.72rem;
+}
+
+.modal-item-input {
+  width: 100%;
+  flex: 0 0 auto;
+  font-size: 0.86rem;
+}
+
+.modal-empty {
+  margin: 0;
+  padding: 18px 10px;
+  color: var(--text-subtle);
+  font-size: 0.84rem;
+}
+
 .menu-overlay {
   position: fixed;
   inset: 0;
@@ -394,8 +1009,8 @@ const menuPanelStyle = computed(() => ({
   position: fixed;
   min-width: 136px;
   padding: 4px;
-  border-radius: 10px;
   border: 1px solid var(--border);
+  border-radius: 10px;
   background: color-mix(in srgb, var(--panel-2) 98%, white 2%);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent),
@@ -430,7 +1045,9 @@ const menuPanelStyle = computed(() => ({
   font-size: 0.78rem;
   cursor: pointer;
   text-align: left;
-  transition: background 0.1s ease, color 0.1s ease;
+  transition:
+    background 0.1s ease,
+    color 0.1s ease;
 }
 
 .menu-item:hover {
@@ -463,5 +1080,46 @@ const menuPanelStyle = computed(() => ({
   margin: 1px 6px;
   background: var(--border);
   opacity: 0.6;
+}
+
+@media (max-width: 700px) {
+  .older-modal-overlay {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .older-modal {
+    max-height: calc(100vh - 24px);
+  }
+}
+
+@keyframes session-running-blink {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  50% {
+    opacity: 0.38;
+    transform: scale(0.86);
+  }
+}
+
+@keyframes session-running-ping {
+  0% {
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, var(--diff-added-accent) 34%, transparent);
+  }
+
+  75% {
+    box-shadow: 0 0 0 6px
+      color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0
+      color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
+  }
 }
 </style>

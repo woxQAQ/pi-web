@@ -590,6 +590,11 @@ export interface RpcResponseMap {
       name: string;
       path: string;
       isRunning?: boolean;
+      timestamp?: string;
+      updatedAt?: string;
+      workspaceId?: string;
+      workspaceName?: string;
+      workspacePath?: string;
     }>;
   };
   list_tree_entries: { entries: RpcTreeEntry[]; sessionPath?: string };

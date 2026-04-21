@@ -162,6 +162,7 @@ describe("WsRpcAdapter", () => {
 
   beforeEach(() => {
     createAgentSessionMock.mockReset();
+    vi.spyOn(SessionManager, "listAll").mockResolvedValue([]);
     ws = createMockWebSocket();
     context = createMockContext();
     eventBus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
@@ -1901,6 +1902,28 @@ describe("WsRpcAdapter", () => {
       (
         context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
       ).mockReturnValue(currentSessionFile);
+      vi.mocked(SessionManager.listAll).mockResolvedValue([
+        {
+          path: currentSessionFile,
+          id: "current-id",
+          cwd: "/tmp",
+          created: new Date("2025-01-02T00:00:00Z"),
+          modified: new Date("2025-01-02T00:00:00Z"),
+          messageCount: 1,
+          firstMessage: "Current first prompt",
+          allMessagesText: "Current first prompt",
+        },
+        {
+          path: olderSessionFile,
+          id: "older-id",
+          cwd: "/tmp",
+          created: new Date("2025-01-01T00:00:00Z"),
+          modified: new Date("2025-01-01T00:00:00Z"),
+          messageCount: 1,
+          firstMessage: "Older first prompt",
+          allMessagesText: "Older first prompt",
+        },
+      ]);
 
       const command: RpcCommand = { id: "cmd-1", type: "list_sessions" };
       (
@@ -1925,14 +1948,22 @@ describe("WsRpcAdapter", () => {
           name: "Current first prompt",
           path: currentSessionFile,
           isRunning: false,
-          timestamp: "2025-01-02T00:00:00Z",
+          timestamp: "2025-01-02T00:00:00.000Z",
+          updatedAt: "2025-01-02T00:00:00.000Z",
+          workspaceId: "/tmp",
+          workspaceName: "tmp",
+          workspacePath: "/tmp",
         },
         {
           id: "older-id",
           name: "Older first prompt",
           path: olderSessionFile,
           isRunning: false,
-          timestamp: "2025-01-01T00:00:00Z",
+          timestamp: "2025-01-01T00:00:00.000Z",
+          updatedAt: "2025-01-01T00:00:00.000Z",
+          workspaceId: "/tmp",
+          workspaceName: "tmp",
+          workspacePath: "/tmp",
         },
       ]);
 
@@ -1967,6 +1998,18 @@ describe("WsRpcAdapter", () => {
       (
         context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
       ).mockReturnValue(liveSessionFile);
+      vi.mocked(SessionManager.listAll).mockResolvedValue([
+        {
+          path: liveSessionFile,
+          id: "live-id",
+          cwd: tmpDir,
+          created: new Date("2025-01-02T00:00:00Z"),
+          modified: new Date("2025-01-02T00:00:00Z"),
+          messageCount: 1,
+          firstMessage: "Current session",
+          allMessagesText: "Current session",
+        },
+      ]);
 
       const newSessionCommand: RpcCommand = {
         id: "cmd-new",
@@ -2039,6 +2082,18 @@ describe("WsRpcAdapter", () => {
       (
         context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
       ).mockReturnValue(liveSessionFile);
+      vi.mocked(SessionManager.listAll).mockResolvedValue([
+        {
+          path: liveSessionFile,
+          id: "live-id",
+          cwd: tmpDir,
+          created: new Date("2025-01-02T00:00:00Z"),
+          modified: new Date("2025-01-02T00:00:00Z"),
+          messageCount: 1,
+          firstMessage: "Current session",
+          allMessagesText: "Current session",
+        },
+      ]);
 
       const newSessionCommand: RpcCommand = {
         id: "cmd-new",
