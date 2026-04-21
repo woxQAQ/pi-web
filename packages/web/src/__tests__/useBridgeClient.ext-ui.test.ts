@@ -1263,7 +1263,7 @@ describe("extension_ui_request handling", () => {
               data: "ZmFrZS1pbWFnZQ==",
             },
           ],
-          streamingBehavior: "steer",
+          streamingBehavior: "followUp",
         },
       }),
     );

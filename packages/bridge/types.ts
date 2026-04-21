@@ -262,7 +262,8 @@ export interface RpcCommandMap {
   fork: { entryId: string };
   get_fork_messages: {};
   get_last_assistant_text: {};
-  set_session_name: { name: string };
+  set_session_name: { name: string; sessionPath?: string };
+  delete_session: { sessionPath: string };
 
   /** Messages / Commands */
   get_messages: {
@@ -564,6 +565,7 @@ export interface RpcResponseMap {
   get_fork_messages: { messages: Array<{ entryId: string; text: string }> };
   get_last_assistant_text: { text: string | null };
   set_session_name: void;
+  delete_session: void;
   get_messages: RpcTranscriptPage & { direction: "latest" | "older" };
   get_commands: { commands: RpcSlashCommand[] };
   list_sessions: {

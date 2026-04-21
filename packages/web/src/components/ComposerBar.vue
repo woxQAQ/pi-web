@@ -53,6 +53,8 @@ const props = defineProps<{
     preview: string;
     hasImages: boolean;
   } | null;
+  pendingMessageCount: number;
+  editQueuedPayload: { text: string; images: RpcImageContent[] } | null;
 }>();
 
 const emit = defineEmits<{
@@ -61,6 +63,7 @@ const emit = defineEmits<{
       message: string;
       images: RpcImageContent[];
       revisionEntryId?: string;
+      steer?: boolean;
     },
   ];
   abort: [];
@@ -137,7 +140,6 @@ const currentModelText = computed(() => {
 const normalizedInputText = computed(() =>
   normalizeSubmittedText(inputText.value),
 );
-const showStopButton = computed(() => props.isStreaming);
 const hasAttachments = computed(() => attachments.value.length > 0);
 const canSubmit = computed(
   () =>
@@ -145,6 +147,8 @@ const canSubmit = computed(
     (normalizedInputText.value.length > 0 || hasAttachments.value),
 );
 const canAbort = computed(() => !isDisabled.value && props.isStreaming);
+const showStopButton = computed(() => props.isStreaming && !canSubmit.value);
+const hasPendingMessages = computed(() => props.pendingMessageCount > 0);
 const attachmentSummary = computed(() => {
   if (attachmentNotice.value) return attachmentNotice.value;
   if (!attachments.value.length) return "";
@@ -312,6 +316,23 @@ watch(
   },
 );
 
+watch(
+  () => props.editQueuedPayload,
+  payload => {
+    if (!payload) return;
+    inputText.value = payload.text;
+    attachments.value = [];
+    if (fileInputRef.value) {
+      fileInputRef.value.value = "";
+    }
+    clearAttachmentNotice();
+    dismissedCommandKey.value = null;
+    dismissedMentionKey.value = null;
+    revisionBackup.value = null;
+    focusComposer({ reveal: true });
+  },
+);
+
 function clearAttachmentNotice() {
   if (attachmentNoticeTimer) {
     clearTimeout(attachmentNoticeTimer);
@@ -369,11 +390,12 @@ function clearAttachments() {
   }
 }
 
-function submitMessage(message: string) {
+function submitMessage(message: string, steer: boolean = false) {
   emit("submit", {
     message,
     images: toRpcImageContent(attachments.value),
     revisionEntryId: props.revision?.entryId,
+    steer,
   });
   inputText.value = "";
   cursorOffset.value = 0;
@@ -385,7 +407,7 @@ function submitMessage(message: string) {
   resizeTextarea();
 }
 
-function handleSubmit() {
+function handleSubmit(steer: boolean = false) {
   const text = normalizedInputText.value;
   if ((!text && !hasAttachments.value) || isDisabled.value) return;
 
@@ -394,7 +416,7 @@ function handleSubmit() {
     return;
   }
 
-  submitMessage(text);
+  submitMessage(text, steer);
 }
 
 function handleAbort() {
@@ -632,10 +654,10 @@ function handleInputKeydown(e: KeyboardEvent) {
     return;
   }
 
-  if (e.key === "Enter" && !e.shiftKey) {
+  if (e.key === "Enter") {
     if (composing) return;
     e.preventDefault();
-    handleSubmit();
+    handleSubmit(e.shiftKey);
   }
 }
 
@@ -785,6 +807,14 @@ resizeTextarea();
             <span v-if="attachmentSummary" class="attachment-summary">
               {{ attachmentSummary }}
             </span>
+            <div
+              v-if="hasPendingMessages"
+              class="pending-queue-indicator"
+              :title="`${pendingMessageCount} message${pendingMessageCount > 1 ? 's' : ''} queued`"
+            >
+              <span class="pending-pulse"></span>
+              <span class="pending-label">{{ pendingMessageCount }}</span>
+            </div>
             <button
               class="send-btn"
               :class="{ stop: showStopButton }"
@@ -972,6 +1002,46 @@ resizeTextarea();
 
 .attachment-summary {
   font-family: var(--pi-font-sans);
+}
+
+.pending-queue-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border-strong) 60%, transparent);
+  background: color-mix(in srgb, var(--panel-2) 80%, transparent);
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  user-select: none;
+}
+
+.pending-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #f59e0b;
+  animation: pending-pulse 1.4s ease-in-out infinite;
+}
+
+.pending-label {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+@keyframes pending-pulse {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.85);
+  }
 }
 
 .attachment-chip-name {

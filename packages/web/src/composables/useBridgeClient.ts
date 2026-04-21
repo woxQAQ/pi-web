@@ -161,6 +161,11 @@ const isCompacting = computed(
   () => compactingRequestCount.value > 0 || remoteCompactionActive.value,
 );
 
+// Locally queued follow-up messages that are not yet reflected in the transcript.
+const queuedUserMessages = ref<
+  Array<{ text: string; images: RpcImageContent[]; timestamp: number }>
+>([]);
+
 // Session stats (context usage + cost)
 const sessionStats = ref<RpcSessionStats | null>(null);
 const gitRepoState = ref<RpcGitRepoState | null>(null);
@@ -575,6 +580,7 @@ function applySessionSnapshotResponse(
   }
   if (previousSessionPath !== getDisplayedSessionPath()) {
     resetGitRepoState();
+    isStreaming.value = false;
   }
   if (options?.refreshState) {
     sendCommand({ type: "get_state" }).catch(() => {});
@@ -658,11 +664,32 @@ function setCompactionState(isCompacting: boolean) {
   };
 }
 
-function sendPrompt(message: string, images?: RpcImageContent[]) {
+function sendPrompt(
+  message: string,
+  images?: RpcImageContent[],
+  streamingBehavior: "steer" | "followUp" = "followUp",
+) {
+  if (streamingBehavior === "followUp") {
+    queuedUserMessages.value = [
+      ...queuedUserMessages.value,
+      { text: message, images: images ?? [], timestamp: Date.now() },
+    ];
+  }
   sendEnvelope({
     type: "command",
-    payload: { type: "prompt", message, images, streamingBehavior: "steer" },
+    payload: { type: "prompt", message, images, streamingBehavior },
   });
+}
+
+function cancelQueuedMessage(index: number) {
+  queuedUserMessages.value = queuedUserMessages.value.filter((_, i) => i !== index);
+}
+
+function editQueuedMessage(index: number): { text: string; images: RpcImageContent[] } | null {
+  const item = queuedUserMessages.value[index];
+  if (!item) return null;
+  cancelQueuedMessage(index);
+  return { text: item.text, images: item.images };
 }
 
 async function fetchWorkspaceEntries(
@@ -1092,6 +1119,7 @@ function handleResponse(payload: RpcResponse) {
           transcriptInitialLoading.value = false;
           treeEntries.value = [];
           sessionState.value = null;
+          isStreaming.value = false;
         }
         setCompactionState(false);
         sendCommand({ type: "list_sessions" }).catch(() => {});
@@ -1190,12 +1218,18 @@ function handleEvent(payload: RpcBridgeEvent) {
       if (Array.isArray(data.messages)) {
         applyTranscriptPage(data, "replace");
       }
+      // Snapshot contains the ground-truth transcript; clear local queue.
+      queuedUserMessages.value = [];
       break;
     }
     case "transcript_upsert": {
       const data = payload as RpcTranscriptUpsertEvent;
       if (data.message) {
         upsertTranscriptMessage(data.message, data.sessionPath ?? null);
+        // If the server inserted a user message, it is no longer queued locally.
+        if (data.message.role === "user" && queuedUserMessages.value.length > 0) {
+          queuedUserMessages.value = queuedUserMessages.value.slice(1);
+        }
       }
       break;
     }
@@ -1440,6 +1474,9 @@ export function useBridgeClient() {
     gitRepoState: readonly(gitRepoState),
     gitRepoLoading: readonly(gitRepoLoading),
     gitBranchSwitching: readonly(gitBranchSwitching),
+    // Pending messages
+    pendingMessageCount: computed(() => sessionState.value?.pendingMessageCount ?? 0),
+    queuedUserMessages: readonly(queuedUserMessages),
     // Reconnect diagnostics
     isReconnecting,
     reconnectCount: readonly(reconnectCount),
@@ -1464,6 +1501,12 @@ export function useBridgeClient() {
     compactSession,
     setThinkingLevel,
     setAutoCompactionEnabled,
+    renameSession: (sessionPath: string, name: string) =>
+      sendCommand({ type: "set_session_name", sessionPath, name }),
+    deleteSession: (sessionPath: string) =>
+      sendCommand({ type: "delete_session", sessionPath }),
+    cancelQueuedMessage,
+    editQueuedMessage,
     connect,
     disconnect,
   };

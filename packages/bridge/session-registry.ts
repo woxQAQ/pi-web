@@ -259,6 +259,14 @@ export class DetachedSessionRegistry {
     return this.openSession(sessionPath).ensureSession();
   }
 
+  removeSession(sessionPath: string): void {
+    const handle = this.handles.get(sessionPath);
+    if (handle) {
+      handle.dispose();
+      this.handles.delete(sessionPath);
+    }
+  }
+
   dispose(): void {
     for (const handle of this.handles.values()) {
       handle.dispose();

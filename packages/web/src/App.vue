@@ -61,12 +61,18 @@ const {
   createGitBranch,
   setThinkingLevel,
   setAutoCompactionEnabled,
+  renameSession,
+  deleteSession,
   pendingExtensionRequest,
   notifications,
   statusEntries,
   prefillText,
   respondToUIRequest,
   dismissNotification,
+  pendingMessageCount,
+  queuedUserMessages,
+  cancelQueuedMessage,
+  editQueuedMessage,
 } = useBridgeClient();
 
 const activeSessionPath = computed(
@@ -106,6 +112,7 @@ const pendingRevision = ref<{
   preview: string;
   hasImages: boolean;
 } | null>(null);
+const editQueuedPayload = ref<{ text: string; images: RpcImageContent[] } | null>(null);
 
 const THEME_CACHE_KEY = "pi-web-theme";
 const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
@@ -231,6 +238,28 @@ async function handleNewSession() {
   }
 }
 
+async function handleRenameSession(sessionPath: string, name: string) {
+  try {
+    const response = await renameSession(sessionPath, name);
+    if (response.success) {
+      handleRefreshSessions();
+    }
+  } catch {
+    // Ignore
+  }
+}
+
+async function handleDeleteSession(sessionPath: string) {
+  try {
+    const response = await deleteSession(sessionPath);
+    if (response.success) {
+      handleRefreshSessions();
+    }
+  } catch {
+    // Ignore
+  }
+}
+
 function toggleOutlineSidebar() {
   const nextOpen = !outlineSidebarOpen.value;
   outlineSidebarOpen.value = nextOpen;
@@ -314,6 +343,7 @@ async function handlePrompt(payload: {
   message: string;
   images: RpcImageContent[];
   revisionEntryId?: string;
+  steer?: boolean;
 }) {
   const compactCommand = parseCompactSlashCommand(payload.message);
   if (compactCommand) {
@@ -341,7 +371,11 @@ async function handlePrompt(payload: {
   }
 
   pendingRevision.value = null;
-  sendPrompt(payload.message, payload.images);
+  sendPrompt(
+    payload.message,
+    payload.images,
+    payload.steer ? "steer" : "followUp",
+  );
 }
 
 function handleReviseMessage(payload: {
@@ -355,6 +389,16 @@ function handleReviseMessage(payload: {
 
 function handleCancelRevision() {
   pendingRevision.value = null;
+}
+
+function handleCancelQueued(index: number) {
+  cancelQueuedMessage(index);
+}
+
+function handleEditQueued(index: number) {
+  const item = editQueuedMessage(index);
+  if (!item) return;
+  editQueuedPayload.value = item;
 }
 
 function handleAbort() {
@@ -448,6 +492,8 @@ onBeforeUnmount(() => {
       @select-session="handleSessionSelect"
       @refresh-sessions="handleRefreshSessions"
       @new-session="handleNewSession"
+      @rename-session="handleRenameSession"
+      @delete-session="handleDeleteSession"
     />
 
     <div class="app-main-column">
@@ -512,11 +558,16 @@ onBeforeUnmount(() => {
           :prefill-text="prefillText"
           :pending-revision="pendingRevision"
           :allow-revision="connectionStatus === 'connected'"
+          :pending-message-count="pendingMessageCount"
+          :queued-user-messages="queuedUserMessages"
+          :edit-queued-payload="editQueuedPayload"
           @submit="handlePrompt($event)"
           @load-older-transcript="loadOlderTranscriptPage"
           @abort="handleAbort"
           @revise-message="handleReviseMessage"
           @cancel-revision="handleCancelRevision"
+          @cancel-queued="handleCancelQueued"
+          @edit-queued="handleEditQueued"
           @select-model="handleModelSelect"
           @select-thinking-level="handleThinkingLevelSelect"
           @toggle-auto-compaction="handleAutoCompactionToggle"

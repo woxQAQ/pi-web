@@ -591,21 +591,20 @@ defineExpose({ preserveScroll, scrollToMessageId });
           :data-tree-entry-id="item.message.id ?? undefined"
         >
           <div class="message-content" :class="roleClass(item.message.role)">
-            <div v-if="showMessageIds" class="message-debug-id">
-              ID {{ messageIdLabel(item.message) }}
-            </div>
-            <div
-              class="error-block"
-              :class="{ aborted: isAbortedMessage(item.message) }"
-            >
-              <span class="error-label">{{
-                isAbortedMessage(item.message) ? "Cancelled" : "Error"
-              }}</span>
-              <span
-                v-if="errorMessageText(item.message)"
-                class="error-message"
-                >{{ errorMessageText(item.message) }}</span
-              >
+            <div class="error-block" :class="{ aborted: isAbortedMessage(item.message) }">
+              <div class="error-block-header">
+                <div class="error-block-heading">
+                  <span class="error-label">{{
+                    isAbortedMessage(item.message) ? "Cancelled" : "Error"
+                  }}</span>
+                  <span v-if="showMessageIds" class="message-debug-id">
+                    ID {{ messageIdLabel(item.message) }}
+                  </span>
+                </div>
+              </div>
+              <div v-if="errorMessageText(item.message)" class="error-block-body">
+                <span class="error-message">{{ errorMessageText(item.message) }}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -1198,37 +1197,70 @@ defineExpose({ preserveScroll, scrollToMessageId });
 
 .error-block {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
-  padding: 8px 12px;
-  border-left: 2px solid #e05050;
-  border-radius: 6px;
-  background: color-mix(in srgb, #e05050 6%, transparent);
-  font-size: 0.8rem;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--tool-card-bg);
 }
 
-.error-block.aborted {
-  border-left-color: var(--text-muted);
-  background: color-mix(in srgb, var(--text-muted) 6%, transparent);
+.error-block:not(.aborted) {
+  border-color: color-mix(in srgb, var(--error-border) 58%, var(--border));
+}
+
+.error-block-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.error-block-heading {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .error-label {
+  font-size: 0.64rem;
   font-weight: 600;
-  font-size: 0.7rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #e05050;
-  flex-shrink: 0;
+  letter-spacing: 0.08em;
+  color: var(--text-subtle);
 }
 
-.error-block.aborted .error-label {
-  color: var(--text-muted);
+.error-block:not(.aborted) .error-label {
+  color: var(--error-text);
+}
+
+.error-block-body {
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--tool-card-bg-strong);
+  overflow: auto;
+  max-height: 360px;
+}
+
+.error-block:not(.aborted) .error-block-body {
+  border-color: color-mix(in srgb, var(--error-border) 92%, var(--border));
 }
 
 .error-message {
+  display: block;
+  margin: 0;
+  padding: 10px 12px;
   color: var(--text-muted);
-  font-size: 0.76rem;
-  line-height: 1.5;
+  font-size: 0.72rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.error-block:not(.aborted) .error-message {
+  color: var(--error-text);
 }
 
 .tool-row {
@@ -1438,6 +1470,17 @@ defineExpose({ preserveScroll, scrollToMessageId });
     border-radius: 10px;
   }
 
+  .error-block {
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 10px;
+  }
+
+  .error-message {
+    padding: 9px 10px;
+  }
+
+  .error-message,
   .tool-result-card-preview,
   .tool-result-card-details,
   .thinking-content,

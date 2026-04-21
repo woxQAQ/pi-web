@@ -2035,7 +2035,7 @@ class SessionRuntime {
     return this.ensureDetachedSession(options);
   }
 
-  dispose(): void {
+  clearSelection(): void {
     if (this.unsubscribeSelectedSession) {
       this.unsubscribeSelectedSession();
       this.unsubscribeSelectedSession = undefined;
@@ -2046,6 +2046,10 @@ class SessionRuntime {
     if (selectedSessionPath) {
       void this.registry.releaseViewer(selectedSessionPath, this.clientId);
     }
+  }
+
+  dispose(): void {
+    this.clearSelection();
   }
 
   private buildSessionSummary(
@@ -2583,6 +2587,7 @@ export class WsRpcAdapter {
   private readonly transcriptProjector = new TranscriptProjector();
   private readonly uiBridge: ExtensionUIBridge;
   private readonly sessionStatsPusher: SessionStatsPusher;
+  private readonly detachedSessionRegistry: DetachedSessionRegistry;
 
   // Detached-session registry subscription.
   private unsubscribeRegistryEvents: (() => void) | undefined;
@@ -2607,7 +2612,7 @@ export class WsRpcAdapter {
     this.config = config;
     this.eventBus = eventBus;
     this.emitEvent = emitEvent;
-    const detachedSessionRegistry =
+    this.detachedSessionRegistry =
       sessionRegistry ?? new DetachedSessionRegistry(context.ctx.cwd);
     this.uiBridge = new ExtensionUIBridge(client.id, config, message => {
       this.sendResponse(message);
@@ -2615,7 +2620,7 @@ export class WsRpcAdapter {
     this.sessionRuntime = new SessionRuntime(
       context,
       client.id,
-      detachedSessionRegistry,
+      this.detachedSessionRegistry,
       () => this.uiBridge.createContext(),
       event => {
         this.handleSelectedSessionEvent(event);
@@ -2630,7 +2635,7 @@ export class WsRpcAdapter {
 
     this.setupWebSocket();
     this.subscribeToEvents();
-    this.subscribeToDetachedSessionEvents(detachedSessionRegistry);
+    this.subscribeToDetachedSessionEvents(this.detachedSessionRegistry);
     this.sendInitialTranscriptSnapshot();
     this.sessionStatsPusher.queue(
       this.sessionRuntime.currentTranscriptSessionPath(),
@@ -3631,7 +3636,10 @@ export class WsRpcAdapter {
             error: "Session name cannot be empty",
           };
         }
-        if (this.sessionRuntime.hasDetachedSelection()) {
+        if (command.sessionPath) {
+          const sm = openSessionManager(command.sessionPath);
+          sm.appendSessionInfo(name);
+        } else if (this.sessionRuntime.hasDetachedSelection()) {
           const session = await this.sessionRuntime.ensureDetachedSession();
           session.sessionManager.appendSessionInfo(name);
         } else {
@@ -3641,6 +3649,50 @@ export class WsRpcAdapter {
           id: correlationId,
           type: "response",
           command: "set_session_name",
+          success: true,
+        };
+      }
+
+      case "delete_session": {
+        const sessionPath = command.sessionPath as string;
+        if (!sessionPath || !fs.existsSync(sessionPath)) {
+          return {
+            id: correlationId,
+            type: "response",
+            command: "delete_session",
+            success: false,
+            error: "Session file not found",
+          };
+        }
+
+        if (this.sessionRuntime.isSessionRunning(sessionPath)) {
+          return {
+            id: correlationId,
+            type: "response",
+            command: "delete_session",
+            success: false,
+            error: "Cannot delete a running session",
+          };
+        }
+
+        if (this.sessionRuntime.currentDetachedSessionPath() === sessionPath) {
+          this.sessionRuntime.clearSelection();
+          this.sendTranscriptSnapshot({
+            sessionPath: undefined,
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          });
+          this.sessionStatsPusher.queue(null);
+        }
+
+        this.detachedSessionRegistry.removeSession(sessionPath);
+        fs.unlinkSync(sessionPath);
+
+        return {
+          id: correlationId,
+          type: "response",
+          command: "delete_session",
           success: true,
         };
       }

@@ -16,6 +16,8 @@ const emit = defineEmits<{
   selectSession: [sessionPath: string];
   refreshSessions: [];
   newSession: [];
+  renameSession: [sessionPath: string, name: string];
+  deleteSession: [sessionPath: string];
 }>();
 </script>
 
@@ -27,6 +29,8 @@ const emit = defineEmits<{
       :active-session-path="activeSessionPath"
       :running-session-paths="runningSessionPaths"
       @select="emit('selectSession', $event)"
+      @rename="emit('renameSession', $event.sessionPath, $event.name)"
+      @delete="emit('deleteSession', $event)"
     >
       <template #header-actions>
         <button
