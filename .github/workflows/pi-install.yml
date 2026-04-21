@@ -45,4 +45,7 @@ jobs:
         run: pi --version
 
       - name: Install pi-web from GitHub
-        run: pi install git:https://github.com/woxQAQ/pi-web
+        env:
+          PI_INSTALL_REPO: ${{ github.event.pull_request.head.repo.full_name || github.repository }}
+          PI_INSTALL_REF: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: pi install git:https://github.com/${{ env.PI_INSTALL_REPO }}@${{ env.PI_INSTALL_REF }}
