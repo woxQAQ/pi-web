@@ -18,6 +18,8 @@ import type {
   RpcExtensionUIResponse,
   RpcGitBranch,
   RpcGitRepoState,
+  RpcQueuedMessage,
+  RpcQueueUpdateEvent,
   RpcTranscriptMessage,
   RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
@@ -125,6 +127,33 @@ function normalizeGitRepoState(value: unknown): RpcGitRepoState | null {
   };
 }
 
+function normalizeQueuedMessage(value: unknown): RpcQueuedMessage | null {
+  if (!value || typeof value !== "object") return null;
+  const data = value as Partial<RpcQueuedMessage>;
+  if (typeof data.text !== "string") {
+    return null;
+  }
+
+  const images = Array.isArray(data.images)
+    ? data.images.filter(
+        (image): image is RpcImageContent =>
+          Boolean(image) &&
+          image.type === "image" &&
+          typeof image.data === "string" &&
+          typeof image.mimeType === "string",
+      )
+    : [];
+
+  return {
+    text: data.text,
+    images,
+    timestamp:
+      typeof data.timestamp === "number" && Number.isFinite(data.timestamp)
+        ? data.timestamp
+        : Date.now(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // State refs
 // ---------------------------------------------------------------------------
@@ -162,9 +191,7 @@ const isCompacting = computed(
 );
 
 // Locally queued follow-up messages that are not yet reflected in the transcript.
-const queuedUserMessages = ref<
-  Array<{ text: string; images: RpcImageContent[]; timestamp: number }>
->([]);
+const queuedUserMessages = ref<RpcQueuedMessage[]>([]);
 
 // Session stats (context usage + cost)
 const sessionStats = ref<RpcSessionStats | null>(null);
@@ -266,6 +293,33 @@ function updateAvailableModels(values: readonly unknown[]) {
 
 function getDisplayedSessionPath(): string | null {
   return activeTreeSessionPath.value ?? sessionState.value?.sessionFile ?? null;
+}
+
+function shouldApplyQueueUpdate(sessionPath: string | null): boolean {
+  const displayedSessionPath = getDisplayedSessionPath();
+  if (!sessionPath) return displayedSessionPath === null;
+  if (!displayedSessionPath) return true;
+  return displayedSessionPath === sessionPath;
+}
+
+function applyQueuedMessages(
+  followUp: readonly RpcQueuedMessage[],
+  options?: {
+    sessionPath?: string | null;
+    steeringCount?: number;
+  },
+) {
+  const sessionPath = options?.sessionPath ?? getDisplayedSessionPath();
+  if (!shouldApplyQueueUpdate(sessionPath)) return;
+
+  queuedUserMessages.value = [...followUp];
+  if (sessionState.value) {
+    const steeringCount = options?.steeringCount ?? 0;
+    sessionState.value = {
+      ...sessionState.value,
+      pendingMessageCount: steeringCount + followUp.length,
+    };
+  }
 }
 
 function resetGitRepoState() {
@@ -458,14 +512,15 @@ function replaceTranscript(
   entries: readonly (TranscriptEntry | RpcTranscriptMessage)[],
   sessionPath: string | null = transcriptSessionPath.value,
 ) {
+  const previousSessionPath = transcriptSessionPath.value;
   rawTranscript.value = entries.map((entry, index) =>
     normalizeTranscriptEntry(entry, `snapshot:${index}`),
   );
-  if (
-    transcriptSessionPath.value !== sessionPath ||
-    rawTranscript.value.length === 0
-  ) {
+  if (previousSessionPath !== sessionPath || rawTranscript.value.length === 0) {
     clearPendingTranscriptConfigEvent();
+  }
+  if (previousSessionPath !== sessionPath) {
+    queuedUserMessages.value = [];
   }
   transcriptSessionPath.value = sessionPath;
   reconcilePendingTranscriptConfigEvent();
@@ -475,6 +530,7 @@ function applyTranscriptPage(
   page: RpcTranscriptPage,
   mode: "replace" | "prepend" = "replace",
 ) {
+  const previousSessionPath = transcriptSessionPath.value;
   const normalized = page.messages.map((entry, index) =>
     normalizeTranscriptEntry(entry, `snapshot:${index}`),
   );
@@ -492,8 +548,9 @@ function applyTranscriptPage(
   }
 
   const nextSessionPath = page.sessionPath ?? null;
-  if (transcriptSessionPath.value !== nextSessionPath) {
+  if (previousSessionPath !== nextSessionPath) {
     clearPendingTranscriptConfigEvent();
+    queuedUserMessages.value = [];
   }
   transcriptSessionPath.value = nextSessionPath;
   transcriptHasOlder.value = page.hasOlder;
@@ -517,14 +574,6 @@ function currentTranscriptContainsLiveOnlyEntries(): boolean {
       typeof entry.transcriptKey === "string" &&
       entry.transcriptKey.startsWith("live:"),
   );
-}
-
-function applySessionTranscript(
-  entries: readonly (TranscriptEntry | RpcTranscriptMessage)[],
-  sessionPath: string | null,
-) {
-  if (!shouldReplaceSessionTranscript(sessionPath)) return;
-  replaceTranscript(entries, sessionPath);
 }
 
 function applySessionTranscriptPage(page: RpcTranscriptPage) {
@@ -669,7 +718,7 @@ function sendPrompt(
   images?: RpcImageContent[],
   streamingBehavior: "steer" | "followUp" = "followUp",
 ) {
-  if (streamingBehavior === "followUp") {
+  if (streamingBehavior === "followUp" && isStreaming.value) {
     queuedUserMessages.value = [
       ...queuedUserMessages.value,
       { text: message, images: images ?? [], timestamp: Date.now() },
@@ -681,14 +730,66 @@ function sendPrompt(
   });
 }
 
-function cancelQueuedMessage(index: number) {
-  queuedUserMessages.value = queuedUserMessages.value.filter((_, i) => i !== index);
+async function dequeueQueuedMessage(index: number): Promise<RpcQueuedMessage | null> {
+  if (!Number.isInteger(index) || index < 0) return null;
+
+  try {
+    const response = await sendCommand({
+      type: "dequeue_follow_up_message",
+      index,
+    });
+    if (!response.success) {
+      pushNotification(
+        summarizeErrorMessage(
+          response.error ?? "Failed to update queued messages",
+          "Failed to update queued messages",
+        ),
+        "error",
+      );
+      return null;
+    }
+
+    const removed = normalizeQueuedMessage(
+      (response.data as { removed?: RpcQueuedMessage } | undefined)?.removed,
+    );
+    if (removed) {
+      queuedUserMessages.value = queuedUserMessages.value.filter(
+        (_, queuedIndex) => queuedIndex !== index,
+      );
+      if (sessionState.value) {
+        sessionState.value = {
+          ...sessionState.value,
+          pendingMessageCount: Math.max(
+            0,
+            sessionState.value.pendingMessageCount - 1,
+          ),
+        };
+      }
+    }
+    return removed;
+  } catch (error) {
+    pushNotification(
+      summarizeErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to update queued messages",
+        "Failed to update queued messages",
+      ),
+      "error",
+    );
+    return null;
+  }
 }
 
-function editQueuedMessage(index: number): { text: string; images: RpcImageContent[] } | null {
-  const item = queuedUserMessages.value[index];
+async function cancelQueuedMessage(index: number): Promise<boolean> {
+  return (await dequeueQueuedMessage(index)) !== null;
+}
+
+async function editQueuedMessage(
+  index: number,
+): Promise<{ text: string; images: RpcImageContent[] } | null> {
+  const item = await dequeueQueuedMessage(index);
   if (!item) return null;
-  cancelQueuedMessage(index);
   return { text: item.text, images: item.images };
 }
 
@@ -1218,18 +1319,12 @@ function handleEvent(payload: RpcBridgeEvent) {
       if (Array.isArray(data.messages)) {
         applyTranscriptPage(data, "replace");
       }
-      // Snapshot contains the ground-truth transcript; clear local queue.
-      queuedUserMessages.value = [];
       break;
     }
     case "transcript_upsert": {
       const data = payload as RpcTranscriptUpsertEvent;
       if (data.message) {
         upsertTranscriptMessage(data.message, data.sessionPath ?? null);
-        // If the server inserted a user message, it is no longer queued locally.
-        if (data.message.role === "user" && queuedUserMessages.value.length > 0) {
-          queuedUserMessages.value = queuedUserMessages.value.slice(1);
-        }
       }
       break;
     }
@@ -1243,6 +1338,24 @@ function handleEvent(payload: RpcBridgeEvent) {
         const stats = normalizeSessionStats(data.stats);
         if (stats) sessionStats.value = stats;
       }
+      break;
+    }
+    case "queue_update": {
+      const data = payload as RpcQueueUpdateEvent;
+      const steering = Array.isArray(data.steering)
+        ? data.steering
+            .map(message => normalizeQueuedMessage(message))
+            .filter((message): message is RpcQueuedMessage => message !== null)
+        : [];
+      const followUp = Array.isArray(data.followUp)
+        ? data.followUp
+            .map(message => normalizeQueuedMessage(message))
+            .filter((message): message is RpcQueuedMessage => message !== null)
+        : [];
+      applyQueuedMessages(followUp, {
+        sessionPath: data.sessionPath ?? null,
+        steeringCount: steering.length,
+      });
       break;
     }
     case "agent_start": {

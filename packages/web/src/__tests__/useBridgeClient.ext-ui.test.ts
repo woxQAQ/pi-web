@@ -1269,6 +1269,168 @@ describe("extension_ui_request handling", () => {
     );
   });
 
+  it("only shows optimistic queued follow-ups while the agent is streaming", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    client.sendPrompt("Immediate message");
+    expect(client.queuedUserMessages.value).toEqual([]);
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: { type: "agent_start" },
+    });
+
+    client.sendPrompt("Queued message");
+    expect(client.queuedUserMessages.value).toEqual([
+      {
+        text: "Queued message",
+        images: [],
+        timestamp: expect.any(Number),
+      },
+    ]);
+  });
+
+  it("syncs queued follow-ups from queue_update events", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "get_state",
+        success: true,
+        data: {
+          thinkingLevel: "medium",
+          isStreaming: true,
+          isCompacting: false,
+          steeringMode: "all",
+          followUpMode: "all",
+          sessionId: "session-queue",
+          sessionFile: "/tmp/queued.jsonl",
+          autoCompactionEnabled: false,
+          messageCount: 1,
+          pendingMessageCount: 0,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "queue_update",
+        sessionPath: "/tmp/queued.jsonl",
+        steering: [],
+        followUp: [
+          {
+            text: "Queued first",
+            images: [],
+            timestamp: 1,
+          },
+          {
+            text: "Queued second",
+            images: [],
+            timestamp: 2,
+          },
+        ],
+      },
+    });
+
+    expect(client.queuedUserMessages.value).toEqual([
+      {
+        text: "Queued first",
+        images: [],
+        timestamp: 1,
+      },
+      {
+        text: "Queued second",
+        images: [],
+        timestamp: 2,
+      },
+    ]);
+    expect(client.pendingMessageCount.value).toBe(2);
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "transcript_upsert",
+        sessionPath: "/tmp/queued.jsonl",
+        message: {
+          id: "user-steer",
+          transcriptKey: "user-steer",
+          role: "user",
+          content: "Steer now",
+        },
+      },
+    });
+
+    expect(client.queuedUserMessages.value).toEqual([
+      {
+        text: "Queued first",
+        images: [],
+        timestamp: 1,
+      },
+      {
+        text: "Queued second",
+        images: [],
+        timestamp: 2,
+      },
+    ]);
+  });
+
+  it("editQueuedMessage dequeues the server-side follow-up and returns it", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    const editPromise = client.editQueuedMessage(1);
+    const dequeueRequest = ws.send.mock.calls
+      .map(
+        ([message]: [string]) =>
+          JSON.parse(message) as { payload?: { type?: string; id?: string; index?: number } },
+      )
+      .find(message => message.payload?.type === "dequeue_follow_up_message");
+
+    expect(dequeueRequest?.payload?.index).toBe(1);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        id: dequeueRequest?.payload?.id,
+        command: "dequeue_follow_up_message",
+        success: true,
+        data: {
+          removed: {
+            text: "Queued second",
+            images: [
+              {
+                type: "image",
+                mimeType: "image/png",
+                data: "ZmFrZS1pbWFnZQ==",
+              },
+            ],
+            timestamp: 2,
+          },
+        },
+      },
+    });
+
+    await expect(editPromise).resolves.toEqual({
+      text: "Queued second",
+      images: [
+        {
+          type: "image",
+          mimeType: "image/png",
+          data: "ZmFrZS1pbWFnZQ==",
+        },
+      ],
+    });
+  });
+
   it("handles select method by setting pendingExtensionRequest", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();

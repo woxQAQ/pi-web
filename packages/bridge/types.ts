@@ -17,6 +17,12 @@ export interface RpcImageContent {
   mimeType: string;
 }
 
+export interface RpcQueuedMessage {
+  text: string;
+  images: RpcImageContent[];
+  timestamp: number;
+}
+
 export interface RpcWorkspaceEntry {
   path: string;
   kind: "file" | "directory";
@@ -283,6 +289,9 @@ export interface RpcCommandMap {
   list_git_branches: {};
   switch_git_branch: { branchName: string };
   create_git_branch: { branchName: string };
+
+  /** Detached follow-up queue */
+  dequeue_follow_up_message: { index: number };
 }
 
 /** All RPC command types that a browser client can send. */
@@ -507,6 +516,13 @@ export interface RpcSessionStatsEvent {
   stats: RpcSessionStats;
 }
 
+export interface RpcQueueUpdateEvent {
+  type: "queue_update";
+  sessionPath?: string;
+  steering: RpcQueuedMessage[];
+  followUp: RpcQueuedMessage[];
+}
+
 // ============================================================================
 // RPC Responses (server → client)
 // ============================================================================
@@ -581,6 +597,7 @@ export interface RpcResponseMap {
   list_git_branches: RpcGitRepoState;
   switch_git_branch: RpcGitRepoState;
   create_git_branch: RpcGitRepoState;
+  dequeue_follow_up_message: { removed: RpcQueuedMessage };
 }
 
 type RpcResponseData<T> = [T] extends [void] ? {} : { data: T };
@@ -771,6 +788,7 @@ export type RpcBridgeEvent =
   | RpcTranscriptSnapshotEvent
   | RpcTranscriptUpsertEvent
   | RpcSessionStatsEvent
+  | RpcQueueUpdateEvent
   | RpcAgentStartEvent
   | RpcAgentEndEvent
   | RpcModelSelectEvent

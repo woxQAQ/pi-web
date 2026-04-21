@@ -29,6 +29,8 @@ export type {
   RpcGitBranch,
   RpcGitRepoState,
   RpcImageContent,
+  RpcQueuedMessage,
+  RpcQueueUpdateEvent,
   RpcResponse,
   RpcSessionState,
   RpcSessionStats,

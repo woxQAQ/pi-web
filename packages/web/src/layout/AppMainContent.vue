@@ -11,6 +11,7 @@ import type {
 import type {
   RpcGitRepoState,
   RpcImageContent,
+  RpcQueuedMessage,
   RpcSessionState,
   RpcSessionStats,
   RpcSlashCommand,
@@ -57,11 +58,7 @@ defineProps<{
   } | null;
   allowRevision: boolean;
   pendingMessageCount: number;
-  queuedUserMessages: readonly {
-    text: string;
-    images: RpcImageContent[];
-    timestamp: number;
-  }[];
+  queuedUserMessages: readonly RpcQueuedMessage[];
   editQueuedPayload: { text: string; images: RpcImageContent[] } | null;
 }>();
 

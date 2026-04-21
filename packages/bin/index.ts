@@ -12,7 +12,6 @@ import { fileURLToPath } from "node:url";
 import {
   type ExtensionAPI,
   type ExtensionCommandContext,
-  type ExtensionUIContext,
 } from "@mariozechner/pi-coding-agent";
 import { isBridgeExitInput } from "../bridge/exit-input.js";
 import { startBridge, type BridgeController } from "../bridge/lifecycle.js";

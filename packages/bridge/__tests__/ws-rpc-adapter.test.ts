@@ -970,6 +970,54 @@ describe("WsRpcAdapter", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
+    it("omits session title metadata from transcript pages", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-title-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendSessionInfo("Inspect terminal-log-view.ts");
+      sessionManager.appendMessage({
+        role: "user",
+        content: "Inspect terminal-log-view.ts",
+        timestamp: Date.now(),
+      } as any);
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      (
+        context.ctx.sessionManager.getSessionFile as ReturnType<typeof vi.fn>
+      ).mockReturnValue(sessionFile);
+      (
+        context.ctx.sessionManager.getBranch as ReturnType<typeof vi.fn>
+      ).mockImplementation(() => sessionManager.getBranch());
+
+      const command: RpcCommand = {
+        id: "cmd-session-title",
+        type: "get_messages",
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = sendCalls[sendCalls.length - 1][0] as string;
+      const response = JSON.parse(lastCall);
+      expect(response.payload.success).toBe(true);
+      expect(response.payload.data.messages).toEqual([
+        expect.objectContaining({
+          role: "user",
+          content: "Inspect terminal-log-view.ts",
+        }),
+      ]);
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
     it("hides bootstrap model and thinking entries for an empty session", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-empty-"));
       const sessionManager = SessionManager.create(tmpDir, tmpDir);
@@ -3369,6 +3417,165 @@ describe("WsRpcAdapter", () => {
           source: "rpc",
         },
       );
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("dequeues queued follow-up messages from the detached session", async () => {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-dequeue-"));
+      const sessionManager = SessionManager.create(tmpDir, tmpDir);
+      sessionManager.appendMessage({
+        role: "user",
+        content: [{ type: "text", text: "Detached session" }],
+        timestamp: Date.now(),
+      });
+      const sessionFile = sessionManager.getSessionFile();
+      if (!sessionFile) {
+        throw new Error("session file was not created");
+      }
+
+      fs.writeFileSync(
+        sessionFile,
+        [
+          JSON.stringify({
+            type: "session",
+            version: 3,
+            id: sessionManager.getSessionId(),
+            timestamp: new Date().toISOString(),
+            cwd: tmpDir,
+          }),
+          ...sessionManager.getEntries().map(entry => JSON.stringify(entry)),
+        ].join("\n"),
+      );
+
+      const listeners: Array<(event: object) => void> = [];
+      const queuedMessages = [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Queued first" }],
+          timestamp: 1,
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Queued second" },
+            {
+              type: "image",
+              data: "ZmFrZS1pbWFnZQ==",
+              mimeType: "image/png",
+            },
+          ],
+          timestamp: 2,
+        },
+      ];
+      const session = {
+        sessionFile,
+        sessionId: sessionManager.getSessionId(),
+        isStreaming: true,
+        bindExtensions: vi.fn().mockResolvedValue(undefined),
+        subscribe: vi.fn().mockImplementation((listener: (event: object) => void) => {
+          listeners.push(listener);
+          return () => {};
+        }),
+        prompt: vi.fn().mockResolvedValue(undefined),
+        sessionManager,
+        agent: {
+          steeringQueue: { messages: [] },
+          followUpQueue: { messages: [...queuedMessages] },
+        },
+        _followUpMessages: ["Queued first", "Queued second"],
+        _emitQueueUpdate: vi.fn(),
+      } as any;
+      session._emitQueueUpdate.mockImplementation(() => {
+        const followUp = [...session._followUpMessages];
+        for (const listener of listeners) {
+          listener({ type: "queue_update", steering: [], followUp });
+        }
+      });
+
+      createAgentSessionMock.mockResolvedValueOnce({ session });
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "switch-dequeue",
+              type: "switch_session",
+              sessionPath: sessionFile,
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 10));
+
+      const switchResponse = (ws.send as ReturnType<typeof vi.fn>).mock.calls
+        .map(call => JSON.parse(call[0] as string))
+        .find(
+          call =>
+            call.type === "response" &&
+            call.payload?.command === "switch_session",
+        );
+      expect(switchResponse?.payload?.success).toBe(true);
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(
+          JSON.stringify({
+            type: "command",
+            payload: {
+              id: "dequeue-follow-up",
+              type: "dequeue_follow_up_message",
+              index: 1,
+            },
+          }),
+        ),
+      );
+      await new Promise(r => setTimeout(r, 10));
+
+      const sentMessages = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const queueUpdate = sentMessages.find(
+        call => call.type === "event" && call.payload?.type === "queue_update",
+      );
+      const response = sentMessages.find(
+        call =>
+          call.type === "response" &&
+          call.payload?.command === "dequeue_follow_up_message",
+      );
+
+      expect(queueUpdate?.payload.followUp).toEqual([
+        {
+          text: "Queued first",
+          images: [],
+          timestamp: 1,
+        },
+      ]);
+      expect(response?.payload).toMatchObject({
+        success: true,
+        data: {
+          removed: {
+            text: "Queued second",
+            images: [
+              {
+                type: "image",
+                data: "ZmFrZS1pbWFnZQ==",
+                mimeType: "image/png",
+              },
+            ],
+            timestamp: 2,
+          },
+        },
+      });
+      expect(session._followUpMessages).toEqual(["Queued first"]);
+      expect(session.agent.followUpQueue.messages).toHaveLength(1);
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });

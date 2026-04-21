@@ -609,6 +609,66 @@ describe("normalizeTranscript", () => {
     ]);
   });
 
+  it("hides session title metadata from transcript rendering", () => {
+    const sessionInfoMessage = {
+      id: "s1",
+      role: "system",
+      content: [{ type: "session_info", name: "Inspect terminal-log-view.ts" }],
+    } satisfies TranscriptEntryLike;
+
+    expect(messageContent(sessionInfoMessage)).toBe("");
+    expect(contentBlocks(sessionInfoMessage)).toEqual([]);
+    expect(
+      buildTranscriptDisplayItems([
+        {
+          id: "m1",
+          role: "system",
+          content: [
+            {
+              type: "model_change",
+              provider: "openai",
+              modelId: "gpt-5.5",
+            },
+          ],
+        },
+        sessionInfoMessage,
+        {
+          id: "m2",
+          role: "system",
+          content: [
+            {
+              type: "thinking_level_change",
+              thinkingLevel: "high",
+            },
+          ],
+        },
+        {
+          id: "u1",
+          role: "user",
+          content: "Inspect terminal-log-view.ts",
+        },
+      ]),
+    ).toEqual([
+      {
+        kind: "session_event",
+        key: "session-event:m1-m2",
+        label: "Session configured",
+        model: { provider: "openai", id: "gpt-5.5" },
+        thinkingLevel: "high",
+        sourceMessageIds: ["m1", "m2"],
+      },
+      {
+        kind: "message",
+        message: {
+          id: "u1",
+          role: "user",
+          content: "Inspect terminal-log-view.ts",
+        },
+        messageIndex: 3,
+      },
+    ]);
+  });
+
   it("parses compact and other system entries into structured transcript blocks", () => {
     const compactionMessage = {
       role: "system",

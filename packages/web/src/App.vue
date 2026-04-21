@@ -112,7 +112,10 @@ const pendingRevision = ref<{
   preview: string;
   hasImages: boolean;
 } | null>(null);
-const editQueuedPayload = ref<{ text: string; images: RpcImageContent[] } | null>(null);
+const editQueuedPayload = ref<{
+  text: string;
+  images: RpcImageContent[];
+} | null>(null);
 
 const THEME_CACHE_KEY = "pi-web-theme";
 const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
@@ -391,12 +394,12 @@ function handleCancelRevision() {
   pendingRevision.value = null;
 }
 
-function handleCancelQueued(index: number) {
-  cancelQueuedMessage(index);
+async function handleCancelQueued(index: number) {
+  await cancelQueuedMessage(index);
 }
 
-function handleEditQueued(index: number) {
-  const item = editQueuedMessage(index);
+async function handleEditQueued(index: number) {
+  const item = await editQueuedMessage(index);
   if (!item) return;
   editQueuedPayload.value = item;
 }

@@ -133,9 +133,6 @@ interface TranscriptToolResultBlockWithSource extends RpcTranscriptToolResultBlo
 type TranscriptContentItem =
   | string
   | (RpcTranscriptContentBlock & { sourceMessageId?: string });
-type ToolResultContentItem = NonNullable<
-  RpcTranscriptToolResultBlock["content"]
->[number];
 type TranscriptImageBlock =
   | RpcTranscriptImageBlock
   | RpcTranscriptImageUrlBlock;
@@ -196,7 +193,9 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
     }
 
     if (isSystemBlock(block)) {
-      blocks.push(systemContentBlock(block));
+      if (!isHiddenSystemBlock(block)) {
+        blocks.push(systemContentBlock(block));
+      }
       continue;
     }
 
@@ -321,6 +320,11 @@ export function buildTranscriptDisplayItems(
   let index = 0;
 
   while (index < messages.length) {
+    if (isHiddenTranscriptMessage(messages[index])) {
+      index += 1;
+      continue;
+    }
+
     if (!configSystemBlock(messages[index])) {
       items.push({
         kind: "message",
@@ -338,6 +342,11 @@ export function buildTranscriptDisplayItems(
     const sourceMessageIds: string[] = [];
 
     while (index < messages.length) {
+      if (isHiddenTranscriptMessage(messages[index])) {
+        index += 1;
+        continue;
+      }
+
       const block = configSystemBlock(messages[index]);
       if (!block) break;
 
@@ -621,6 +630,21 @@ function configSystemBlock(
   return block as ConfigSystemBlock;
 }
 
+function isHiddenTranscriptMessage(message: TranscriptEntryLike): boolean {
+  if (message.role !== "system" || !Array.isArray(message.content)) {
+    return false;
+  }
+  if (message.content.length === 0) return false;
+
+  return message.content.every(
+    block =>
+      typeof block === "object" &&
+      block !== null &&
+      isSystemBlock(block) &&
+      isHiddenSystemBlock(block),
+  );
+}
+
 function sessionEventKey(
   messages: readonly TranscriptEntryLike[],
   startIndex: number,
@@ -705,9 +729,15 @@ function isSystemBlock(
   );
 }
 
+function isHiddenSystemBlock(block: RpcTranscriptSystemBlock): boolean {
+  return block.type === "session_info";
+}
+
 function contentItemText(block: TranscriptContentItem): string {
   if (typeof block === "string") return block;
-  if (isSystemBlock(block)) return systemBlockText(block);
+  if (isSystemBlock(block)) {
+    return isHiddenSystemBlock(block) ? "" : systemBlockText(block);
+  }
 
   switch (block.type) {
     case "text":
