@@ -51,6 +51,11 @@ export interface SessionEntry {
   name: string;
   path: string;
   isRunning?: boolean;
+  timestamp?: string;
+  updatedAt?: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspacePath?: string;
 }
 
 export type TreeTrackColumn = RpcTreeTrackColumn;

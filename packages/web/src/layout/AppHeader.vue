@@ -76,10 +76,14 @@ const emit = defineEmits<{
         class="outline-toggle"
         type="button"
         :aria-label="
-          outlineSidebarOpen ? 'Collapse session outline' : 'Expand session outline'
+          outlineSidebarOpen
+            ? 'Collapse session outline'
+            : 'Expand session outline'
         "
         :title="
-          outlineSidebarOpen ? 'Collapse session outline' : 'Expand session outline'
+          outlineSidebarOpen
+            ? 'Collapse session outline'
+            : 'Expand session outline'
         "
         @click="emit('toggleOutlineSidebar')"
       >
@@ -88,11 +92,7 @@ const emit = defineEmits<{
           class="outline-toggle-icon"
           aria-hidden="true"
         />
-        <PanelRightOpen
-          v-else
-          class="outline-toggle-icon"
-          aria-hidden="true"
-        />
+        <PanelRightOpen v-else class="outline-toggle-icon" aria-hidden="true" />
       </button>
       <button
         v-if="showDebugToggle"

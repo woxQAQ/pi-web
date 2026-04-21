@@ -32,4 +32,5 @@ the Vite `/ws` proxy has a stable target. Run `npm run dev:web`, start Pi, run
 - Do not add thin wrapper functions around existing functions unless the wrapper
   adds real value beyond renaming.
 - use git conventional commits specification when commit
-- do not use `nl -ba $file | rg -n $pattern`, use `car $file | rg -n $pattern` instead
+- do not use `nl -ba $file | rg -n $pattern`, use `car $file | rg -n $pattern`
+  instead

@@ -549,7 +549,9 @@ onBeforeUnmount(() => {
           :available-models="availableModels"
           :current-model="currentModel"
           :current-thinking-level="currentThinkingLevel"
-          :auto-compaction-enabled="sessionState?.autoCompactionEnabled ?? false"
+          :auto-compaction-enabled="
+            sessionState?.autoCompactionEnabled ?? false
+          "
           :session-stats="sessionStats"
           :session-state="sessionState"
           :git-repo-state="gitRepoState"

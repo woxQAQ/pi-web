@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
   SessionManager,
@@ -125,6 +126,33 @@ interface SessionSummary {
   treeEntries: RpcTreeEntry[];
   sessionId: string;
   sessionName: string;
+}
+
+interface WorkspaceSessionEntry {
+  id: string;
+  name: string;
+  path: string;
+  isRunning?: boolean;
+  timestamp?: string;
+  updatedAt?: string;
+  workspaceId?: string;
+  workspaceName?: string;
+  workspacePath?: string;
+}
+
+interface WorkspaceMetadata {
+  workspaceId: string;
+  workspaceName: string;
+  workspacePath: string;
+}
+
+interface SessionListManager {
+  getHeader: () => { id: string; timestamp: string; cwd?: string } | null;
+  getCwd: () => string | undefined;
+  getSessionFile: () => string | undefined;
+  getSessionName: () => string | undefined;
+  getEntries: () => unknown[];
+  getSessionId: () => string;
 }
 
 /* ============================================================================
@@ -394,15 +422,67 @@ function sessionTimestampSortValue(timestamp?: string): number {
 }
 
 function compareSessionsByRecency(
-  left: { timestamp?: string; path: string },
-  right: { timestamp?: string; path: string },
+  left: { timestamp?: string; updatedAt?: string; path: string },
+  right: { timestamp?: string; updatedAt?: string; path: string },
 ): number {
   const timestampDelta =
-    sessionTimestampSortValue(right.timestamp) -
-    sessionTimestampSortValue(left.timestamp);
+    sessionTimestampSortValue(right.updatedAt ?? right.timestamp) -
+    sessionTimestampSortValue(left.updatedAt ?? left.timestamp);
   if (timestampDelta !== 0) return timestampDelta;
 
   return right.path.localeCompare(left.path);
+}
+
+function workspaceDisplayName(workspacePath: string): string {
+  const baseName = path.basename(workspacePath);
+  return baseName || workspacePath || "Unknown workspace";
+}
+
+function workspaceMetadata(
+  workspacePath: string | undefined,
+  sessionPath: string,
+): WorkspaceMetadata {
+  const fallbackPath = path.dirname(sessionPath);
+  const normalizedWorkspacePath = workspacePath?.trim() || fallbackPath;
+
+  return {
+    workspaceId: normalizedWorkspacePath,
+    workspaceName: workspaceDisplayName(normalizedWorkspacePath),
+    workspacePath: normalizedWorkspacePath,
+  };
+}
+
+function normalizeSessionTimestamp(timestamp?: string): string | undefined {
+  const value = sessionTimestampSortValue(timestamp);
+  return Number.isFinite(value) ? new Date(value).toISOString() : timestamp;
+}
+
+function listSessionFilesInDir(sessionDir: string): string[] {
+  try {
+    return fs
+      .readdirSync(sessionDir)
+      .filter(file => file.endsWith(".jsonl"))
+      .map(file => path.join(sessionDir, file));
+  } catch {
+    return [];
+  }
+}
+
+function listStoredSessionFiles(): string[] {
+  const sessionsRoot =
+    process.env.PI_WEB_SESSIONS_ROOT ??
+    path.join(os.homedir(), ".pi", "agent", "sessions");
+  if (!fs.existsSync(sessionsRoot)) return [];
+
+  const sessionFiles: string[] = [];
+  for (const entry of fs.readdirSync(sessionsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    sessionFiles.push(
+      ...listSessionFilesInDir(path.join(sessionsRoot, entry.name)),
+    );
+  }
+
+  return sessionFiles;
 }
 
 function normalizeWorkspacePath(filePath: string): string {
@@ -1728,7 +1808,9 @@ function queuedMessageTimestamp(value: unknown): number {
     : Date.now();
 }
 
-function extractMessageImages(message: { content?: unknown }): RpcImageContent[] {
+function extractMessageImages(message: {
+  content?: unknown;
+}): RpcImageContent[] {
   if (!Array.isArray(message.content)) return [];
 
   return message.content.flatMap(item => {
@@ -3590,7 +3672,8 @@ export class WsRpcAdapter {
             type: "response",
             command: "dequeue_follow_up_message",
             success: false,
-            error: "Queued follow-up editing requires an active detached session",
+            error:
+              "Queued follow-up editing requires an active detached session",
           };
         }
 
@@ -4096,58 +4179,66 @@ export class WsRpcAdapter {
 
       case "list_sessions": {
         try {
-          const sessions: Array<{
-            id: string;
-            name: string;
-            path: string;
-            isRunning?: boolean;
-            timestamp?: string;
-          }> = [];
+          const sessions: WorkspaceSessionEntry[] = [];
           const seenSessionPaths = new Set<string>();
-          const currentSessionFile =
-            this.sessionRuntime.currentTranscriptSessionPath() ??
-            ctx.sessionManager.getSessionFile();
-          const sessionDir = currentSessionFile
-            ? path.dirname(currentSessionFile)
-            : undefined;
+          const liveSessionFile = ctx.sessionManager.getSessionFile();
 
-          const appendSession = (
-            sessionManager: SessionManager,
+          const appendSessionManager = (
+            sessionManager: SessionListManager,
             sessionPath?: string,
+            fallbackWorkspacePath?: string,
           ) => {
             if (!sessionPath || seenSessionPaths.has(sessionPath)) return;
             const header = sessionManager.getHeader();
             if (!header) return;
+
+            const workspace = workspaceMetadata(
+              sessionManager.getCwd() || header.cwd || fallbackWorkspacePath,
+              sessionPath,
+            );
             seenSessionPaths.add(sessionPath);
             sessions.push({
               id: header.id,
               name: sessionDisplayName(sessionManager, sessionPath),
               path: sessionPath,
               isRunning:
-                sessionPath === ctx.sessionManager.getSessionFile()
+                sessionPath === liveSessionFile
                   ? !ctx.isIdle()
                   : this.sessionRuntime.isSessionRunning(sessionPath),
-              timestamp: header.timestamp,
+              timestamp: normalizeSessionTimestamp(header.timestamp),
+              updatedAt: normalizeSessionTimestamp(header.timestamp),
+              ...workspace,
             });
           };
 
-          for (const sessionManager of this.sessionRuntime.getCachedSessionManagers()) {
-            appendSession(sessionManager, sessionManager.getSessionFile());
+          const storedSessionFiles = new Set(listStoredSessionFiles());
+          if (liveSessionFile) {
+            for (const sessionPath of listSessionFilesInDir(
+              path.dirname(liveSessionFile),
+            )) {
+              storedSessionFiles.add(sessionPath);
+            }
           }
 
-          if (sessionDir && fs.existsSync(sessionDir)) {
-            const files = fs
-              .readdirSync(sessionDir)
-              .filter((f: string) => f.endsWith(".jsonl"));
-
-            for (const file of files) {
-              const filePath = path.join(sessionDir, file);
-              try {
-                appendSession(openSessionManager(filePath), filePath);
-              } catch {
-                // Skip malformed session files
-              }
+          for (const sessionPath of storedSessionFiles) {
+            try {
+              appendSessionManager(
+                openSessionManager(sessionPath),
+                sessionPath,
+              );
+            } catch {
+              // Skip malformed or unreadable session files.
             }
+          }
+
+          appendSessionManager(ctx.sessionManager, liveSessionFile, ctx.cwd);
+
+          for (const sessionManager of this.sessionRuntime.getCachedSessionManagers()) {
+            appendSessionManager(
+              sessionManager,
+              sessionManager.getSessionFile(),
+              ctx.cwd,
+            );
           }
 
           sessions.sort(compareSessionsByRecency);
@@ -4165,15 +4256,7 @@ export class WsRpcAdapter {
             type: "response" as const,
             command: "list_sessions" as const,
             success: true as const,
-            data: {
-              sessions: [] as Array<{
-                id: string;
-                name: string;
-                path: string;
-                isRunning?: boolean;
-                timestamp?: string;
-              }>,
-            },
+            data: { sessions: [] as WorkspaceSessionEntry[] },
           };
         }
       }
