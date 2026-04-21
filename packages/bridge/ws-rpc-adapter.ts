@@ -510,7 +510,7 @@ function listStoredSessionFiles(): string[] {
   return sessionFiles;
 }
 
-const STORED_SESSION_METADATA_HEAD_BYTES = 4 * 1024;
+const STORED_SESSION_METADATA_HEAD_BYTES = 2 * 1024;
 
 function parseStoredSessionMetadataContent(
   sessionPath: string,
