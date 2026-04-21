@@ -1,1 +1,0 @@
-- If real cold-disk traces show I/O wait dominates, try a bounded async worker pool for metadata head reads. Unbounded `Promise.all` over every file regressed badly on the benchmark.
