@@ -60,16 +60,49 @@ function sessionActivityValue(session: SessionEntry): number {
   return Number.isFinite(parsed) ? parsed : Number.NEGATIVE_INFINITY;
 }
 
+function workspaceFromSessionPath(sessionPath: string): {
+  id: string;
+  name: string;
+  path: string;
+} | null {
+  const match = /[\\/]\.pi[\\/]agent[\\/]sessions[\\/]([^\\/]+)[\\/]/.exec(
+    sessionPath,
+  );
+  const encoded = match?.[1];
+  if (!encoded) return null;
+
+  const stripped = encoded.replace(/^--/, "").replace(/--$/, "");
+  const homeMatch = /^home-([^-]+)-(.+)$/.exec(stripped);
+  if (homeMatch) {
+    const [, user, workspaceName] = homeMatch;
+    const workspacePath = `/home/${user}/${workspaceName}`;
+    return { id: workspacePath, name: workspaceName, path: workspacePath };
+  }
+
+  return { id: encoded, name: stripped || encoded, path: stripped || encoded };
+}
+
 function getWorkspaceId(session: SessionEntry): string {
-  return session.workspaceId ?? session.workspacePath ?? UNKNOWN_WORKSPACE_ID;
+  return (
+    session.workspaceId ??
+    session.workspacePath ??
+    workspaceFromSessionPath(session.path)?.id ??
+    UNKNOWN_WORKSPACE_ID
+  );
 }
 
 function getWorkspacePath(session: SessionEntry): string {
-  return session.workspacePath ?? "Unknown workspace";
+  return (
+    session.workspacePath ??
+    workspaceFromSessionPath(session.path)?.path ??
+    "Unknown workspace"
+  );
 }
 
 function getWorkspaceName(session: SessionEntry): string {
   if (session.workspaceName) return session.workspaceName;
+  const fallbackWorkspace = workspaceFromSessionPath(session.path);
+  if (fallbackWorkspace) return fallbackWorkspace.name;
   const workspacePath = getWorkspacePath(session);
   const parts = workspacePath.split(/[\\/]/).filter(Boolean);
   return parts.at(-1) ?? workspacePath;
@@ -326,7 +359,6 @@ watch(
             <span class="workspace-name">{{ workspace.name }}</span>
             <span class="workspace-path">{{ workspace.path }}</span>
           </span>
-          <span class="workspace-count">{{ workspace.sessions.length }}</span>
           <span
             v-if="workspace.hasRunningSession"
             class="workspace-running"
@@ -468,7 +500,6 @@ watch(
               @click.stop
             />
             <span v-else class="modal-session-name">{{ s.name }}</span>
-            <span class="modal-session-path">{{ s.path }}</span>
           </span>
           <span
             v-if="isSessionRunning(s.path)"
@@ -636,21 +667,6 @@ watch(
 .workspace-path {
   font-size: 0.68rem;
   color: var(--text-subtle);
-}
-
-.workspace-count {
-  min-width: 24px;
-  height: 20px;
-  padding: 0 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 999px;
-  background: var(--panel-2);
-  color: var(--text-subtle);
-  font-size: 0.68rem;
-  font-weight: 600;
-  flex-shrink: 0;
 }
 
 .workspace-running {
@@ -922,10 +938,10 @@ watch(
 .older-modal-list {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 1px;
   min-height: 0;
   overflow-y: auto;
-  padding: 0 14px 16px;
+  padding: 0 14px 12px;
 }
 
 .modal-session-item {
@@ -933,9 +949,9 @@ watch(
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 44px;
-  padding: 6px 10px;
-  border-radius: 10px;
+  min-height: 34px;
+  padding: 3px 10px;
+  border-radius: 8px;
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -965,24 +981,15 @@ watch(
   flex: 1 1 auto;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.modal-session-name,
-.modal-session-path {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  align-items: center;
 }
 
 .modal-session-name {
-  font-size: 0.86rem;
-}
-
-.modal-session-path {
-  color: var(--text-subtle);
-  font-size: 0.72rem;
+  overflow: hidden;
+  font-size: 0.82rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .modal-item-input {

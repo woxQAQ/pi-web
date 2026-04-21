@@ -163,6 +163,9 @@ describe("WsRpcAdapter", () => {
   beforeEach(() => {
     createAgentSessionMock.mockReset();
     vi.spyOn(SessionManager, "listAll").mockResolvedValue([]);
+    process.env.PI_WEB_SESSIONS_ROOT = fs.mkdtempSync(
+      path.join(os.tmpdir(), "pi-web-sessions-root-"),
+    );
     ws = createMockWebSocket();
     context = createMockContext();
     eventBus = new BridgeEventBus(DEFAULT_BRIDGE_CONFIG);
@@ -3528,10 +3531,12 @@ describe("WsRpcAdapter", () => {
         sessionId: sessionManager.getSessionId(),
         isStreaming: true,
         bindExtensions: vi.fn().mockResolvedValue(undefined),
-        subscribe: vi.fn().mockImplementation((listener: (event: object) => void) => {
-          listeners.push(listener);
-          return () => {};
-        }),
+        subscribe: vi
+          .fn()
+          .mockImplementation((listener: (event: object) => void) => {
+            listeners.push(listener);
+            return () => {};
+          }),
         prompt: vi.fn().mockResolvedValue(undefined),
         sessionManager,
         agent: {

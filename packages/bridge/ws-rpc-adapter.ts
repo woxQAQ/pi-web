@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import {
   SessionManager,
@@ -451,11 +452,37 @@ function workspaceMetadata(
   };
 }
 
-function normalizeSessionDate(
-  value: Date | string | undefined,
-): string | undefined {
-  if (value instanceof Date) return value.toISOString();
-  return typeof value === "string" && value ? value : undefined;
+function normalizeSessionTimestamp(timestamp?: string): string | undefined {
+  const value = sessionTimestampSortValue(timestamp);
+  return Number.isFinite(value) ? new Date(value).toISOString() : timestamp;
+}
+
+function listSessionFilesInDir(sessionDir: string): string[] {
+  try {
+    return fs
+      .readdirSync(sessionDir)
+      .filter(file => file.endsWith(".jsonl"))
+      .map(file => path.join(sessionDir, file));
+  } catch {
+    return [];
+  }
+}
+
+function listStoredSessionFiles(): string[] {
+  const sessionsRoot =
+    process.env.PI_WEB_SESSIONS_ROOT ??
+    path.join(os.homedir(), ".pi", "agent", "sessions");
+  if (!fs.existsSync(sessionsRoot)) return [];
+
+  const sessionFiles: string[] = [];
+  for (const entry of fs.readdirSync(sessionsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    sessionFiles.push(
+      ...listSessionFilesInDir(path.join(sessionsRoot, entry.name)),
+    );
+  }
+
+  return sessionFiles;
 }
 
 function normalizeWorkspacePath(filePath: string): string {
@@ -1781,7 +1808,9 @@ function queuedMessageTimestamp(value: unknown): number {
     : Date.now();
 }
 
-function extractMessageImages(message: { content?: unknown }): RpcImageContent[] {
+function extractMessageImages(message: {
+  content?: unknown;
+}): RpcImageContent[] {
   if (!Array.isArray(message.content)) return [];
 
   return message.content.flatMap(item => {
@@ -3643,7 +3672,8 @@ export class WsRpcAdapter {
             type: "response",
             command: "dequeue_follow_up_message",
             success: false,
-            error: "Queued follow-up editing requires an active detached session",
+            error:
+              "Queued follow-up editing requires an active detached session",
           };
         }
 
@@ -4175,28 +4205,30 @@ export class WsRpcAdapter {
                 sessionPath === liveSessionFile
                   ? !ctx.isIdle()
                   : this.sessionRuntime.isSessionRunning(sessionPath),
-              timestamp: header.timestamp,
-              updatedAt: header.timestamp,
+              timestamp: normalizeSessionTimestamp(header.timestamp),
+              updatedAt: normalizeSessionTimestamp(header.timestamp),
               ...workspace,
             });
           };
 
-          for (const info of await SessionManager.listAll()) {
-            if (seenSessionPaths.has(info.path)) continue;
-            const workspace = workspaceMetadata(info.cwd, info.path);
-            seenSessionPaths.add(info.path);
-            sessions.push({
-              id: info.id,
-              name:
-                info.name?.trim() ||
-                info.firstMessage ||
-                path.basename(info.path, ".jsonl"),
-              path: info.path,
-              isRunning: this.sessionRuntime.isSessionRunning(info.path),
-              timestamp: normalizeSessionDate(info.created),
-              updatedAt: normalizeSessionDate(info.modified),
-              ...workspace,
-            });
+          const storedSessionFiles = new Set(listStoredSessionFiles());
+          if (liveSessionFile) {
+            for (const sessionPath of listSessionFilesInDir(
+              path.dirname(liveSessionFile),
+            )) {
+              storedSessionFiles.add(sessionPath);
+            }
+          }
+
+          for (const sessionPath of storedSessionFiles) {
+            try {
+              appendSessionManager(
+                openSessionManager(sessionPath),
+                sessionPath,
+              );
+            } catch {
+              // Skip malformed or unreadable session files.
+            }
           }
 
           appendSessionManager(ctx.sessionManager, liveSessionFile, ctx.cwd);
