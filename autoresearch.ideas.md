@@ -1,0 +1,1 @@
+- Revisit bounded head reads only with a separate large-transcript startup benchmark. The current 480-session corpus regressed because manual open/read/close cost exceeded savings, but multi-MB JSONL files may benefit.

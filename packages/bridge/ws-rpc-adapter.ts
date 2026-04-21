@@ -469,6 +469,19 @@ function normalizeSessionTimestamp(timestamp?: string): string | undefined {
   return Number.isFinite(value) ? new Date(value).toISOString() : timestamp;
 }
 
+function normalizeSessionListTimestamp(timestamp?: string): {
+  timestamp?: string;
+  activitySortValue: number;
+} {
+  const activitySortValue = sessionTimestampSortValue(timestamp);
+  return {
+    timestamp: Number.isFinite(activitySortValue)
+      ? new Date(activitySortValue).toISOString()
+      : timestamp,
+    activitySortValue,
+  };
+}
+
 function listSessionFilesInDir(sessionDir: string): string[] {
   try {
     return fs
@@ -4306,7 +4319,9 @@ export class WsRpcAdapter {
               entry.path,
             );
             seenSessionPaths.add(entry.path);
-            const timestamp = normalizeSessionTimestamp(entry.timestamp);
+            const timestampInfo = normalizeSessionListTimestamp(
+              entry.timestamp,
+            );
             sessions.push({
               id: entry.id,
               name: entry.name ?? path.basename(entry.path, ".jsonl"),
@@ -4315,9 +4330,9 @@ export class WsRpcAdapter {
                 entry.path === liveSessionFile
                   ? !ctx.isIdle()
                   : this.sessionRuntime.isSessionRunning(entry.path),
-              timestamp,
-              updatedAt: timestamp,
-              activitySortValue: sessionTimestampSortValue(timestamp),
+              timestamp: timestampInfo.timestamp,
+              updatedAt: timestampInfo.timestamp,
+              activitySortValue: timestampInfo.activitySortValue,
               ...workspace,
             });
           };
