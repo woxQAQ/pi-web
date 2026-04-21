@@ -146,6 +146,14 @@ interface WorkspaceMetadata {
   workspacePath: string;
 }
 
+interface StoredSessionMetadata {
+  id: string;
+  name?: string;
+  path: string;
+  timestamp?: string;
+  cwd?: string;
+}
+
 interface SessionListManager {
   getHeader: () => { id: string; timestamp: string; cwd?: string } | null;
   getCwd: () => string | undefined;
@@ -483,6 +491,89 @@ function listStoredSessionFiles(): string[] {
   }
 
   return sessionFiles;
+}
+
+function readStoredSessionMetadata(
+  sessionPath: string,
+): StoredSessionMetadata | null {
+  let content: string;
+  try {
+    content = fs.readFileSync(sessionPath, "utf8");
+  } catch {
+    return null;
+  }
+
+  const lines = content.split(/\r?\n/);
+  const firstLine = lines.find(line => line.trim().length > 0);
+  if (!firstLine) return null;
+
+  let header: { id: string; timestamp?: unknown; cwd?: unknown };
+  try {
+    const parsedHeader = JSON.parse(firstLine) as {
+      type?: unknown;
+      id?: unknown;
+      timestamp?: unknown;
+      cwd?: unknown;
+    };
+    if (
+      parsedHeader.type !== "session" ||
+      typeof parsedHeader.id !== "string"
+    ) {
+      return null;
+    }
+    header = parsedHeader as { id: string; timestamp?: unknown; cwd?: unknown };
+  } catch {
+    return null;
+  }
+
+  let explicitName: string | undefined;
+  let firstUserText: string | undefined;
+
+  for (const line of lines) {
+    if (!line.trim()) continue;
+
+    let entry: {
+      type?: unknown;
+      name?: unknown;
+      message?: { role?: unknown; content?: unknown; text?: string };
+      role?: unknown;
+      content?: unknown;
+      text?: string;
+    };
+    try {
+      entry = JSON.parse(line) as typeof entry;
+    } catch {
+      continue;
+    }
+
+    if (entry.type === "session_info") {
+      const name = typeof entry.name === "string" ? entry.name.trim() : "";
+      explicitName = name || undefined;
+      continue;
+    }
+
+    if (firstUserText) continue;
+
+    const message =
+      entry.type === "message" && entry.message
+        ? entry.message
+        : typeof entry.role === "string"
+          ? entry
+          : null;
+    if (message?.role !== "user") continue;
+
+    const text = collapseWhitespace(extractMessageText(message));
+    if (text) firstUserText = text;
+  }
+
+  return {
+    id: header.id,
+    name: firstUserText ?? explicitName,
+    path: sessionPath,
+    timestamp:
+      typeof header.timestamp === "string" ? header.timestamp : undefined,
+    cwd: typeof header.cwd === "string" ? header.cwd : undefined,
+  };
 }
 
 function normalizeWorkspacePath(filePath: string): string {
@@ -4183,6 +4274,31 @@ export class WsRpcAdapter {
           const seenSessionPaths = new Set<string>();
           const liveSessionFile = ctx.sessionManager.getSessionFile();
 
+          const appendSession = (
+            entry: StoredSessionMetadata,
+            fallbackWorkspacePath?: string,
+          ) => {
+            if (seenSessionPaths.has(entry.path)) return;
+
+            const workspace = workspaceMetadata(
+              entry.cwd || fallbackWorkspacePath,
+              entry.path,
+            );
+            seenSessionPaths.add(entry.path);
+            sessions.push({
+              id: entry.id,
+              name: entry.name ?? path.basename(entry.path, ".jsonl"),
+              path: entry.path,
+              isRunning:
+                entry.path === liveSessionFile
+                  ? !ctx.isIdle()
+                  : this.sessionRuntime.isSessionRunning(entry.path),
+              timestamp: normalizeSessionTimestamp(entry.timestamp),
+              updatedAt: normalizeSessionTimestamp(entry.timestamp),
+              ...workspace,
+            });
+          };
+
           const appendSessionManager = (
             sessionManager: SessionListManager,
             sessionPath?: string,
@@ -4192,23 +4308,16 @@ export class WsRpcAdapter {
             const header = sessionManager.getHeader();
             if (!header) return;
 
-            const workspace = workspaceMetadata(
-              sessionManager.getCwd() || header.cwd || fallbackWorkspacePath,
-              sessionPath,
+            appendSession(
+              {
+                id: header.id,
+                name: sessionDisplayName(sessionManager, sessionPath),
+                path: sessionPath,
+                timestamp: header.timestamp,
+                cwd: sessionManager.getCwd() || header.cwd,
+              },
+              fallbackWorkspacePath,
             );
-            seenSessionPaths.add(sessionPath);
-            sessions.push({
-              id: header.id,
-              name: sessionDisplayName(sessionManager, sessionPath),
-              path: sessionPath,
-              isRunning:
-                sessionPath === liveSessionFile
-                  ? !ctx.isIdle()
-                  : this.sessionRuntime.isSessionRunning(sessionPath),
-              timestamp: normalizeSessionTimestamp(header.timestamp),
-              updatedAt: normalizeSessionTimestamp(header.timestamp),
-              ...workspace,
-            });
           };
 
           const storedSessionFiles = new Set(listStoredSessionFiles());
@@ -4221,14 +4330,8 @@ export class WsRpcAdapter {
           }
 
           for (const sessionPath of storedSessionFiles) {
-            try {
-              appendSessionManager(
-                openSessionManager(sessionPath),
-                sessionPath,
-              );
-            } catch {
-              // Skip malformed or unreadable session files.
-            }
+            const metadata = readStoredSessionMetadata(sessionPath);
+            if (metadata) appendSession(metadata);
           }
 
           appendSessionManager(ctx.sessionManager, liveSessionFile, ctx.cwd);
