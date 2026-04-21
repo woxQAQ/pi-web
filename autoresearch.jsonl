@@ -1,0 +1,1 @@
+{"type":"config","name":"Optimize web bridge initial session list load","metricName":"session_list_ms","metricUnit":"ms","bestDirection":"lower"}
