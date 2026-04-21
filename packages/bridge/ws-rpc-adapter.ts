@@ -563,7 +563,10 @@ function readStoredSessionMetadata(
     if (message?.role !== "user") continue;
 
     const text = collapseWhitespace(extractMessageText(message));
-    if (text) firstUserText = text;
+    if (text) {
+      firstUserText = text;
+      break;
+    }
   }
 
   return {
