@@ -511,6 +511,7 @@ function listStoredSessionFiles(): string[] {
 }
 
 const STORED_SESSION_METADATA_HEAD_BYTES = 512;
+const STORED_SESSION_METADATA_RETRY_HEAD_BYTES = 4 * 1024;
 
 function hasOddTrailingBackslashes(value: string, quoteIndex: number): boolean {
   let count = 0;
@@ -656,13 +657,14 @@ function parseStoredSessionMetadataContent(
   };
 }
 
-function readStoredSessionMetadata(
+function readStoredSessionMetadataHead(
   sessionPath: string,
-): StoredSessionMetadata | null {
+  headBytes: number,
+): StoredSessionMetadata | null | undefined {
   let fd: number | undefined;
   try {
     fd = fs.openSync(sessionPath, "r");
-    const buffer = Buffer.allocUnsafe(STORED_SESSION_METADATA_HEAD_BYTES);
+    const buffer = Buffer.allocUnsafe(headBytes);
     const bytesRead = fs.readSync(fd, buffer, 0, buffer.length, 0);
     fs.closeSync(fd);
     fd = undefined;
@@ -679,9 +681,7 @@ function readStoredSessionMetadata(
     if (parsedHead && (parsedHead.foundFirstUser || isCompleteFile)) {
       return parsedHead.metadata;
     }
-
-    const content = fs.readFileSync(sessionPath, "utf8");
-    return parseStoredSessionMetadataContent(sessionPath, content)?.metadata ?? null;
+    return undefined;
   } catch {
     if (fd !== undefined) {
       try {
@@ -690,6 +690,29 @@ function readStoredSessionMetadata(
         // Ignore close failures for unreadable session files.
       }
     }
+    return null;
+  }
+}
+
+function readStoredSessionMetadata(
+  sessionPath: string,
+): StoredSessionMetadata | null {
+  const headMetadata = readStoredSessionMetadataHead(
+    sessionPath,
+    STORED_SESSION_METADATA_HEAD_BYTES,
+  );
+  if (headMetadata !== undefined) return headMetadata;
+
+  const retryMetadata = readStoredSessionMetadataHead(
+    sessionPath,
+    STORED_SESSION_METADATA_RETRY_HEAD_BYTES,
+  );
+  if (retryMetadata !== undefined) return retryMetadata;
+
+  try {
+    const content = fs.readFileSync(sessionPath, "utf8");
+    return parseStoredSessionMetadataContent(sessionPath, content)?.metadata ?? null;
+  } catch {
     return null;
   }
 }
