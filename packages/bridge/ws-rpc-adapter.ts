@@ -503,8 +503,19 @@ function readStoredSessionMetadata(
     return null;
   }
 
-  const lines = content.split(/\r?\n/);
-  const firstLine = lines.find(line => line.trim().length > 0);
+  let lineStart = 0;
+  let firstLine: string | undefined;
+  while (lineStart <= content.length) {
+    const lineEnd = content.indexOf("\n", lineStart);
+    const rawLine =
+      lineEnd === -1 ? content.slice(lineStart) : content.slice(lineStart, lineEnd);
+    lineStart = lineEnd === -1 ? content.length + 1 : lineEnd + 1;
+    const line = rawLine.trim();
+    if (line) {
+      firstLine = line;
+      break;
+    }
+  }
   if (!firstLine) return null;
 
   let header: { id: string; timestamp?: unknown; cwd?: unknown };
@@ -529,8 +540,13 @@ function readStoredSessionMetadata(
   let explicitName: string | undefined;
   let firstUserText: string | undefined;
 
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  while (lineStart <= content.length) {
+    const lineEnd = content.indexOf("\n", lineStart);
+    const rawLine =
+      lineEnd === -1 ? content.slice(lineStart) : content.slice(lineStart, lineEnd);
+    lineStart = lineEnd === -1 ? content.length + 1 : lineEnd + 1;
+    const line = rawLine.trim();
+    if (!line) continue;
 
     let entry: {
       type?: unknown;
@@ -551,8 +567,6 @@ function readStoredSessionMetadata(
       explicitName = name || undefined;
       continue;
     }
-
-    if (firstUserText) continue;
 
     const message =
       entry.type === "message" && entry.message
