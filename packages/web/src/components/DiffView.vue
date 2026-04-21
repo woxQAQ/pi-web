@@ -28,14 +28,20 @@ function classifyLine(
 
 <template>
   <div class="diff-view" role="presentation">
-    <div
-      v-for="(line, index) in lines"
-      :key="`${index}:${line.text}`"
-      class="diff-line"
-      :data-kind="line.kind"
-    >
-      <pre>{{ line.text }}</pre>
-    </div>
+    <table class="diff-table" role="presentation">
+      <tbody>
+        <tr
+          v-for="(line, index) in lines"
+          :key="`${index}:${line.text}`"
+          class="diff-line"
+          :data-kind="line.kind"
+        >
+          <td>
+            <pre>{{ line.text }}</pre>
+          </td>
+        </tr>
+      </tbody>
+    </table>
   </div>
 </template>
 
@@ -49,6 +55,18 @@ function classifyLine(
   max-height: 360px;
 }
 
+.diff-table {
+  width: max-content;
+  min-width: 100%;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+
+.diff-line td {
+  padding: 0;
+  color: var(--text-muted);
+}
+
 .diff-line pre {
   margin: 0;
   padding: 0 12px;
@@ -56,43 +74,31 @@ function classifyLine(
   font-size: 0.72rem;
   line-height: 1.65;
   white-space: pre;
-  color: var(--text-muted);
+  color: inherit;
   font-weight: 500;
 }
 
-.diff-line[data-kind="header"] {
+.diff-line[data-kind="header"] td {
   background: var(--diff-header-bg);
-}
-
-.diff-line[data-kind="header"] pre {
   color: var(--text-subtle);
 }
 
-.diff-line[data-kind="hunk"] {
-  background: var(--diff-hunk-bg);
+.diff-line[data-kind="hunk"] td {
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-}
-
-.diff-line[data-kind="hunk"] pre {
+  background: var(--diff-hunk-bg);
   color: var(--text);
 }
 
-.diff-line[data-kind="added"] {
+.diff-line[data-kind="added"] td {
   background: var(--diff-added-bg);
   box-shadow: inset 3px 0 0 var(--diff-added-accent);
-}
-
-.diff-line[data-kind="added"] pre {
   color: var(--diff-added-text);
 }
 
-.diff-line[data-kind="removed"] {
+.diff-line[data-kind="removed"] td {
   background: var(--diff-removed-bg);
   box-shadow: inset 3px 0 0 var(--diff-removed-accent);
-}
-
-.diff-line[data-kind="removed"] pre {
   color: var(--diff-removed-text);
 }
 </style>
