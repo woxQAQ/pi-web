@@ -1,11 +1,11 @@
 # Autoresearch: initial session list load
 
 ## Objective
-Reduce the time for the web bridge to answer the first `list_sessions` RPC during browser startup. The user reports that the session list is slow on initial load. The workload is a realistic multi-workspace session store with hundreds of JSONL session files, including long historical transcripts so the loop does not overfit to tiny session files.
+Reduce the time for the web bridge to answer the first `list_sessions` RPC during browser startup. The user reports that the session list is slow on initial load. The workload is a realistic multi-workspace session store with hundreds of JSONL session files, including long historical transcripts and some long initial prompts so the loop does not overfit to tiny session files or short first messages.
 
 ## Metrics
 - **Primary**: `session_list_ms` (ms, lower is better), median RPC elapsed time across repeated fresh adapters.
-- **Secondary**: `best_ms`, `worst_ms`, `session_count`, `entries_per_session`, `large_session_count`, `total_session_bytes`.
+- **Secondary**: `best_ms`, `worst_ms`, `session_count`, `entries_per_session`, `large_session_count`, `long_initial_prompt_count`, `total_session_bytes`.
 
 ## How to Run
 `./autoresearch.sh` outputs `METRIC name=value` lines.
@@ -40,4 +40,6 @@ Reduce the time for the web bridge to answer the first `list_sessions` RPC durin
 - Workload broadened after run 23 to include long historical transcripts. This avoids overfitting to tiny JSONL files and re-tests whether bounded metadata reads are worthwhile for real slow startup cases.
 - Mixed long-transcript baseline: 13.092ms median with 480 sessions, 80 long sessions, and 13.3MB total JSONL.
 - Kept on mixed corpus: bounded metadata head reads improved median to 9.651ms, then tuning the head size to 2KB improved median to 5.936ms.
-- Discarded on mixed corpus: 1KB and 1536-byte head sizes, shared head buffer, parser wrapper removal, direct live-file duplicate checks, unbounded async reads, avoiding head slicing, and array path collection all regressed.
+- Kept on mixed corpus: generated user string-content extraction improved median to 5.852ms, then retuning head size to 512 bytes improved median to 5.285ms.
+- Discarded on mixed corpus: 256-byte, 768-byte, 1536-byte, 1KB before fast extraction, 3KB/4KB/8KB/32KB head sizes, shared head buffer, parser wrapper removal, direct live-file duplicate checks, unbounded async reads, avoiding head slicing, stat-based small-file reads, and array path collection all regressed.
+- Workload broadened again after run 48 to include long initial prompts. This checks that head-size tuning does not overfit to short first user messages.

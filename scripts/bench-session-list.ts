@@ -16,6 +16,7 @@ const WORKSPACE_COUNT = 8;
 const SESSIONS_PER_WORKSPACE = 60;
 const MESSAGES_PER_SESSION = 18;
 const LARGE_SESSION_EVERY = 6;
+const LONG_INITIAL_PROMPT_EVERY = 10;
 const LARGE_TRAILING_MESSAGES = 220;
 const REPEATS = Number.parseInt(process.env.SESSION_LIST_REPEATS ?? "7", 10);
 
@@ -52,6 +53,10 @@ function isLargeSession(sessionIndex: number): boolean {
   return sessionIndex % LARGE_SESSION_EVERY === 0;
 }
 
+function hasLongInitialPrompt(sessionIndex: number): boolean {
+  return sessionIndex % LONG_INITIAL_PROMPT_EVERY === 0;
+}
+
 function writeSessionFile(
   filePath: string,
   workspacePath: string,
@@ -86,7 +91,11 @@ function writeSessionFile(
         role,
         content:
           role === "user"
-            ? `Open benchmark session ${sessionIndex} in workspace ${workspaceIndex}`
+            ? `Open benchmark session ${sessionIndex} in workspace ${workspaceIndex}${
+                messageIndex === 0 && hasLongInitialPrompt(sessionIndex)
+                  ? `. ${"Long initial prompt context ".repeat(80)}`
+                  : ""
+              }`
             : [
                 {
                   type: "text",
@@ -130,11 +139,13 @@ function createCorpus(): {
   liveSessionFile: string;
   totalBytes: number;
   largeSessionCount: number;
+  longInitialPromptCount: number;
 } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-session-list-bench-"));
   let liveSessionFile = "";
   let totalBytes = 0;
   let largeSessionCount = 0;
+  let longInitialPromptCount = 0;
 
   for (let workspaceIndex = 0; workspaceIndex < WORKSPACE_COUNT; workspaceIndex += 1) {
     const workspacePath = path.join(root, `workspace-${workspaceIndex}`);
@@ -149,13 +160,14 @@ function createCorpus(): {
       );
       totalBytes += writeSessionFile(filePath, workspacePath, workspaceIndex, sessionIndex);
       if (isLargeSession(sessionIndex)) largeSessionCount += 1;
+      if (hasLongInitialPrompt(sessionIndex)) longInitialPromptCount += 1;
       if (workspaceIndex === 0 && sessionIndex === SESSIONS_PER_WORKSPACE - 1) {
         liveSessionFile = filePath;
       }
     }
   }
 
-  return { root, liveSessionFile, totalBytes, largeSessionCount };
+  return { root, liveSessionFile, totalBytes, largeSessionCount, longInitialPromptCount };
 }
 
 function createContext(liveSessionFile: string): WsRpcAdapterContext {
@@ -266,7 +278,7 @@ function median(values: number[]): number {
 }
 
 async function main(): Promise<void> {
-  const { root, liveSessionFile, totalBytes, largeSessionCount } = createCorpus();
+  const { root, liveSessionFile, totalBytes, largeSessionCount, longInitialPromptCount } = createCorpus();
   process.env.PI_WEB_SESSIONS_ROOT = root;
 
   try {
@@ -287,6 +299,7 @@ async function main(): Promise<void> {
     console.log(`METRIC session_count=${sessionCount}`);
     console.log(`METRIC entries_per_session=${entriesPerSession}`);
     console.log(`METRIC large_session_count=${largeSessionCount}`);
+    console.log(`METRIC long_initial_prompt_count=${longInitialPromptCount}`);
     console.log(`METRIC total_session_bytes=${totalBytes}`);
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
