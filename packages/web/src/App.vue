@@ -229,10 +229,13 @@ function handleRefreshSessions() {
   sendCommand({ type: "list_sessions" }).catch(() => {});
 }
 
-async function handleNewSession() {
+async function handleNewSession(workspacePath: string) {
   pendingRevision.value = null;
   try {
-    const response = await sendCommand({ type: "new_session" });
+    const response = await sendCommand({
+      type: "new_session",
+      workspacePath,
+    });
     if (response.success) {
       sidebarOpen.value = false;
     }

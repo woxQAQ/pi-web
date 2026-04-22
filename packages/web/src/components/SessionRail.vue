@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRight, Pencil, Search, Trash2, X } from "lucide-vue-next";
+import { ChevronRight, Pencil, Plus, Search, Trash2, X } from "lucide-vue-next";
 import { computed, nextTick, ref, watch } from "vue";
 import type { SessionEntry } from "../composables/useBridgeClient";
 
@@ -13,6 +13,7 @@ const emit = defineEmits<{
   select: [sessionPath: string];
   rename: [payload: { sessionPath: string; name: string }];
   delete: [sessionPath: string];
+  newSession: [workspacePath: string];
 }>();
 
 const RECENT_SESSION_LIMIT = 10;
@@ -300,6 +301,12 @@ function handleSessionSelect(sessionPath: string, closeModal = false) {
   if (closeModal) closeOlderSessions();
 }
 
+function handleWorkspaceNewSession(workspace: WorkspaceGroup) {
+  if (workspace.path === "Unknown workspace") return;
+  closeMenu();
+  emit("newSession", workspace.path);
+}
+
 watch(
   () => props.sessions.map(session => session.path).join(","),
   () => {
@@ -347,26 +354,36 @@ watch(
           running: workspace.hasRunningSession,
         }"
       >
-        <button
-          class="workspace-row"
-          type="button"
-          :aria-expanded="workspace.isExpanded"
-          :title="workspace.path"
-          @click="toggleWorkspace(workspace.id)"
-        >
-          <ChevronRight class="workspace-caret" aria-hidden="true" />
-          <span class="workspace-copy">
-            <span class="workspace-name">{{ workspace.name }}</span>
-            <span class="workspace-path">{{ workspace.path }}</span>
-          </span>
-          <span
-            v-if="workspace.hasRunningSession"
-            class="workspace-running"
-            role="status"
-            aria-label="Agent running in workspace"
-            title="Agent running in workspace"
-          ></span>
-        </button>
+        <div class="workspace-row" :title="workspace.path">
+          <button
+            class="workspace-toggle"
+            type="button"
+            :aria-expanded="workspace.isExpanded"
+            @click="toggleWorkspace(workspace.id)"
+          >
+            <ChevronRight class="workspace-caret" aria-hidden="true" />
+            <span class="workspace-copy">
+              <span class="workspace-name">{{ workspace.name }}</span>
+              <span class="workspace-path">{{ workspace.path }}</span>
+            </span>
+            <span
+              v-if="workspace.hasRunningSession"
+              class="workspace-running"
+              role="status"
+              aria-label="Agent running in workspace"
+              title="Agent running in workspace"
+            ></span>
+          </button>
+          <button
+            class="workspace-new-session"
+            type="button"
+            :aria-label="`New session in ${workspace.name}`"
+            :title="`New session in ${workspace.path}`"
+            @click.stop="handleWorkspaceNewSession(workspace)"
+          >
+            <Plus aria-hidden="true" />
+          </button>
+        </div>
 
         <div v-if="workspace.isExpanded" class="session-list">
           <div
@@ -598,7 +615,7 @@ watch(
   background: color-mix(in srgb, var(--panel-2) 64%, transparent);
 }
 
-.workspace-row,
+.workspace-toggle,
 .rail-item,
 .older-toggle {
   width: 100%;
@@ -610,21 +627,39 @@ watch(
 .workspace-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
   min-height: 42px;
-  padding: 6px 8px;
+  padding: 4px 6px 4px 8px;
   border-radius: 10px;
   background: transparent;
   color: var(--text-muted);
-  cursor: pointer;
   transition:
     background 0.12s ease,
     color 0.12s ease;
 }
 
-.workspace-row:hover {
+.workspace-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  align-self: stretch;
+  padding: 2px 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.workspace-row:hover,
+.workspace-row:focus-within {
   background: var(--panel-2);
   color: var(--text);
+}
+
+.workspace-toggle:focus-visible,
+.workspace-new-session:focus-visible {
+  outline: 1px solid var(--border-strong);
+  outline-offset: 2px;
 }
 
 .workspace-group.active > .workspace-row {
@@ -675,6 +710,47 @@ watch(
   border-radius: 999px;
   background: var(--diff-added-accent);
   flex-shrink: 0;
+}
+
+.workspace-new-session {
+  width: 26px;
+  height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--panel) 72%, transparent);
+  color: var(--text-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  opacity: 0;
+  transform: translateX(2px) scale(0.96);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease,
+    transform 0.14s ease;
+}
+
+.workspace-row:hover .workspace-new-session,
+.workspace-row:focus-within .workspace-new-session {
+  opacity: 1;
+  transform: translateX(0) scale(1);
+}
+
+.workspace-new-session:hover {
+  border-color: color-mix(in srgb, var(--border-strong) 70%, transparent);
+  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+  color: var(--text-muted);
+}
+
+.workspace-new-session svg {
+  width: 14px;
+  height: 14px;
 }
 
 .session-list {

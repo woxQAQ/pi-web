@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Plus, RefreshCw } from "lucide-vue-next";
+import { RefreshCw } from "lucide-vue-next";
 import SessionRail from "../components/SessionRail.vue";
 import type { SessionEntry } from "../composables/useBridgeClient";
 
@@ -15,7 +15,7 @@ const emit = defineEmits<{
   closeSidebar: [];
   selectSession: [sessionPath: string];
   refreshSessions: [];
-  newSession: [];
+  newSession: [workspacePath: string];
   renameSession: [sessionPath: string, name: string];
   deleteSession: [sessionPath: string];
 }>();
@@ -31,6 +31,7 @@ const emit = defineEmits<{
       @select="emit('selectSession', $event)"
       @rename="emit('renameSession', $event.sessionPath, $event.name)"
       @delete="emit('deleteSession', $event)"
+      @new-session="emit('newSession', $event)"
     >
       <template #header-actions>
         <button
@@ -41,15 +42,6 @@ const emit = defineEmits<{
           @click="emit('refreshSessions')"
         >
           <RefreshCw aria-hidden="true" />
-        </button>
-        <button
-          class="rail-button"
-          type="button"
-          aria-label="New session"
-          title="New session"
-          @click="emit('newSession')"
-        >
-          <Plus aria-hidden="true" />
         </button>
       </template>
     </SessionRail>

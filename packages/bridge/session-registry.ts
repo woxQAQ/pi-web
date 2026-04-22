@@ -169,8 +169,12 @@ export class DetachedSessionRegistry {
 
   constructor(private readonly fallbackCwd: string) {}
 
-  createSession(sessionDir?: string): DetachedSessionHandle {
-    const sessionManager = SessionManager.create(this.fallbackCwd, sessionDir);
+  createSession(options?: {
+    cwd?: string;
+    sessionDir?: string;
+  }): DetachedSessionHandle {
+    const cwd = options?.cwd?.trim() || this.fallbackCwd;
+    const sessionManager = SessionManager.create(cwd, options?.sessionDir);
     const sessionPath = sessionManager.getSessionFile();
     if (!sessionPath) {
       throw new Error("Selected session file not found");

@@ -2176,23 +2176,34 @@ class SessionRuntime {
     };
   }
 
-  async createDetachedSession(
-    transcriptLimit?: number,
-  ): Promise<SessionSummary> {
+  async createDetachedSession(options: {
+    workspacePath?: string;
+    transcriptLimit?: number;
+  } = {}): Promise<SessionSummary> {
     const { ctx } = this.context;
     const currentSessionFile =
       this.currentDetachedSessionPath() ?? ctx.sessionManager.getSessionFile();
-    const sessionDir = currentSessionFile
-      ? path.dirname(currentSessionFile)
-      : undefined;
+    const currentSessionManager = this.selectedSessionPath
+      ? this.registry.getCachedSessionManager(this.selectedSessionPath)
+      : null;
+    const targetCwd =
+      options.workspacePath?.trim() ||
+      currentSessionManager?.getCwd() ||
+      ctx.sessionManager.getCwd() ||
+      ctx.cwd;
+    const sessionDir = options.workspacePath
+      ? undefined
+      : currentSessionFile
+        ? path.dirname(currentSessionFile)
+        : undefined;
 
-    const handle = this.registry.createSession(sessionDir);
+    const handle = this.registry.createSession({ cwd: targetCwd, sessionDir });
     await this.selectSessionPath(handle.sessionPath);
 
     return this.buildSessionSummary(
       handle.getSessionManager(),
       handle.sessionPath,
-      transcriptLimit,
+      options.transcriptLimit,
     );
   }
 
@@ -3804,9 +3815,33 @@ export class WsRpcAdapter {
        * ================================================================== */
 
       case "new_session": {
-        const created = await this.sessionRuntime.createDetachedSession(
-          command.limit,
-        );
+        const workspacePath = command.workspacePath?.trim();
+        if (workspacePath) {
+          try {
+            if (!fs.statSync(workspacePath).isDirectory()) {
+              return {
+                id: correlationId,
+                type: "response",
+                command: "new_session",
+                success: false,
+                error: "Workspace path is not a directory",
+              };
+            }
+          } catch {
+            return {
+              id: correlationId,
+              type: "response",
+              command: "new_session",
+              success: false,
+              error: "Workspace path not found",
+            };
+          }
+        }
+
+        const created = await this.sessionRuntime.createDetachedSession({
+          workspacePath,
+          transcriptLimit: command.limit,
+        });
         this.transcriptProjector.syncPage(created.transcript);
         return {
           id: correlationId,

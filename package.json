@@ -4,6 +4,11 @@
   "description": "Web Shell for pi coding agent",
   "license": "MIT",
   "type": "module",
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-coding-agent"
+  ],
   "files": [
     "dist/bin",
     "dist/bridge",
