@@ -1,7 +1,7 @@
 # pi-web
 
-A [Pi](https://github.com/mariozechner/pi-coding-agent) extension that opens a
-WebSocket bridge for browser-based interaction.
+A [Pi](https://github.com/mariozechner/pi-coding-agent) extension that launch a
+Web Shell.
 
 Running `/web` inside Pi starts a local HTTP/WebSocket server and degrades the
 terminal to a read-only log view. Open the served URL in a browser to interact
@@ -14,13 +14,7 @@ with Pi through a full-featured chat UI.
 Install the published package into your Pi environment:
 
 ```bash
-pi install woxqaq@pi-web-bridge
-```
-
-For development snapshots, you can still install directly from git:
-
-```bash
-pi install git:https://github.com/woxQAQ/pi-web
+pi install woxqaq@pi-web
 ```
 
 Start Pi, then run:
@@ -29,7 +23,7 @@ Start Pi, then run:
 /web
 ```
 
-Open the printed URL (default: `http://localhost:8080`) in your browser.
+Open the printed URL (default: `http://localhost:7036`) in your browser.
 
 ---
 
