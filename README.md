@@ -14,7 +14,7 @@ with Pi through a full-featured chat UI.
 Install the published package into your Pi environment:
 
 ```bash
-pi install woxqaq@pi-web
+pi install npm:@woxqaq/pi-web
 ```
 
 Start Pi, then run:

@@ -37,19 +37,17 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build publishable package
+        run: pnpm run build:server && pnpm run build:web
+
       - name: Install pi-coding-agent
         run: npm install --global @mariozechner/pi-coding-agent
 
       - name: Show Pi version
         run: pi --version
 
-      - name: Install pi-web from GitHub
-        env:
-          PI_INSTALL_REPO:
-            ${{ github.event.pull_request.head.repo.full_name ||
-            github.repository }}
-          PI_INSTALL_REF:
-            ${{ github.event.pull_request.head.sha || github.sha }}
-        run:
-          pi install git:https://github.com/${{ env.PI_INSTALL_REPO }}@${{
-          env.PI_INSTALL_REF }}
+      - name: Install pi-web from local package
+        run: pi install .

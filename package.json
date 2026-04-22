@@ -1,63 +1,65 @@
 {
-	"name": "@woxqaq/pi-web",
-	"version": "0.1.1",
-	"description": "Web Shell for pi coding agent",
-	"license": "MIT",
-	"type": "module",
-	"files": [
-		"packages",
-		"web-dist",
-		"README.md"
-	],
-	"repository": {
-		"url": "https://github.com/woxQAQ/pi-web"
-	},
-	"scripts": {
-		"build:web": "vite build packages/web/",
-		"check": "tsgo --noEmit",
-		"dev:pi": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} pi -e ./packages/bin/index.ts",
-		"dev:pi:inspect": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} NODE_OPTIONS='--inspect-brk' pi -e ./packages/bin/index.ts",
-		"dev:web": "vite packages/web/",
-		"fmt": "oxfmt",
-		"fmt:check": "oxfmt --check",
-		"lint": "oxlint",
-		"lint:fix": "oxlint --fix",
-		"prepack": "npm run build:web",
-		"test": "vitest run",
-		"test:watch": "vitest"
-	},
-	"dependencies": {
-		"ws": "^8.18.0"
-	},
-	"devDependencies": {
-		"@mariozechner/pi-coding-agent": "^0.65.0",
-		"@types/node": "^24.3.0",
-		"@types/ws": "^8.18.0",
-		"@typescript/native-preview": "7.0.0-dev.20260413.1",
-		"@vitejs/plugin-vue": "^6.0.5",
-		"dompurify": "^3.3.3",
-		"lucide-vue-next": "^1.0.0",
-		"marked": "^18.0.0",
-		"oxfmt": "^0.45.0",
-		"oxlint": "^1.60.0",
-		"shiki": "^4.0.2",
-		"typescript": "^5.7.3",
-		"vite": "^8.0.0",
-		"vitest": "^3.2.4",
-		"vue": "^3.5.32"
-	},
-	"peerDependencies": {
-		"@mariozechner/pi-coding-agent": "*"
-	},
-	"engines": {
-		"node": ">=20.6.0"
-	},
-	"publishConfig": {
-		"access": "public"
-	},
-	"pi": {
-		"extensions": [
-			"./packages/bin/index.ts"
-		]
-	}
+  "name": "@woxqaq/pi-web",
+  "version": "0.1.2",
+  "description": "Web Shell for pi coding agent",
+  "license": "MIT",
+  "type": "module",
+  "files": [
+    "dist/bin",
+    "dist/bridge",
+    "web-dist",
+    "README.md"
+  ],
+  "repository": {
+    "url": "https://github.com/woxQAQ/pi-web"
+  },
+  "scripts": {
+    "build:server": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && tsc -p tsconfig.build.json",
+    "build:web": "vite build packages/web/",
+    "check": "tsgo --noEmit",
+    "dev:pi": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} pi -e ./packages/bin/index.ts",
+    "dev:pi:inspect": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} NODE_OPTIONS='--inspect-brk' pi -e ./packages/bin/index.ts",
+    "dev:web": "vite packages/web/",
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "prepack": "npm run build:server && npm run build:web",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "^0.65.0",
+    "@types/node": "^24.3.0",
+    "@types/ws": "^8.18.0",
+    "@typescript/native-preview": "7.0.0-dev.20260413.1",
+    "@vitejs/plugin-vue": "^6.0.5",
+    "dompurify": "^3.3.3",
+    "lucide-vue-next": "^1.0.0",
+    "marked": "^18.0.0",
+    "oxfmt": "^0.45.0",
+    "oxlint": "^1.60.0",
+    "shiki": "^4.0.2",
+    "typescript": "^5.7.3",
+    "vite": "^8.0.0",
+    "vitest": "^3.2.4",
+    "vue": "^3.5.32"
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "engines": {
+    "node": ">=20.6.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "pi": {
+    "extensions": [
+      "./dist/bin/index.js"
+    ]
+  }
 }

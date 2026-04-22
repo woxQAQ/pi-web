@@ -50,6 +50,9 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      - name: Build server bundle
+        run: pnpm run build:server
+
       - name: Build web bundle
         run: pnpm run build:web
 
