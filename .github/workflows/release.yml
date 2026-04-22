@@ -62,7 +62,7 @@ jobs:
           name: npm-package
           path: .artifacts/*.tgz
 
-      - name: Publish to npm with trusted publishing
+      - name: Publish to npm
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
