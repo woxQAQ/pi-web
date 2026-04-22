@@ -2176,10 +2176,12 @@ class SessionRuntime {
     };
   }
 
-  async createDetachedSession(options: {
-    workspacePath?: string;
-    transcriptLimit?: number;
-  } = {}): Promise<SessionSummary> {
+  async createDetachedSession(
+    options: {
+      workspacePath?: string;
+      transcriptLimit?: number;
+    } = {},
+  ): Promise<SessionSummary> {
     const { ctx } = this.context;
     const currentSessionFile =
       this.currentDetachedSessionPath() ?? ctx.sessionManager.getSessionFile();

@@ -1,11 +1,45 @@
 <script setup lang="ts">
 import DOMPurify from "dompurify";
 import { marked } from "marked";
-import { computed } from "vue";
-
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 const props = defineProps<{
   content: string;
+  deferMermaidErrors?: boolean;
 }>();
+
+type MermaidModule = typeof import("mermaid").default;
+
+type RenderedMarkdown = {
+  html: string;
+  mermaidSources: string[];
+};
+
+const MERMAID_SELECTOR = "[data-mermaid-index]";
+const MERMAID_MIN_WIDTH = 420;
+const MERMAID_MAX_WIDTH = 900;
+const MERMAID_MIN_ZOOM = 0.5;
+const MERMAID_MAX_ZOOM = 2.5;
+const MERMAID_ZOOM_STEP = 0.25;
+const HTML_ESCAPE: Record<string, string> = {
+  "&": "&amp;",
+  "<": "&lt;",
+  ">": "&gt;",
+  '"': "&quot;",
+  "'": "&#39;",
+};
+
+let mermaidPromise: Promise<MermaidModule> | null = null;
+let renderVersion = 0;
+let themeObserver: MutationObserver | undefined;
+const rendererId = Math.random().toString(36).slice(2);
+const markdownBody = ref<HTMLDivElement | null>(null);
 
 // Configure marked once
 marked.setOptions({
@@ -13,10 +47,19 @@ marked.setOptions({
   breaks: true,
 });
 
-const renderedHtml = computed(() => {
-  const raw = props.content;
-  if (!raw) return "";
-  const html = marked.parse(raw) as string;
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, char => HTML_ESCAPE[char] ?? char);
+}
+
+function languageName(lang?: string): string {
+  return (lang ?? "").trim().split(/\s+/, 1)[0]?.toLowerCase() ?? "";
+}
+
+function mermaidPlaceholder(index: number, source: string): string {
+  return `<div class="mermaid-block" data-mermaid-index="${index}"><div class="mermaid-block-status" aria-live="polite">Rendering diagram...</div><pre class="mermaid-source"><code>${escapeHtml(source)}</code></pre></div>`;
+}
+
+function sanitizeMarkdownHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
       "h1",
@@ -50,15 +93,368 @@ const renderedHtml = computed(() => {
       "summary",
       "sup",
       "sub",
+      "div",
+      "span",
     ],
-    ALLOWED_ATTR: ["href", "target", "rel", "alt", "src", "title", "class"],
+    ALLOWED_ATTR: [
+      "href",
+      "target",
+      "rel",
+      "alt",
+      "src",
+      "title",
+      "class",
+      "data-mermaid-index",
+      "aria-live",
+    ],
   });
+}
+
+function renderMarkdown(raw: string): RenderedMarkdown {
+  if (!raw) return { html: "", mermaidSources: [] };
+
+  const mermaidSources: string[] = [];
+  const renderer = new marked.Renderer();
+  const defaultCodeRenderer = renderer.code.bind(renderer);
+
+  renderer.code = token => {
+    if (languageName(token.lang) !== "mermaid") {
+      return defaultCodeRenderer(token);
+    }
+
+    const index = mermaidSources.push(token.text) - 1;
+    return mermaidPlaceholder(index, token.text);
+  };
+
+  const html = marked.parse(raw, {
+    renderer,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  return {
+    html: sanitizeMarkdownHtml(html),
+    mermaidSources,
+  };
+}
+
+function loadMermaid(): Promise<MermaidModule> {
+  mermaidPromise ??= import("mermaid").then(module => module.default);
+  return mermaidPromise;
+}
+
+function cssVar(styles: CSSStyleDeclaration, name: string, fallback: string) {
+  return styles.getPropertyValue(name).trim() || fallback;
+}
+
+function configureMermaid(mermaid: MermaidModule) {
+  const shell = document.querySelector<HTMLElement>(".app-shell");
+  const styles = getComputedStyle(shell ?? document.documentElement);
+  const isDark = shell?.dataset.theme !== "light";
+
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme: "base",
+    htmlLabels: false,
+    flowchart: {
+      htmlLabels: false,
+    },
+    themeVariables: {
+      darkMode: isDark,
+      background: cssVar(styles, "--panel", isDark ? "#101010" : "#ffffff"),
+      mainBkg: cssVar(styles, "--panel-2", isDark ? "#141414" : "#f5f5f5"),
+      primaryColor: cssVar(styles, "--panel-2", isDark ? "#141414" : "#f5f5f5"),
+      primaryTextColor: cssVar(
+        styles,
+        "--text",
+        isDark ? "#f5f5f5" : "#111111",
+      ),
+      primaryBorderColor: cssVar(
+        styles,
+        "--border-strong",
+        isDark ? "#323232" : "#c9c9c9",
+      ),
+      lineColor: cssVar(
+        styles,
+        "--text-subtle",
+        isDark ? "#737373" : "#7a7a7a",
+      ),
+      textColor: cssVar(styles, "--text", isDark ? "#f5f5f5" : "#111111"),
+      fontFamily: cssVar(styles, "--pi-font-sans", "system-ui, sans-serif"),
+    },
+  });
+}
+
+function sanitizeMermaidSvg(svg: string): string {
+  return DOMPurify.sanitize(svg, {
+    USE_PROFILES: { svg: true, svgFilters: true },
+    ADD_TAGS: ["style"],
+    ADD_ATTR: ["class", "style"],
+  });
+}
+
+function numericSvgLength(value: string | null): number | null {
+  const match = value?.trim().match(/^[0-9.]+/);
+  if (!match) return null;
+
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function svgViewBoxWidth(svg: SVGSVGElement): number | null {
+  const values = svg
+    .getAttribute("viewBox")
+    ?.trim()
+    .split(/[\s,]+/)
+    .map(Number);
+  const width = values?.[2];
+  return typeof width === "number" && Number.isFinite(width) && width > 0
+    ? width
+    : null;
+}
+
+function clampMermaidZoom(value: number): number {
+  return Math.min(MERMAID_MAX_ZOOM, Math.max(MERMAID_MIN_ZOOM, value));
+}
+
+function readMermaidZoom(block: HTMLElement): number {
+  const zoom = Number(block.dataset.mermaidZoom);
+  return Number.isFinite(zoom) ? clampMermaidZoom(zoom) : 1;
+}
+
+function mermaidZoomLabel(zoom: number): string {
+  return `${Math.round(zoom * 100)}%`;
+}
+
+function updateMermaidZoom(block: HTMLElement, zoom: number) {
+  const nextZoom = clampMermaidZoom(zoom);
+  const baseWidth = Number(block.dataset.mermaidBaseWidth);
+  const svg = block.querySelector<SVGSVGElement>("svg");
+
+  block.dataset.mermaidZoom = String(nextZoom);
+  if (svg && Number.isFinite(baseWidth) && baseWidth > 0) {
+    svg.style.width = `${Math.round(baseWidth * nextZoom)}px`;
+    svg.style.maxWidth = nextZoom > 1 ? "none" : "100%";
+  }
+
+  const label = block.querySelector<HTMLElement>("[data-mermaid-zoom-label]");
+  if (label) label.textContent = mermaidZoomLabel(nextZoom);
+
+  const zoomOut = block.querySelector<HTMLButtonElement>(
+    '[data-mermaid-zoom-action="out"]',
+  );
+  const zoomIn = block.querySelector<HTMLButtonElement>(
+    '[data-mermaid-zoom-action="in"]',
+  );
+  const reset = block.querySelector<HTMLButtonElement>(
+    '[data-mermaid-zoom-action="reset"]',
+  );
+  if (zoomOut) zoomOut.disabled = nextZoom <= MERMAID_MIN_ZOOM;
+  if (zoomIn) zoomIn.disabled = nextZoom >= MERMAID_MAX_ZOOM;
+  if (reset) reset.disabled = nextZoom === 1;
+}
+
+function mermaidZoomButton(action: string, label: string, title: string) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "mermaid-zoom-button";
+  button.dataset.mermaidZoomAction = action;
+  button.title = title;
+  button.setAttribute("aria-label", title);
+  button.textContent = label;
+  return button;
+}
+
+function addMermaidZoomControls(block: HTMLElement) {
+  const toolbar = document.createElement("div");
+  toolbar.className = "mermaid-block-toolbar";
+
+  const label = document.createElement("span");
+  label.className = "mermaid-zoom-label";
+  label.dataset.mermaidZoomLabel = "true";
+
+  toolbar.append(
+    mermaidZoomButton("out", "-", "Zoom out"),
+    label,
+    mermaidZoomButton("in", "+", "Zoom in"),
+    mermaidZoomButton("reset", "Reset zoom", "Reset zoom"),
+  );
+  toolbar.addEventListener("click", event => {
+    const target =
+      event.target instanceof Element
+        ? event.target.closest<HTMLButtonElement>(
+            "button[data-mermaid-zoom-action]",
+          )
+        : null;
+    if (!target) return;
+
+    const currentZoom = readMermaidZoom(block);
+    if (target.dataset.mermaidZoomAction === "out") {
+      updateMermaidZoom(block, currentZoom - MERMAID_ZOOM_STEP);
+    } else if (target.dataset.mermaidZoomAction === "in") {
+      updateMermaidZoom(block, currentZoom + MERMAID_ZOOM_STEP);
+    } else {
+      updateMermaidZoom(block, 1);
+    }
+  });
+
+  block.prepend(toolbar);
+  updateMermaidZoom(block, readMermaidZoom(block));
+}
+
+function wrapMermaidDiagram(block: HTMLElement) {
+  const scrollContainer = document.createElement("div");
+  scrollContainer.className = "mermaid-diagram-scroll";
+  scrollContainer.append(...block.childNodes);
+  block.replaceChildren(scrollContainer);
+}
+
+function fitMermaidSvg(block: HTMLElement) {
+  const svg = block.querySelector<SVGSVGElement>("svg");
+  const intrinsicWidth = svg
+    ? (svgViewBoxWidth(svg) ?? numericSvgLength(svg.getAttribute("width")))
+    : null;
+  if (!intrinsicWidth) return;
+
+  const displayWidth = Math.min(
+    MERMAID_MAX_WIDTH,
+    Math.max(MERMAID_MIN_WIDTH, intrinsicWidth),
+  );
+  block.dataset.mermaidBaseWidth = String(displayWidth);
+  updateMermaidZoom(block, readMermaidZoom(block));
+}
+
+function errorText(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
+function replaceWithMermaidSource(
+  block: HTMLElement,
+  source: string,
+  statusText: string,
+) {
+  const status = document.createElement("div");
+  status.className = "mermaid-block-status";
+  status.textContent = statusText;
+
+  const code = document.createElement("code");
+  code.textContent = source;
+  const pre = document.createElement("pre");
+  pre.className = "mermaid-source";
+  pre.append(code);
+
+  delete block.dataset.mermaidBaseWidth;
+  delete block.dataset.mermaidZoom;
+  block.classList.remove("mermaid-block-rendered");
+  block.replaceChildren(status, pre);
+}
+
+function showMermaidDeferred(block: HTMLElement) {
+  const status = block.querySelector<HTMLElement>(".mermaid-block-status");
+  if (status) status.textContent = "Waiting for complete Mermaid diagram...";
+  block.classList.remove("mermaid-block-error", "mermaid-block-rendered");
+}
+
+function showMermaidError(block: HTMLElement, source: string, error: unknown) {
+  block.classList.add("mermaid-block-error");
+  replaceWithMermaidSource(
+    block,
+    source,
+    `Could not render Mermaid diagram: ${errorText(error)}`,
+  );
+}
+
+async function renderMermaidBlocks() {
+  const version = ++renderVersion;
+  const root = markdownBody.value;
+  const sources = renderedMarkdown.value.mermaidSources;
+  if (!root || sources.length === 0) return;
+
+  if (props.deferMermaidErrors) {
+    for (const block of root.querySelectorAll<HTMLElement>(MERMAID_SELECTOR)) {
+      showMermaidDeferred(block);
+    }
+    return;
+  }
+
+  ensureThemeObserver();
+  await nextTick();
+
+  const mermaid = await loadMermaid();
+  if (version !== renderVersion || !markdownBody.value) return;
+  configureMermaid(mermaid);
+
+  const blocks = [
+    ...markdownBody.value.querySelectorAll<HTMLElement>(MERMAID_SELECTOR),
+  ];
+  for (const block of blocks) {
+    const index = Number(block.dataset.mermaidIndex);
+    const source = Number.isInteger(index) ? sources[index] : undefined;
+    if (!source) continue;
+
+    try {
+      const result = await mermaid.render(
+        `markdown-mermaid-${rendererId}-${version}-${index}`,
+        source,
+      );
+      if (version !== renderVersion) return;
+
+      block.innerHTML = sanitizeMermaidSvg(result.svg);
+      wrapMermaidDiagram(block);
+      fitMermaidSvg(block);
+      addMermaidZoomControls(block);
+      block.classList.add("mermaid-block-rendered");
+      block.classList.remove("mermaid-block-error");
+      result.bindFunctions?.(block);
+    } catch (error) {
+      if (version !== renderVersion) return;
+      showMermaidError(block, source, error);
+    }
+  }
+}
+
+function ensureThemeObserver() {
+  if (themeObserver) return;
+  const shell = document.querySelector(".app-shell");
+  if (!shell) return;
+
+  themeObserver = new MutationObserver(() => {
+    if (renderedMarkdown.value.mermaidSources.length === 0) return;
+    void renderMermaidBlocks();
+  });
+  themeObserver.observe(shell, {
+    attributes: true,
+    attributeFilter: ["data-theme"],
+  });
+}
+
+const renderedMarkdown = computed(() => renderMarkdown(props.content));
+
+onMounted(() => {
+  void renderMermaidBlocks();
 });
+
+onBeforeUnmount(() => {
+  renderVersion++;
+  themeObserver?.disconnect();
+});
+
+watch(
+  [renderedMarkdown, () => props.deferMermaidErrors],
+  () => {
+    void renderMermaidBlocks();
+  },
+  { flush: "post" },
+);
 </script>
 
 <template>
   <!-- eslint-disable-next-line vue/no-v-html -->
-  <div class="markdown-body" v-html="renderedHtml"></div>
+  <div
+    ref="markdownBody"
+    class="markdown-body"
+    v-html="renderedMarkdown.html"
+  ></div>
 </template>
 
 <style>
@@ -161,6 +557,97 @@ const renderedHtml = computed(() => {
   white-space: pre;
   word-break: normal;
   overflow-wrap: normal;
+}
+
+.markdown-body .mermaid-block {
+  margin: 0.7em 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.markdown-body .mermaid-block-rendered {
+  text-align: center;
+}
+
+.markdown-body .mermaid-block-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.markdown-body .mermaid-zoom-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--panel-2) 82%, transparent);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 0.68rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.markdown-body .mermaid-zoom-button:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  color: var(--text);
+}
+
+.markdown-body .mermaid-zoom-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.markdown-body .mermaid-zoom-label {
+  min-width: 42px;
+  color: var(--text-subtle);
+  font-size: 0.68rem;
+  line-height: 1;
+  text-align: center;
+}
+
+.markdown-body .mermaid-diagram-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.markdown-body .mermaid-block svg {
+  display: block;
+  width: min(100%, var(--mermaid-svg-width, 760px));
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+
+.markdown-body .mermaid-block-status {
+  margin-bottom: 10px;
+  color: var(--text-subtle);
+  font-size: 0.76rem;
+}
+
+.markdown-body .mermaid-source {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+}
+
+.markdown-body .mermaid-block-rendered .mermaid-block-status,
+.markdown-body .mermaid-block-rendered .mermaid-source {
+  display: none;
+}
+
+.markdown-body .mermaid-block-error {
+  border-color: color-mix(in srgb, var(--error-border) 72%, var(--border));
 }
 
 .markdown-body a {

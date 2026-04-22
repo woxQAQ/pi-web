@@ -224,7 +224,11 @@ export interface RpcCommandMap {
     images?: RpcImageContent[];
   };
   abort: {};
-  new_session: { parentSession?: string; limit?: number; workspacePath?: string };
+  new_session: {
+    parentSession?: string;
+    limit?: number;
+    workspacePath?: string;
+  };
 
   /** State */
   get_state: {};

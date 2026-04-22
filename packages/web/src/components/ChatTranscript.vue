@@ -126,6 +126,15 @@ const displayItems = computed(() =>
 const showBusyIndicator = computed(
   () => props.isStreaming || props.isCompacting,
 );
+const streamingAssistantMessageIndex = computed(() => {
+  if (!props.isStreaming) return -1;
+
+  for (let index = props.messages.length - 1; index >= 0; index--) {
+    if (props.messages[index]?.role === "assistant") return index;
+  }
+
+  return -1;
+});
 const busyIndicatorLabel = computed(() =>
   props.isCompacting && !props.isStreaming
     ? "Compacting context"
@@ -155,6 +164,16 @@ function sessionEventModelText(
 
 function toolBlockKey(messageKey: string, blockIdx: number): string {
   return `${messageKey}-${blockIdx}`;
+}
+
+function shouldDeferMessageMarkdownErrors(
+  msg: TranscriptEntry,
+  messageIndex: number,
+): boolean {
+  return (
+    msg.role === "assistant" &&
+    messageIndex === streamingAssistantMessageIndex.value
+  );
 }
 
 function toggleToolBlock(messageKey: string, blockIdx: number) {
@@ -683,6 +702,12 @@ defineExpose({ preserveScroll, scrollToMessageId });
                     "
                     class="thinking-content"
                     :content="block.text"
+                    :defer-mermaid-errors="
+                      shouldDeferMessageMarkdownErrors(
+                        item.message,
+                        item.messageIndex,
+                      )
+                    "
                   />
                 </div>
 
@@ -730,6 +755,12 @@ defineExpose({ preserveScroll, scrollToMessageId });
                 <MarkdownRenderer
                   v-else-if="block.kind === 'text' && block.text"
                   :content="block.text"
+                  :defer-mermaid-errors="
+                    shouldDeferMessageMarkdownErrors(
+                      item.message,
+                      item.messageIndex,
+                    )
+                  "
                 />
               </template>
             </div>
