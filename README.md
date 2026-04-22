@@ -11,7 +11,13 @@ with Pi through a full-featured chat UI.
 
 ## Quick start
 
-Install the extension into your Pi environment:
+Install the published package into your Pi environment:
+
+```bash
+pi install woxqaq@pi-web-bridge
+```
+
+For development snapshots, you can still install directly from git:
 
 ```bash
 pi install git:https://github.com/woxQAQ/pi-web

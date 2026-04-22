@@ -1,8 +1,13 @@
 {
-  "name": "pi-web-bridge",
+  "name": "woxqaq@pi-web",
   "version": "0.1.0",
   "description": "Pi extension: WebSocket bridge for browser-based interaction",
   "type": "module",
+  "files": [
+    "packages",
+    "web-dist",
+    "README.md"
+  ],
   "scripts": {
     "build:web": "vite build packages/web/",
     "check": "tsgo --noEmit",
@@ -13,7 +18,7 @@
     "fmt:check": "oxfmt --check",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "prepare": "npm run build:web",
+    "prepack": "npm run build:web",
     "test": "vitest run",
     "test:watch": "vitest"
   },
