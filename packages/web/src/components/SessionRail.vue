@@ -29,7 +29,6 @@ interface WorkspaceGroup {
   latestActivity: number;
   isExpanded: boolean;
   isActive: boolean;
-  hasRunningSession: boolean;
   query: string;
   recentSessions: SessionEntry[];
   remainingSessions: SessionEntry[];
@@ -177,9 +176,6 @@ const workspaceGroups = computed<WorkspaceGroup[]>(() => {
         isExpanded: expandedWorkspaceIds.value.has(group.id),
         isActive: sessions.some(
           session => session.path === props.activeSessionPath,
-        ),
-        hasRunningSession: sessions.some(session =>
-          props.runningSessionPaths.includes(session.path),
         ),
         query,
         recentSessions: sessions.slice(0, RECENT_SESSION_LIMIT),
@@ -351,7 +347,6 @@ watch(
         :class="{
           expanded: workspace.isExpanded,
           active: workspace.isActive,
-          running: workspace.hasRunningSession,
         }"
       >
         <div class="workspace-row" :title="workspace.path">
@@ -366,13 +361,6 @@ watch(
               <span class="workspace-name">{{ workspace.name }}</span>
               <span class="workspace-path">{{ workspace.path }}</span>
             </span>
-            <span
-              v-if="workspace.hasRunningSession"
-              class="workspace-running"
-              role="status"
-              aria-label="Agent running in workspace"
-              title="Agent running in workspace"
-            ></span>
           </button>
           <button
             class="workspace-new-session"
@@ -702,14 +690,6 @@ watch(
 .workspace-path {
   font-size: 0.68rem;
   color: var(--text-subtle);
-}
-
-.workspace-running {
-  width: 7px;
-  height: 7px;
-  border-radius: 999px;
-  background: var(--diff-added-accent);
-  flex-shrink: 0;
 }
 
 .workspace-new-session {
