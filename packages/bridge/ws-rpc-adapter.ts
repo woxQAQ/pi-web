@@ -4223,7 +4223,13 @@ export class WsRpcAdapter {
             sessionPath?: string,
             fallbackWorkspacePath?: string,
           ) => {
-            if (!sessionPath || seenSessionPaths.has(sessionPath)) return;
+            if (
+              !sessionPath ||
+              seenSessionPaths.has(sessionPath) ||
+              !fs.existsSync(sessionPath)
+            ) {
+              return;
+            }
             const header = sessionManager.getHeader();
             if (!header) return;
 

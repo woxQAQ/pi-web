@@ -1973,7 +1973,7 @@ describe("WsRpcAdapter", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it("should include a pending new session in list_sessions", async () => {
+    it("omits a pending new session from list_sessions until it is stored", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-pending-"));
       const liveSessionFile = path.join(tmpDir, "live-session.jsonl");
       fs.writeFileSync(
@@ -2044,20 +2044,17 @@ describe("WsRpcAdapter", () => {
       const response = JSON.parse(lastCall);
 
       expect(response.payload.success).toBe(true);
-      expect(response.payload.data.sessions).toHaveLength(2);
-      expect(response.payload.data.sessions[0]).toMatchObject({
-        path: expect.any(String),
-      });
-      expect(response.payload.data.sessions[0].path).not.toBe(liveSessionFile);
-      expect(response.payload.data.sessions[1]).toMatchObject({
-        id: "live-id",
-        path: liveSessionFile,
-      });
+      expect(response.payload.data.sessions).toEqual([
+        expect.objectContaining({
+          id: "live-id",
+          path: liveSessionFile,
+        }),
+      ]);
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
-    it("should switch back to a pending new session after switching away", async () => {
+    it("keeps a pending new session switchable even when omitted from list_sessions", async () => {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-web-pending-"));
       const liveSessionFile = path.join(tmpDir, "live-session.jsonl");
       fs.writeFileSync(
@@ -2192,7 +2189,6 @@ describe("WsRpcAdapter", () => {
         );
 
       expect(listResponse?.payload.data.sessions).toEqual([
-        expect.objectContaining({ path: pendingSessionPath }),
         expect.objectContaining({ path: liveSessionFile }),
       ]);
       expect(switchBackResponse?.payload.success).toBe(true);
