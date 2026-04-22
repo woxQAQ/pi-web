@@ -1,5 +1,5 @@
 {
-  "name": "woxqaq@pi-web",
+  "name": "@woxqaq/pi-web",
   "version": "0.1.0",
   "description": "Pi extension: WebSocket bridge for browser-based interaction",
   "type": "module",
