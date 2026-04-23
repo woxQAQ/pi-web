@@ -122,6 +122,17 @@ const editQueuedPayload = ref<{
 
 const THEME_CACHE_KEY = "pi-web-theme";
 const DEBUG_MODE_CACHE_KEY = "pi-web-debug-mode";
+const LEFT_RAIL_WIDTH_CACHE_KEY = "pi-web-left-rail-width";
+const RIGHT_RAIL_WIDTH_CACHE_KEY = "pi-web-right-rail-width";
+const LEFT_RAIL_MIN_WIDTH = 260;
+const LEFT_RAIL_MAX_WIDTH = 520;
+const LEFT_RAIL_DEFAULT_WIDTH = 320;
+const RIGHT_RAIL_MIN_WIDTH = 240;
+const RIGHT_RAIL_MAX_WIDTH = 420;
+const RIGHT_RAIL_DEFAULT_WIDTH = 300;
+const MIN_CENTER_COLUMN_WIDTH = 360;
+
+type RailSide = "left" | "right";
 
 function readCachedTheme(): ThemeMode {
   if (typeof window === "undefined") return "dark";
@@ -145,14 +156,89 @@ function readCachedDebugMode(): boolean {
   );
 }
 
+function readCachedRailWidth(
+  cacheKey: string,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  if (typeof window === "undefined") return fallback;
+  const cached = Number.parseInt(
+    window.localStorage.getItem(cacheKey) ?? "",
+    10,
+  );
+  return Number.isFinite(cached)
+    ? Math.min(max, Math.max(min, cached))
+    : fallback;
+}
+
 const theme = ref<ThemeMode>(readCachedTheme());
 const debugMode = ref(readCachedDebugMode());
+const compactLayout = ref(isCompactLayout());
+const leftRailWidth = ref(
+  readCachedRailWidth(
+    LEFT_RAIL_WIDTH_CACHE_KEY,
+    LEFT_RAIL_DEFAULT_WIDTH,
+    LEFT_RAIL_MIN_WIDTH,
+    LEFT_RAIL_MAX_WIDTH,
+  ),
+);
+const rightRailWidth = ref(
+  readCachedRailWidth(
+    RIGHT_RAIL_WIDTH_CACHE_KEY,
+    RIGHT_RAIL_DEFAULT_WIDTH,
+    RIGHT_RAIL_MIN_WIDTH,
+    RIGHT_RAIL_MAX_WIDTH,
+  ),
+);
+const activeRailResize = ref<{
+  side: RailSide;
+  startX: number;
+  startWidth: number;
+} | null>(null);
 const nextThemeLabel = computed<ThemeMode>(() =>
   theme.value === "dark" ? "light" : "dark",
 );
 const debugModeLabel = computed(() =>
   debugMode.value ? "Disable debug mode" : "Enable debug mode",
 );
+const showLeftRailResizer = computed(
+  () => !compactLayout.value && !leftSidebarCollapsed.value,
+);
+const showRightRailResizer = computed(
+  () =>
+    !compactLayout.value && hasSessionOutline.value && outlineSidebarOpen.value,
+);
+const appShellStyle = computed(() => {
+  if (compactLayout.value) {
+    return undefined;
+  }
+
+  return {
+    gridTemplateColumns: leftSidebarCollapsed.value
+      ? "minmax(0, 1fr)"
+      : `${leftRailWidth.value}px minmax(0, 1fr)`,
+  };
+});
+const appBodyStyle = computed(() => {
+  if (
+    compactLayout.value ||
+    !hasSessionOutline.value ||
+    !outlineSidebarOpen.value
+  ) {
+    return undefined;
+  }
+
+  return {
+    gridTemplateColumns: `minmax(0, 1fr) ${rightRailWidth.value}px`,
+  };
+});
+const leftRailResizerStyle = computed(() => ({
+  left: `${leftRailWidth.value - 5}px`,
+}));
+const rightRailResizerStyle = computed(() => ({
+  right: `${rightRailWidth.value - 5}px`,
+}));
 
 watch(theme, value => {
   if (typeof window !== "undefined") {
@@ -164,6 +250,18 @@ watch(debugMode, value => {
   if (!debugModeAvailable) return;
   if (typeof window !== "undefined") {
     window.localStorage.setItem(DEBUG_MODE_CACHE_KEY, String(value));
+  }
+});
+
+watch(leftRailWidth, value => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(LEFT_RAIL_WIDTH_CACHE_KEY, String(value));
+  }
+});
+
+watch(rightRailWidth, value => {
+  if (typeof window !== "undefined") {
+    window.localStorage.setItem(RIGHT_RAIL_WIDTH_CACHE_KEY, String(value));
   }
 });
 
@@ -188,11 +286,157 @@ watch(hasSessionOutline, visible => {
   }
 });
 
+watch([hasSessionOutline, outlineSidebarOpen, leftSidebarCollapsed], () => {
+  if (compactLayout.value) {
+    if (activeRailResize.value) {
+      stopRailResize();
+    }
+    return;
+  }
+
+  if (activeRailResize.value?.side === "left" && leftSidebarCollapsed.value) {
+    stopRailResize();
+    return;
+  }
+
+  if (
+    activeRailResize.value?.side === "right" &&
+    (!hasSessionOutline.value || !outlineSidebarOpen.value)
+  ) {
+    stopRailResize();
+    return;
+  }
+
+  normalizeRailWidths();
+});
+
 const compatWarningVisible = ref(false);
 
 function isCompactLayout(): boolean {
   if (typeof window === "undefined") return false;
   return window.matchMedia("(max-width: 900px)").matches;
+}
+
+function maxRailWidth(side: RailSide): number {
+  if (typeof window === "undefined") {
+    return side === "left" ? LEFT_RAIL_MAX_WIDTH : RIGHT_RAIL_MAX_WIDTH;
+  }
+
+  const viewportWidth = window.innerWidth;
+  if (side === "left") {
+    const reservedRightWidth =
+      !compactLayout.value &&
+      hasSessionOutline.value &&
+      outlineSidebarOpen.value
+        ? rightRailWidth.value
+        : 0;
+    return Math.max(
+      LEFT_RAIL_MIN_WIDTH,
+      Math.min(
+        LEFT_RAIL_MAX_WIDTH,
+        viewportWidth - reservedRightWidth - MIN_CENTER_COLUMN_WIDTH,
+      ),
+    );
+  }
+
+  const reservedLeftWidth =
+    !compactLayout.value && !leftSidebarCollapsed.value
+      ? leftRailWidth.value
+      : 0;
+  return Math.max(
+    RIGHT_RAIL_MIN_WIDTH,
+    Math.min(
+      RIGHT_RAIL_MAX_WIDTH,
+      viewportWidth - reservedLeftWidth - MIN_CENTER_COLUMN_WIDTH,
+    ),
+  );
+}
+
+function clampRailWidth(side: RailSide, width: number): number {
+  const minWidth = side === "left" ? LEFT_RAIL_MIN_WIDTH : RIGHT_RAIL_MIN_WIDTH;
+  const maxWidth = maxRailWidth(side);
+  return Math.round(Math.min(maxWidth, Math.max(minWidth, width)));
+}
+
+function normalizeRailWidths() {
+  leftRailWidth.value = clampRailWidth("left", leftRailWidth.value);
+  rightRailWidth.value = clampRailWidth("right", rightRailWidth.value);
+}
+
+function syncCompactLayout() {
+  compactLayout.value = isCompactLayout();
+  if (compactLayout.value) {
+    stopRailResize();
+    return;
+  }
+  normalizeRailWidths();
+}
+
+function startRailResize(side: RailSide, event: PointerEvent) {
+  if (compactLayout.value) return;
+  if (side === "left" && leftSidebarCollapsed.value) return;
+  if (
+    side === "right" &&
+    (!hasSessionOutline.value || !outlineSidebarOpen.value)
+  ) {
+    return;
+  }
+
+  event.preventDefault();
+  activeRailResize.value = {
+    side,
+    startX: event.clientX,
+    startWidth: side === "left" ? leftRailWidth.value : rightRailWidth.value,
+  };
+  document.body.style.cursor = "col-resize";
+  document.body.style.userSelect = "none";
+  window.addEventListener("pointermove", handleRailResize);
+  window.addEventListener("pointerup", stopRailResize);
+  window.addEventListener("pointercancel", stopRailResize);
+}
+
+function handleRailResize(event: PointerEvent) {
+  if (!activeRailResize.value) return;
+
+  const delta = event.clientX - activeRailResize.value.startX;
+  if (activeRailResize.value.side === "left") {
+    leftRailWidth.value = clampRailWidth(
+      "left",
+      activeRailResize.value.startWidth + delta,
+    );
+    return;
+  }
+
+  rightRailWidth.value = clampRailWidth(
+    "right",
+    activeRailResize.value.startWidth - delta,
+  );
+}
+
+function stopRailResize() {
+  if (!activeRailResize.value && typeof window === "undefined") {
+    return;
+  }
+
+  activeRailResize.value = null;
+  if (typeof document !== "undefined") {
+    document.body.style.removeProperty("cursor");
+    document.body.style.removeProperty("user-select");
+  }
+  if (typeof window !== "undefined") {
+    window.removeEventListener("pointermove", handleRailResize);
+    window.removeEventListener("pointerup", stopRailResize);
+    window.removeEventListener("pointercancel", stopRailResize);
+  }
+}
+
+function resetRailWidth(side: RailSide) {
+  if (side === "left") {
+    leftRailWidth.value = clampRailWidth("left", LEFT_RAIL_DEFAULT_WIDTH);
+    return;
+  }
+
+  rightRailWidth.value = clampRailWidth("right", RIGHT_RAIL_DEFAULT_WIDTH);
 }
 
 function toggleTheme() {
@@ -202,7 +446,7 @@ function toggleTheme() {
 function toggleSessionSidebar() {
   const nextOpen = !sidebarOpen.value;
   sidebarOpen.value = nextOpen;
-  if (nextOpen && isCompactLayout()) {
+  if (nextOpen && compactLayout.value) {
     outlineSidebarOpen.value = false;
   }
 }
@@ -285,8 +529,10 @@ function toggleOutlineSidebar() {
   const nextOpen = !outlineSidebarOpen.value;
   outlineSidebarOpen.value = nextOpen;
   if (nextOpen) {
-    if (isCompactLayout()) {
+    if (compactLayout.value) {
       sidebarOpen.value = false;
+    } else {
+      rightRailWidth.value = clampRailWidth("right", rightRailWidth.value);
     }
     handleRefreshTree();
   }
@@ -339,7 +585,7 @@ async function handleTreeEntrySelect(entryId: string) {
   if (entry?.isOnActivePath) {
     const revealed = await revealTreeEntryInTranscript(entryId);
     if (revealed) {
-      if (isCompactLayout()) {
+      if (compactLayout.value) {
         outlineSidebarOpen.value = false;
       }
       return;
@@ -351,7 +597,7 @@ async function handleTreeEntrySelect(entryId: string) {
     if (response.success) {
       await nextTick();
       mainContentRef.value?.scrollToTranscriptEntry(entryId);
-      if (isCompactLayout()) {
+      if (compactLayout.value) {
         outlineSidebarOpen.value = false;
       }
     }
@@ -489,10 +735,14 @@ function handleGlobalKeydown(event: KeyboardEvent) {
 }
 
 onMounted(() => {
+  syncCompactLayout();
+  window.addEventListener("resize", syncCompactLayout);
   window.addEventListener("keydown", handleGlobalKeydown);
 });
 
 onBeforeUnmount(() => {
+  stopRailResize();
+  window.removeEventListener("resize", syncCompactLayout);
   window.removeEventListener("keydown", handleGlobalKeydown);
 });
 </script>
@@ -502,6 +752,7 @@ onBeforeUnmount(() => {
     class="app-shell"
     :class="{ 'left-rail-collapsed': leftSidebarCollapsed }"
     :data-theme="theme"
+    :style="appShellStyle"
   >
     <AppSidebar
       :sessions="sessions"
@@ -518,6 +769,15 @@ onBeforeUnmount(() => {
       @rename-session="handleRenameSession"
       @delete-session="handleDeleteSession"
     />
+    <div
+      v-if="showLeftRailResizer"
+      class="rail-resizer left"
+      :class="{ active: activeRailResize?.side === 'left' }"
+      :style="leftRailResizerStyle"
+      title="Drag to resize sessions sidebar. Double-click to reset."
+      @pointerdown="startRailResize('left', $event)"
+      @dblclick="resetRailWidth('left')"
+    ></div>
 
     <div class="app-main-column">
       <AppHeader
@@ -548,6 +808,7 @@ onBeforeUnmount(() => {
           'has-right-rail': hasSessionOutline,
           'right-rail-open': hasSessionOutline && outlineSidebarOpen,
         }"
+        :style="appBodyStyle"
       >
         <AppMainContent
           ref="mainContentRef"
@@ -597,6 +858,16 @@ onBeforeUnmount(() => {
           @select-thinking-level="handleThinkingLevelSelect"
           @toggle-auto-compaction="handleAutoCompactionToggle"
         />
+
+        <div
+          v-if="showRightRailResizer"
+          class="rail-resizer right"
+          :class="{ active: activeRailResize?.side === 'right' }"
+          :style="rightRailResizerStyle"
+          title="Drag to resize session outline. Double-click to reset."
+          @pointerdown="startRailResize('right', $event)"
+          @dblclick="resetRailWidth('right')"
+        ></div>
 
         <AppRightSidebar
           v-if="hasSessionOutline && outlineSidebarOpen"
@@ -687,6 +958,37 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.rail-resizer {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  z-index: 25;
+  touch-action: none;
+}
+
+.rail-resizer::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 999px;
+  background: transparent;
+  transition:
+    background 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.rail-resizer:hover::before,
+.rail-resizer.active::before {
+  background: color-mix(in srgb, var(--accent) 55%, var(--border-strong));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--focus-ring) 70%, transparent);
+}
+
 .app-shell ::selection {
   background: var(--selection-bg);
 }
@@ -770,6 +1072,10 @@ onBeforeUnmount(() => {
   .app-shell {
     display: flex;
     flex-direction: column;
+  }
+
+  .rail-resizer {
+    display: none;
   }
 
   .app-body,
