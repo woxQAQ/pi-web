@@ -183,25 +183,25 @@ function configureMermaid(mermaid: MermaidModule) {
     },
     themeVariables: {
       darkMode: isDark,
-      background: cssVar(styles, "--panel", isDark ? "#101010" : "#ffffff"),
-      mainBkg: cssVar(styles, "--panel-2", isDark ? "#141414" : "#f5f5f5"),
-      primaryColor: cssVar(styles, "--panel-2", isDark ? "#141414" : "#f5f5f5"),
+      background: cssVar(styles, "--panel", isDark ? "#161b22" : "#ffffff"),
+      mainBkg: cssVar(styles, "--panel-2", isDark ? "#21262d" : "#f6f8fa"),
+      primaryColor: cssVar(styles, "--panel-2", isDark ? "#21262d" : "#f6f8fa"),
       primaryTextColor: cssVar(
         styles,
         "--text",
-        isDark ? "#f5f5f5" : "#111111",
+        isDark ? "#e6edf3" : "#1f2328",
       ),
       primaryBorderColor: cssVar(
         styles,
         "--border-strong",
-        isDark ? "#323232" : "#c9c9c9",
+        isDark ? "#484f58" : "#afb8c1",
       ),
       lineColor: cssVar(
         styles,
         "--text-subtle",
-        isDark ? "#737373" : "#7a7a7a",
+        isDark ? "#7d8590" : "#6e7781",
       ),
-      textColor: cssVar(styles, "--text", isDark ? "#f5f5f5" : "#111111"),
+      textColor: cssVar(styles, "--text", isDark ? "#e6edf3" : "#1f2328"),
       fontFamily: cssVar(styles, "--pi-font-sans", "system-ui, sans-serif"),
     },
   });

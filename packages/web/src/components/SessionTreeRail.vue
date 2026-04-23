@@ -201,10 +201,16 @@ function handleSelect(entryId: string) {
 }
 
 .nav-button:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--text);
   transform: translateY(-1px);
+}
+
+.nav-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .nav-button svg {
@@ -262,9 +268,8 @@ function handleSelect(entryId: string) {
 }
 
 .search-input:focus {
-  border-color: var(--border-strong);
-  box-shadow: inset 0 0 0 1px
-    color-mix(in srgb, var(--border-strong) 70%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .filter-row {
@@ -301,14 +306,14 @@ function handleSelect(entryId: string) {
 }
 
 .filter-chip:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--text-muted);
 }
 
 .filter-chip.active {
-  background: color-mix(in srgb, var(--panel-3) 86%, transparent);
-  border-color: color-mix(in srgb, var(--border-strong) 92%, transparent);
+  background: var(--surface-selected);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
   color: var(--text);
 }
 
@@ -360,7 +365,7 @@ function handleSelect(entryId: string) {
 }
 
 .tree-item:hover .tree-content {
-  background: color-mix(in srgb, var(--panel-2) 72%, transparent);
+  background: var(--surface-hover);
 }
 
 .tree-item.dimmed {
@@ -377,16 +382,8 @@ function handleSelect(entryId: string) {
 }
 
 .tree-item.active .tree-content {
-  background: color-mix(
-    in srgb,
-    var(--panel-3) 92%,
-    var(--diff-added-accent) 8%
-  );
-  border-color: color-mix(
-    in srgb,
-    var(--border-strong) 76%,
-    var(--diff-added-accent) 24%
-  );
+  background: var(--surface-active);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
   box-shadow: none;
 }
 

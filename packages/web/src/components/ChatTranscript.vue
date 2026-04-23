@@ -1083,8 +1083,14 @@ defineExpose({ preserveScroll, scrollToMessageId });
 .message-action-button:hover,
 .message-action-button:focus-visible {
   border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  background: var(--surface-hover);
   color: var(--text);
+}
+
+.message-action-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .message-action-icon {
@@ -1192,7 +1198,7 @@ defineExpose({ preserveScroll, scrollToMessageId });
   border: 1px solid var(--border);
   border-radius: 14px;
   background: color-mix(in srgb, var(--panel) 88%, transparent);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-raised);
   object-fit: contain;
   transition:
     transform 0.16s ease,
@@ -1203,8 +1209,10 @@ defineExpose({ preserveScroll, scrollToMessageId });
 .message-image-button:hover .message-image,
 .message-image-button:focus-visible .message-image {
   transform: translateY(-1px) scale(1.01);
-  border-color: var(--border-strong);
-  box-shadow: 0 18px 32px rgba(0, 0, 0, 0.16);
+  border-color: var(--accent);
+  box-shadow:
+    0 0 0 3px var(--focus-ring),
+    var(--shadow-floating);
 }
 
 .thinking-toggle {

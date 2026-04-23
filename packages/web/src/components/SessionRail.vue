@@ -633,7 +633,7 @@ watch(
 }
 
 .workspace-group.active {
-  background: color-mix(in srgb, var(--panel-2) 64%, transparent);
+  background: var(--surface-selected);
 }
 
 .workspace-toggle,
@@ -673,14 +673,14 @@ watch(
 
 .workspace-row:hover,
 .workspace-row:focus-within {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text);
 }
 
 .workspace-toggle:focus-visible,
 .workspace-new-session:focus-visible {
-  outline: 1px solid var(--border-strong);
-  outline-offset: 2px;
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .workspace-group.active > .workspace-row {
@@ -757,7 +757,7 @@ watch(
 
 .workspace-new-session:hover {
   border-color: color-mix(in srgb, var(--border-strong) 70%, transparent);
-  background: color-mix(in srgb, var(--panel-2) 88%, transparent);
+  background: var(--surface-hover);
   color: var(--text-muted);
 }
 
@@ -792,11 +792,11 @@ watch(
 }
 
 .rail-item:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
 }
 
 .rail-item.active {
-  background: var(--panel-3);
+  background: var(--surface-selected);
   color: var(--text);
 }
 
@@ -836,9 +836,8 @@ watch(
 }
 
 .item-input:focus {
-  border-color: var(--diff-added-accent);
-  box-shadow: 0 0 0 1px
-    color-mix(in srgb, var(--diff-added-accent) 30%, transparent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .item-status {
@@ -883,8 +882,13 @@ watch(
 }
 
 .older-toggle:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text-muted);
+}
+
+.older-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .rail-empty {
@@ -915,7 +919,7 @@ watch(
   border-radius: 16px;
   background: var(--bg-elevated);
   color: var(--text);
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-floating);
 }
 
 .older-modal-header {
@@ -975,8 +979,14 @@ watch(
 }
 
 .older-modal-close:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text-muted);
+}
+
+.older-modal-close:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .older-modal-close svg {
@@ -998,7 +1008,8 @@ watch(
 }
 
 .modal-session-search:focus-within {
-  border-color: var(--border-strong);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .modal-session-search svg {
@@ -1050,11 +1061,11 @@ watch(
 }
 
 .modal-session-item:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
 }
 
 .modal-session-item.active {
-  background: var(--panel-3);
+  background: var(--surface-selected);
   color: var(--text);
 }
 
@@ -1100,8 +1111,14 @@ watch(
 }
 
 .modal-load-more:hover {
-  background: var(--panel-3);
+  background: var(--surface-hover);
   color: var(--text);
+}
+
+.modal-load-more:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .modal-empty {
@@ -1127,7 +1144,7 @@ watch(
   background: color-mix(in srgb, var(--panel-2) 98%, white 2%);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--border) 50%, transparent),
-    0 8px 24px rgba(0, 0, 0, 0.35);
+    var(--shadow-raised);
   display: flex;
   flex-direction: column;
   gap: 1px;
@@ -1164,7 +1181,13 @@ watch(
 }
 
 .menu-item:hover {
-  background: var(--panel-3);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.menu-item:focus-visible {
+  outline: none;
+  background: var(--surface-active);
   color: var(--text);
 }
 

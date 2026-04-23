@@ -474,13 +474,23 @@ onBeforeUnmount(() => {
     color 0.15s ease;
 }
 
-.git-trigger:hover:not(:disabled),
-.git-trigger[aria-expanded="true"],
-.git-trigger:focus-visible {
+.git-trigger:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text);
+}
+
+.git-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+  background: var(--surface-active);
+  color: var(--text);
+}
+
+.git-trigger:focus-visible {
   outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  color: var(--text);
 }
 
 .git-trigger:disabled {
@@ -519,7 +529,7 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--panel) 97%, transparent),
     var(--bg-elevated)
   );
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-floating);
   backdrop-filter: blur(18px);
   z-index: 18;
 }
@@ -545,12 +555,18 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 
-.git-refresh:hover:not(:disabled),
-.git-refresh:focus-visible {
+.git-refresh:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--panel-2);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.git-refresh:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface-hover);
   color: var(--text);
   outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .git-refresh:disabled {
@@ -579,8 +595,9 @@ onBeforeUnmount(() => {
 }
 
 .git-search:focus-within {
-  border-color: var(--border-strong);
+  border-color: var(--accent);
   background: var(--panel);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .git-search-input {
@@ -619,11 +636,16 @@ onBeforeUnmount(() => {
   text-align: left;
 }
 
-.git-create:hover:not(:disabled),
-.git-create:focus-visible {
-  background: var(--panel-2);
+.git-create:hover:not(:disabled) {
+  background: var(--surface-hover);
   border-color: var(--border-strong);
+}
+
+.git-create:focus-visible {
+  background: var(--surface-hover);
+  border-color: var(--accent);
   outline: none;
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .git-create:disabled {
@@ -685,14 +707,14 @@ onBeforeUnmount(() => {
 
 .git-option:hover:not(:disabled),
 .git-option.highlighted {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: color-mix(in srgb, var(--border-strong) 84%, transparent);
   transform: translateX(1px);
 }
 
 .git-option.selected {
-  background: color-mix(in srgb, var(--panel-2) 82%, var(--button-bg));
-  border-color: color-mix(in srgb, var(--border-strong) 90%, transparent);
+  background: var(--surface-selected);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
 }
 
 .git-option:disabled {

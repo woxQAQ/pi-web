@@ -80,8 +80,8 @@ const hasVisibleContent = computed(
 const barColor = computed(() => {
   if (contextPercent.value == null) return "var(--text-subtle)";
   if (contextPercent.value < 50) return "var(--text-subtle)";
-  if (contextPercent.value < 80) return "#eab308";
-  return "#ef4444";
+  if (contextPercent.value < 80) return "var(--warning)";
+  return "var(--danger)";
 });
 </script>
 

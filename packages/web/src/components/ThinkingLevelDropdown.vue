@@ -273,16 +273,23 @@ onBeforeUnmount(() => {
     opacity 0.15s ease;
 }
 
-.thinking-trigger:hover:not(:disabled),
-.thinking-trigger[aria-expanded="true"],
-.thinking-trigger:focus-visible {
+.thinking-trigger:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--panel-2);
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.thinking-trigger[aria-expanded="true"] {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+  background: var(--surface-active);
   color: var(--text);
 }
 
 .thinking-trigger:focus-visible {
   outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+  color: var(--text);
 }
 
 .thinking-trigger:disabled {
@@ -329,7 +336,7 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--panel) 97%, transparent),
     var(--bg-elevated)
   );
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-floating);
   backdrop-filter: blur(18px);
   z-index: 18;
 }
@@ -369,14 +376,14 @@ onBeforeUnmount(() => {
 
 .thinking-option:hover,
 .thinking-option.highlighted {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: color-mix(in srgb, var(--border-strong) 84%, transparent);
   transform: translateX(1px);
 }
 
 .thinking-option.selected {
-  background: color-mix(in srgb, var(--panel-2) 82%, var(--button-bg));
-  border-color: color-mix(in srgb, var(--border-strong) 90%, transparent);
+  background: var(--surface-selected);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
 }
 
 .thinking-option-label {

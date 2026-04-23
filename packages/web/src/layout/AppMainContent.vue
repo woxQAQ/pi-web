@@ -323,13 +323,13 @@ defineExpose({ preserveTranscriptScroll, scrollToTranscriptEntry });
 }
 
 .queued-action-btn.edit:hover {
-  border-color: color-mix(in srgb, #3b82f6 60%, var(--border-strong));
-  color: #60a5fa;
+  border-color: color-mix(in srgb, var(--accent) 60%, var(--border-strong));
+  color: var(--accent-hover);
 }
 
 .queued-action-btn.cancel:hover {
-  border-color: color-mix(in srgb, #ef4444 60%, var(--border-strong));
-  color: #f87171;
+  border-color: color-mix(in srgb, var(--danger) 60%, var(--border-strong));
+  color: var(--danger);
 }
 
 @media (max-width: 900px) {

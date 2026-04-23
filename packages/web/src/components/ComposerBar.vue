@@ -862,7 +862,7 @@ resizeTextarea();
     color-mix(in srgb, var(--bg-elevated) 92%, transparent),
     var(--panel)
   );
-  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.12);
+  box-shadow: var(--shadow-raised);
   transition:
     border-color 0.15s ease,
     background 0.15s ease,
@@ -930,27 +930,38 @@ resizeTextarea();
 
 .revision-cancel-button:hover {
   border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  background: var(--surface-hover);
   color: var(--text);
+}
+
+.revision-cancel-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .composer-dock:focus-within {
   border-color: var(--border-strong);
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--panel) 94%, transparent),
-    var(--panel-2)
+    color-mix(in srgb, var(--bg-elevated) 94%, transparent),
+    color-mix(in srgb, var(--panel) 96%, var(--panel-2))
   );
-  box-shadow: 0 26px 56px rgba(0, 0, 0, 0.16);
+  box-shadow:
+    0 0 0 2px var(--focus-ring-muted),
+    var(--shadow-raised);
 }
 
 .composer-dock.drag-active {
-  border-color: color-mix(in srgb, var(--border-strong) 82%, white);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--panel-2) 92%, transparent),
-    var(--panel)
+    color-mix(in srgb, var(--surface-active) 52%, var(--bg-elevated)),
+    color-mix(in srgb, var(--panel) 96%, var(--panel-2))
   );
+  box-shadow:
+    0 0 0 2px var(--focus-ring),
+    var(--shadow-raised);
 }
 
 .composer-dock.disabled {
@@ -1022,7 +1033,7 @@ resizeTextarea();
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #f59e0b;
+  background: var(--warning);
   animation: pending-pulse 1.4s ease-in-out infinite;
 }
 
@@ -1100,16 +1111,17 @@ resizeTextarea();
 .attachment-chip-remove:hover,
 .attach-btn:hover:not(:disabled) {
   border-color: var(--border-strong);
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text);
 }
 
 .attachment-chip-remove:focus-visible,
 .attach-btn:focus-visible {
   outline: none;
-  border-color: var(--border-strong);
-  background: var(--panel-2);
+  border-color: var(--accent);
+  background: var(--surface-hover);
   color: var(--text);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .attachment-chip-remove-icon,
@@ -1127,8 +1139,8 @@ resizeTextarea();
 
 .attach-btn.active {
   color: var(--text);
-  border-color: color-mix(in srgb, var(--border-strong) 88%, transparent);
-  background: color-mix(in srgb, var(--panel-2) 86%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
+  background: var(--surface-selected);
 }
 
 .prompt-input {
@@ -1183,6 +1195,12 @@ resizeTextarea();
   background: var(--button-hover);
   border-color: var(--border-strong);
   transform: translateY(-1px);
+}
+
+.send-btn:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .send-btn.stop {
@@ -1257,11 +1275,17 @@ resizeTextarea();
     transform 0.15s ease;
 }
 
-.toggle-chip:hover:not(.disabled),
-.toggle-chip:focus-within {
+.toggle-chip:hover:not(.disabled) {
   border-color: var(--border-strong);
-  background: var(--panel-2);
+  background: var(--surface-hover);
   color: var(--text);
+}
+
+.toggle-chip:focus-within {
+  border-color: var(--accent);
+  background: var(--surface-active);
+  color: var(--text);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .toggle-chip.disabled {

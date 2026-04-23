@@ -256,11 +256,22 @@ onBeforeUnmount(() => {
     transform 0.15s ease;
 }
 
-.model-trigger:hover:not(:disabled),
-.model-trigger[aria-expanded="true"] {
-  background: var(--panel-2);
+.model-trigger:hover:not(:disabled) {
+  background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--text);
+}
+
+.model-trigger[aria-expanded="true"] {
+  background: var(--surface-active);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+  color: var(--text);
+}
+
+.model-trigger:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .model-trigger:disabled {
@@ -296,7 +307,7 @@ onBeforeUnmount(() => {
     color-mix(in srgb, var(--panel) 97%, transparent),
     var(--bg-elevated)
   );
-  box-shadow: var(--shadow);
+  box-shadow: var(--shadow-floating);
   backdrop-filter: blur(18px);
   z-index: 18;
 }
@@ -314,8 +325,9 @@ onBeforeUnmount(() => {
 }
 
 .model-search:focus-within {
-  border-color: var(--border-strong);
+  border-color: var(--accent);
   background: var(--panel);
+  box-shadow: 0 0 0 3px var(--focus-ring);
 }
 
 .model-search-icon {
@@ -372,14 +384,14 @@ onBeforeUnmount(() => {
 
 .model-option:hover,
 .model-option.highlighted {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: color-mix(in srgb, var(--border-strong) 84%, transparent);
   transform: translateX(1px);
 }
 
 .model-option.selected {
-  background: color-mix(in srgb, var(--panel-2) 82%, var(--button-bg));
-  border-color: color-mix(in srgb, var(--border-strong) 90%, transparent);
+  background: var(--surface-selected);
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
 }
 
 .model-option-copy {

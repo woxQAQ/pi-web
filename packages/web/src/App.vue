@@ -626,36 +626,49 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .app-shell {
-  --bg: #0a0a0a;
-  --bg-elevated: #0f0f0f;
-  --panel: #101010;
-  --panel-2: #141414;
-  --panel-3: #181818;
-  --tool-card-bg: #151515;
-  --tool-card-bg-strong: #1b1b1b;
-  --diff-added-bg: rgba(34, 197, 94, 0.16);
-  --diff-added-text: #dcfce7;
-  --diff-added-accent: #22c55e;
-  --diff-removed-bg: rgba(248, 113, 113, 0.15);
-  --diff-removed-text: #fecaca;
-  --diff-removed-accent: #f87171;
-  --diff-header-bg: #242424;
-  --diff-hunk-bg: #2b2b2b;
-  --rail-bg: #111111;
-  --border: #242424;
-  --border-strong: #323232;
-  --text: #f5f5f5;
-  --text-muted: #b0b0b0;
-  --text-subtle: #737373;
-  --button-bg: #191919;
-  --button-hover: #212121;
-  --shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
-  --overlay: rgba(0, 0, 0, 0.72);
-  --backdrop: rgba(0, 0, 0, 0.45);
-  --composer-fade: rgba(10, 10, 10, 0.96);
-  --error-bg: rgba(127, 29, 29, 0.28);
-  --error-border: rgba(248, 113, 113, 0.42);
-  --error-text: #fecaca;
+  --bg: #0d1117;
+  --bg-elevated: #161b22;
+  --panel: #161b22;
+  --panel-2: #21262d;
+  --panel-3: #30363d;
+  --tool-card-bg: #161b22;
+  --tool-card-bg-strong: #21262d;
+  --diff-added-bg: rgba(46, 160, 67, 0.15);
+  --diff-added-text: #aff5b4;
+  --diff-added-accent: #3fb950;
+  --diff-removed-bg: rgba(218, 54, 51, 0.15);
+  --diff-removed-text: #ffa198;
+  --diff-removed-accent: #f85149;
+  --diff-header-bg: #30363d;
+  --diff-hunk-bg: #21262d;
+  --rail-bg: #010409;
+  --border: #30363d;
+  --border-strong: #484f58;
+  --text: #e6edf3;
+  --text-muted: #8b949e;
+  --text-subtle: #7d8590;
+  --accent: #2f81f7;
+  --accent-hover: #58a6ff;
+  --success: #3fb950;
+  --warning: #d29922;
+  --danger: #f85149;
+  --surface-hover: rgba(110, 118, 129, 0.1);
+  --surface-active: rgba(56, 139, 253, 0.15);
+  --surface-selected: rgba(110, 118, 129, 0.4);
+  --focus-ring: rgba(31, 111, 235, 0.35);
+  --focus-ring-muted: rgba(139, 148, 158, 0.22);
+  --selection-bg: rgba(56, 139, 253, 0.22);
+  --button-bg: #21262d;
+  --button-hover: #30363d;
+  --shadow-raised: 0 8px 24px rgba(1, 4, 9, 0.28);
+  --shadow-floating: 0 20px 48px rgba(1, 4, 9, 0.4);
+  --shadow: 0 24px 60px rgba(1, 4, 9, 0.36);
+  --overlay: rgba(1, 4, 9, 0.78);
+  --backdrop: rgba(1, 4, 9, 0.52);
+  --composer-fade: rgba(13, 17, 23, 0.96);
+  --error-bg: rgba(248, 81, 73, 0.14);
+  --error-border: rgba(248, 81, 73, 0.32);
+  --error-text: #ffa198;
   --pi-font-sans:
     -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --pi-font-mono:
@@ -674,6 +687,10 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.app-shell ::selection {
+  background: var(--selection-bg);
+}
+
 .app-shell.left-rail-collapsed {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -687,36 +704,49 @@ onBeforeUnmount(() => {
 }
 
 .app-shell[data-theme="light"] {
-  --bg: #fafafa;
+  --bg: #ffffff;
   --bg-elevated: #ffffff;
   --panel: #ffffff;
-  --panel-2: #f5f5f5;
-  --panel-3: #efefef;
-  --tool-card-bg: #f3f3f3;
-  --tool-card-bg-strong: #ececec;
-  --diff-added-bg: #dcfce7;
-  --diff-added-text: #14532d;
-  --diff-added-accent: #16a34a;
-  --diff-removed-bg: #fee2e2;
-  --diff-removed-text: #7f1d1d;
-  --diff-removed-accent: #dc2626;
-  --diff-header-bg: #dddddd;
-  --diff-hunk-bg: #d1d1d1;
-  --rail-bg: #f6f6f6;
-  --border: #dddddd;
-  --border-strong: #c9c9c9;
-  --text: #111111;
-  --text-muted: #454545;
-  --text-subtle: #7a7a7a;
-  --button-bg: #efefef;
-  --button-hover: #e6e6e6;
-  --shadow: 0 18px 48px rgba(20, 20, 20, 0.08);
-  --overlay: rgba(0, 0, 0, 0.22);
-  --backdrop: rgba(0, 0, 0, 0.12);
-  --composer-fade: rgba(250, 250, 250, 0.96);
-  --error-bg: #fff1f2;
-  --error-border: #fecdd3;
-  --error-text: #9f1239;
+  --panel-2: #f6f8fa;
+  --panel-3: #ebedf0;
+  --tool-card-bg: #f6f8fa;
+  --tool-card-bg-strong: #ebedf0;
+  --diff-added-bg: rgba(26, 127, 55, 0.12);
+  --diff-added-text: #116329;
+  --diff-added-accent: #1a7f37;
+  --diff-removed-bg: rgba(207, 34, 46, 0.1);
+  --diff-removed-text: #a40e26;
+  --diff-removed-accent: #cf222e;
+  --diff-header-bg: #d8dee4;
+  --diff-hunk-bg: #eaeef2;
+  --rail-bg: #f6f8fa;
+  --border: #d0d7de;
+  --border-strong: #afb8c1;
+  --text: #1f2328;
+  --text-muted: #656d76;
+  --text-subtle: #6e7781;
+  --accent: #0969da;
+  --accent-hover: #218bff;
+  --success: #1a7f37;
+  --warning: #9a6700;
+  --danger: #cf222e;
+  --surface-hover: rgba(234, 238, 242, 0.5);
+  --surface-active: rgba(221, 244, 255, 0.95);
+  --surface-selected: rgba(175, 184, 193, 0.2);
+  --focus-ring: rgba(9, 105, 218, 0.28);
+  --focus-ring-muted: rgba(101, 109, 118, 0.18);
+  --selection-bg: rgba(9, 105, 218, 0.16);
+  --button-bg: #f6f8fa;
+  --button-hover: #f3f4f6;
+  --shadow-raised: 0 8px 24px rgba(31, 35, 40, 0.08);
+  --shadow-floating: 0 20px 48px rgba(31, 35, 40, 0.12);
+  --shadow: 0 18px 48px rgba(31, 35, 40, 0.08);
+  --overlay: rgba(31, 35, 40, 0.22);
+  --backdrop: rgba(31, 35, 40, 0.12);
+  --composer-fade: rgba(255, 255, 255, 0.96);
+  --error-bg: rgba(207, 34, 46, 0.08);
+  --error-border: rgba(207, 34, 46, 0.22);
+  --error-text: #cf222e;
   color-scheme: light;
 }
 

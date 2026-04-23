@@ -210,16 +210,25 @@ const emit = defineEmits<{
 .outline-toggle:hover,
 .debug-toggle:hover,
 .theme-toggle:hover {
-  background: var(--panel-2);
+  background: var(--surface-hover);
   border-color: var(--border-strong);
   color: var(--text-muted);
   transform: translateY(-1px);
 }
 
+.sidebar-collapse:focus-visible,
+.outline-toggle:focus-visible,
+.debug-toggle:focus-visible,
+.theme-toggle:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+
 .debug-toggle.active {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
   color: var(--text);
-  background: var(--panel-2);
+  background: var(--surface-active);
 }
 
 .sidebar-collapse,
