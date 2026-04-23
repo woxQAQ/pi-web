@@ -751,6 +751,23 @@ function applySessionTranscriptPage(page: RpcTranscriptPage) {
   applyTranscriptPage(page, "replace");
 }
 
+function applyTreeEntriesUpdate(
+  entries: readonly TreeEntry[],
+  sessionPath: string | null,
+  options?: { force?: boolean },
+) {
+  if (
+    !options?.force &&
+    activeTreeSessionPath.value &&
+    activeTreeSessionPath.value !== sessionPath
+  ) {
+    return;
+  }
+
+  treeEntries.value = [...entries];
+  activeTreeSessionPath.value = sessionPath;
+}
+
 function applySessionSnapshotResponse(
   data:
     | {
@@ -771,11 +788,14 @@ function applySessionSnapshotResponse(
 
   applySessionTranscriptPage(data.transcript);
   if (data.sessionPath) {
-    activeTreeSessionPath.value = data.sessionPath;
     liveSessionPath.value = data.sessionPath;
   }
   if (Array.isArray(data.treeEntries)) {
-    treeEntries.value = data.treeEntries;
+    applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null, {
+      force: true,
+    });
+  } else if (data.sessionPath) {
+    activeTreeSessionPath.value = data.sessionPath;
   }
   if (data.sessionId) {
     sessionState.value = {
@@ -1425,14 +1445,7 @@ function handleResponse(payload: RpcResponse) {
           | { entries: TreeEntry[]; sessionPath?: string }
           | undefined;
         if (data) {
-          const responseSessionPath = data.sessionPath ?? null;
-          if (
-            !activeTreeSessionPath.value ||
-            activeTreeSessionPath.value === responseSessionPath
-          ) {
-            treeEntries.value = data.entries;
-            activeTreeSessionPath.value = responseSessionPath;
-          }
+          applyTreeEntriesUpdate(data.entries, data.sessionPath ?? null);
         }
         break;
       }
@@ -1559,6 +1572,9 @@ function handleEvent(payload: RpcBridgeEvent) {
       const data = payload as RpcTranscriptUpsertEvent;
       if (data.message) {
         upsertTranscriptMessage(data.message, data.sessionPath ?? null);
+      }
+      if (Array.isArray(data.treeEntries)) {
+        applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null);
       }
       break;
     }

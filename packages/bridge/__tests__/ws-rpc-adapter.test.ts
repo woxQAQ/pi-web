@@ -1440,6 +1440,7 @@ describe("WsRpcAdapter", () => {
           content: "Hi",
         },
       });
+      expect(sendCalls[0].payload.treeEntries).toEqual(expect.any(Array));
       expect(sendCalls[1].payload).toMatchObject({
         type: "transcript_upsert",
         message: {
@@ -1449,6 +1450,14 @@ describe("WsRpcAdapter", () => {
           content: "Hi there",
         },
       });
+      expect(sendCalls[1].payload.treeEntries).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: "assistant-1",
+            isActive: true,
+          }),
+        ]),
+      );
       expect(sendCalls[2].payload).toMatchObject({
         type: "session_stats",
         stats: {

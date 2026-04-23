@@ -1297,7 +1297,7 @@ function orderTreeChildren(
 }
 
 function buildTreeEntriesFromSession(
-  sessionManager: SessionManager,
+  sessionManager: Pick<SessionManager, "getLeafId" | "getTree">,
 ): RpcTreeEntry[] {
   const activeLeafId = sessionManager.getLeafId();
   const visibleTree = buildVisibleTree(
@@ -1363,6 +1363,61 @@ function buildTreeEntriesFromBranch(
 function buildTreeEntriesForSessionPath(sessionPath: string): RpcTreeEntry[] {
   const sessionManager = openSessionManager(sessionPath);
   return buildTreeEntriesFromSession(sessionManager);
+}
+
+function projectTreeEntriesWithTranscriptMessage(
+  entries: readonly RpcTreeEntry[],
+  message: RpcTranscriptMessage,
+): RpcTreeEntry[] {
+  const projectedEntryId = message.id ?? message.transcriptKey;
+  if (!projectedEntryId) return [...entries];
+
+  const [projectedEntry] = buildTreeEntriesFromBranch([
+    {
+      id: projectedEntryId,
+      role: message.role,
+      content: message.content,
+      text: message.text,
+      timestamp: message.timestamp,
+      type: message.role,
+    },
+  ]);
+  if (!projectedEntry) return [...entries];
+
+  const nextEntries = entries.map(entry => ({
+    ...entry,
+    isActive: false,
+  }));
+  const existingIndex = nextEntries.findIndex(
+    entry => entry.id === projectedEntryId || entry.id === message.transcriptKey,
+  );
+
+  if (existingIndex >= 0) {
+    const existingEntry = nextEntries[existingIndex];
+    nextEntries[existingIndex] = {
+      ...existingEntry,
+      ...projectedEntry,
+      id: projectedEntryId,
+      parentId: existingEntry.parentId ?? projectedEntry.parentId ?? null,
+      depth: existingEntry.depth ?? projectedEntry.depth,
+      trackColumns: existingEntry.trackColumns ?? projectedEntry.trackColumns,
+      isActive: true,
+      isOnActivePath: true,
+    };
+    return nextEntries;
+  }
+
+  const activeParent = [...nextEntries]
+    .reverse()
+    .find(entry => entry.isOnActivePath);
+  nextEntries.push({
+    ...projectedEntry,
+    id: projectedEntryId,
+    parentId: activeParent?.id ?? null,
+    isActive: true,
+    isOnActivePath: true,
+  });
+  return nextEntries;
 }
 
 function transcriptMessageFromBranchEntry(
@@ -2293,6 +2348,31 @@ class SessionRuntime {
     );
   }
 
+  buildTreeEntriesForSessionPath(sessionPath: string | null): RpcTreeEntry[] {
+    const activeSession = sessionPath
+      ? this.registry.getActiveSession(sessionPath)
+      : null;
+    if (activeSession) {
+      return buildTreeEntriesFromSession(activeSession.sessionManager);
+    }
+
+    const liveSessionPath = this.context.ctx.sessionManager.getSessionFile();
+    if (!sessionPath || sessionPath === liveSessionPath) {
+      return buildTreeEntriesFromSession(this.context.ctx.sessionManager);
+    }
+
+    const cachedSession = this.registry.getCachedSessionManager(sessionPath);
+    if (cachedSession) {
+      return buildTreeEntriesFromSession(cachedSession);
+    }
+
+    if (fs.existsSync(sessionPath)) {
+      return buildTreeEntriesForSessionPath(sessionPath);
+    }
+
+    return [];
+  }
+
   buildActiveState(): RpcSessionState {
     if (this.selectedSessionPath) {
       const activeSession = this.registry.getActiveSession(
@@ -3195,6 +3275,23 @@ export class WsRpcAdapter {
     );
     if (!payload) return;
 
+    let treeEntries = this.sessionRuntime.buildTreeEntriesForSessionPath(
+      sessionPath,
+    );
+    if (
+      !treeEntries.some(
+        entry =>
+          entry.id === payload.message.id ||
+          entry.id === payload.message.transcriptKey,
+      )
+    ) {
+      treeEntries = projectTreeEntriesWithTranscriptMessage(
+        treeEntries,
+        payload.message,
+      );
+    }
+
+    payload.treeEntries = treeEntries;
     this.sendEvent(payload);
     if (eventType !== "message_start") {
       this.sessionStatsPusher.queue(sessionPath);

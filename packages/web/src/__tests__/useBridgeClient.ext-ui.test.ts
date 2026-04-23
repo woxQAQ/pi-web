@@ -428,6 +428,157 @@ describe("extension_ui_request handling", () => {
     );
   });
 
+  it("updates tree entries from transcript_upsert events for the active session", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "get_state",
+        success: true,
+        data: {
+          sessionId: "live-session",
+          sessionFile: "/tmp/live.jsonl",
+          sessionName: "Live",
+          thinkingLevel: "normal",
+          isStreaming: false,
+          isCompacting: false,
+          steeringMode: "all",
+          followUpMode: "all",
+          autoCompactionEnabled: false,
+          messageCount: 0,
+          pendingMessageCount: 0,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "transcript_upsert",
+        sessionPath: "/tmp/live.jsonl",
+        message: {
+          transcriptKey: "live:1",
+          id: "assistant-1",
+          role: "assistant",
+          content: "Hi there",
+        },
+        treeEntries: [
+          {
+            id: "assistant-1",
+            label: "assistant: Hi there",
+            type: "message",
+            depth: 0,
+            isActive: true,
+          },
+        ],
+      },
+    });
+
+    expect(client.treeEntries.value).toEqual([
+      {
+        id: "assistant-1",
+        label: "assistant: Hi there",
+        type: "message",
+        depth: 0,
+        isActive: true,
+      },
+    ]);
+  });
+
+  it("ignores stale tree updates from transcript_upsert events", async () => {
+    const client = await importComposable();
+    const ws = getLastMockWs();
+    simulateOpen(ws);
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "get_state",
+        success: true,
+        data: {
+          sessionId: "live-session",
+          sessionFile: "/tmp/live.jsonl",
+          sessionName: "Live",
+          thinkingLevel: "normal",
+          isStreaming: false,
+          isCompacting: false,
+          steeringMode: "all",
+          followUpMode: "all",
+          autoCompactionEnabled: false,
+          messageCount: 0,
+          pendingMessageCount: 0,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "response",
+      payload: {
+        type: "response",
+        command: "switch_session",
+        success: true,
+        data: {
+          transcript: {
+            messages: [],
+            hasOlder: false,
+            hasNewer: false,
+          },
+          treeEntries: [
+            {
+              id: "session-node",
+              label: "user: Switched",
+              type: "message",
+              depth: 0,
+              isActive: true,
+            },
+          ],
+          sessionId: "session-2",
+          sessionName: "Session 2",
+          sessionPath: "/tmp/session-2.jsonl",
+          cancelled: false,
+        },
+      },
+    });
+
+    simulateMessage(ws, {
+      type: "event",
+      payload: {
+        type: "transcript_upsert",
+        sessionPath: "/tmp/live.jsonl",
+        message: {
+          transcriptKey: "live:1",
+          id: "live-node",
+          role: "assistant",
+          content: "Live update",
+        },
+        treeEntries: [
+          {
+            id: "live-node",
+            label: "assistant: Live update",
+            type: "message",
+            depth: 0,
+            isActive: true,
+          },
+        ],
+      },
+    });
+
+    expect(client.treeEntries.value).toEqual([
+      {
+        id: "session-node",
+        label: "user: Switched",
+        type: "message",
+        depth: 0,
+        isActive: true,
+      },
+    ]);
+  });
+
   it("ignores stale live tree responses after switch_session", async () => {
     const client = await importComposable();
     const ws = getLastMockWs();

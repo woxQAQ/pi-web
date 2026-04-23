@@ -520,6 +520,7 @@ export interface RpcTranscriptUpsertEvent {
   type: "transcript_upsert";
   sessionPath?: string;
   message: RpcTranscriptMessage;
+  treeEntries?: RpcTreeEntry[];
 }
 
 export interface RpcSessionStatsEvent {
