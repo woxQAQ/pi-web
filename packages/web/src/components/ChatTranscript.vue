@@ -1631,7 +1631,6 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 .thinking-block + .system-block,
 .tool-inline-block + .markdown-body,
 .tool-inline-block + .thinking-block,
-.tool-inline-block + .tool-inline-block,
 .tool-inline-block + .message-image-block,
 .tool-inline-block + .system-block,
 .message-image-block + .markdown-body,
@@ -1645,6 +1644,10 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 .system-block + .message-image-block,
 .system-block + .system-block {
   margin-top: 12px;
+}
+
+.tool-inline-block + .tool-inline-block {
+  margin-top: 16px;
 }
 
 .thinking-block {
