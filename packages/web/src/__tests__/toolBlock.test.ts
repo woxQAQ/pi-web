@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { buildToolCardModel } from "../utils/toolBlock";
+import { buildToolInlineModel } from "../utils/toolBlock";
 import type { ToolContentBlock } from "../utils/transcript";
 
-describe("buildToolCardModel", () => {
+describe("buildToolInlineModel", () => {
   it("renders read blocks around the target path and line range", () => {
     const block: ToolContentBlock = {
       kind: "tool",
@@ -13,14 +13,13 @@ describe("buildToolCardModel", () => {
       toolStatus: "success",
     };
 
-    const model = buildToolCardModel(block);
-    expect(model.label).toBe("Read file");
+    const model = buildToolInlineModel(block);
     expect(model.title).toBe("src/main.ts:10-14");
-    expect(model.preview).toContain("const value = 1;");
-    expect(model.details.map(detail => detail.label)).toEqual(["Contents"]);
+    expect(model.meta).toBeUndefined();
+    expect(model.diffStats).toBeUndefined();
   });
 
-  it("uses file content previews for successful writes", () => {
+  it("uses line counts for successful writes", () => {
     const block: ToolContentBlock = {
       kind: "tool",
       toolName: "write",
@@ -30,53 +29,27 @@ describe("buildToolCardModel", () => {
       toolStatus: "success",
     };
 
-    const model = buildToolCardModel(block);
+    const model = buildToolInlineModel(block);
     expect(model.title).toBe("README.md");
     expect(model.meta).toBe("3 lines");
-    expect(model.preview).toBe("# Title\n\nBody copy");
-    expect(model.details[0]).toEqual({
-      label: "Content",
-      text: "# Title\n\nBody copy",
-    });
   });
 
-  it("shows bash exit code and only previews the last lines", () => {
+  it("shows bash exit code and timeout metadata", () => {
     const block: ToolContentBlock = {
       kind: "tool",
       toolName: "bash",
       toolArgs: { command: "pnpm test", timeout: 30 },
       argumentsText: '{"command":"pnpm test","timeout":30}',
-      resultText: [
-        "line 1",
-        "line 2",
-        "line 3",
-        "line 4",
-        "line 5",
-        "line 6",
-        "line 7",
-        "Command exited with code 2",
-      ].join("\n"),
+      resultText: "Command exited with code 2",
       toolStatus: "error",
     };
 
-    const model = buildToolCardModel(block);
-    expect(model.label).toBe("Run command");
+    const model = buildToolInlineModel(block);
     expect(model.title).toBe("pnpm test");
     expect(model.meta).toBe("exit 2 · timeout 30s");
-    expect(model.preview).toBe(
-      [
-        "... 2 earlier lines",
-        "line 3",
-        "line 4",
-        "line 5",
-        "line 6",
-        "line 7",
-        "Command exited with code 2",
-      ].join("\n"),
-    );
   });
 
-  it("renders real edit diffs directly in the preview", () => {
+  it("exposes edit diff stats when a diff is available", () => {
     const diff = [
       "--- src/app.ts",
       "+++ src/app.ts",
@@ -103,15 +76,13 @@ describe("buildToolCardModel", () => {
       toolStatus: "success",
     };
 
-    const model = buildToolCardModel(block);
+    const model = buildToolInlineModel(block);
     expect(model.title).toBe("src/app.ts");
     expect(model.meta).toBeUndefined();
     expect(model.diffStats).toEqual({ added: 2, removed: 1 });
-    expect(model.preview).toBe(diff);
-    expect(model.details).toEqual([]);
   });
 
-  it("hides added and removed stats when an edit does not succeed", () => {
+  it("hides edit diff stats when an edit does not succeed", () => {
     const block: ToolContentBlock = {
       kind: "tool",
       toolName: "edit",
@@ -128,28 +99,8 @@ describe("buildToolCardModel", () => {
       toolStatus: "error",
     };
 
-    const model = buildToolCardModel(block);
+    const model = buildToolInlineModel(block);
     expect(model.meta).toBeUndefined();
     expect(model.diffStats).toBeUndefined();
-    expect(model.preview).toBe(
-      "Could not find the exact text to replace in src/app.ts.",
-    );
-  });
-
-  it("shows pending tool state as inline status text", () => {
-    const block: ToolContentBlock = {
-      kind: "tool",
-      toolName: "bash",
-      toolArgs: { command: "pnpm test", timeout: 30 },
-      argumentsText: '{"command":"pnpm test","timeout":30}',
-      toolStatus: "pending",
-    };
-
-    const model = buildToolCardModel(block);
-    expect(model.label).toBe("Run command");
-    expect(model.title).toBe("pnpm test");
-    expect(model.meta).toBe("timeout 30s");
-    expect(model.preview).toBe("Running command...");
-    expect(model.details).toEqual([]);
   });
 });

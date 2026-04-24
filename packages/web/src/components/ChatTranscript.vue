@@ -11,6 +11,7 @@ import {
 import type { TranscriptEntry } from "../composables/useBridgeClient";
 import type { RpcImageContent } from "../shared-types";
 import { userMessageCopyText } from "../utils/messageCopy";
+import { buildToolInlineModel } from "../utils/toolBlock";
 import {
   buildTranscriptDisplayItems,
   contentBlocks,
@@ -21,12 +22,14 @@ import {
   messageContent,
   type ImageContentBlock,
   type PendingTranscriptSessionEvent,
+  type ToolContentBlock,
   type TranscriptDisplayItem,
   type TranscriptSessionEventDisplayItem,
 } from "../utils/transcript";
+import DiffView from "./DiffView.vue";
+import HighlightedCode from "./HighlightedCode.vue";
 import ImageLightbox from "./ImageLightbox.vue";
 import MarkdownRenderer from "./MarkdownRenderer.vue";
-import ToolCard from "./ToolCard.vue";
 
 const props = defineProps<{
   sessionPath: string | null;
@@ -304,6 +307,10 @@ const busyIndicatorLabel = computed(() =>
 );
 const lightboxImages = ref<ImageContentBlock[]>([]);
 const lightboxIndex = ref(0);
+const toolBlockModelCache = new WeakMap<
+  ToolContentBlock,
+  ReturnType<typeof buildToolInlineModel>
+>();
 
 function messageStableKey(msg: TranscriptEntry, index: number): string {
   return msg.transcriptKey ?? msg.id ?? `message:${index}`;
@@ -371,6 +378,107 @@ function previewText(text: string, maxLines: number = 8): string {
   return `${lines.slice(0, maxLines).join("\n")}\n... ${remaining} more line${remaining === 1 ? "" : "s"}`;
 }
 
+function compactInlineText(
+  text: string | undefined,
+  maxLength: number = 96,
+): string | undefined {
+  if (!text) return undefined;
+  const singleLine = text.replace(/\s+/g, " ").trim();
+  if (!singleLine) return undefined;
+  if (singleLine.length <= maxLength) return singleLine;
+  return `${singleLine.slice(0, maxLength - 3).trimEnd()}...`;
+}
+
+function toolBlockModel(block: ToolContentBlock) {
+  const cached = toolBlockModelCache.get(block);
+  if (cached) return cached;
+  const model = buildToolInlineModel(block);
+  toolBlockModelCache.set(block, model);
+  return model;
+}
+
+function toolBlockDescriptor(block: ToolContentBlock): {
+  name: string;
+  params?: string;
+  meta?: string;
+  status: ToolContentBlock["toolStatus"];
+} {
+  const model = toolBlockModel(block);
+  return {
+    name: block.toolName || "tool",
+    params: model.title !== model.label ? model.title : undefined,
+    meta: model.meta ?? toolStatusMeta(block.toolStatus),
+    status: block.toolStatus,
+  };
+}
+
+function toolBlockDiffStats(block: ToolContentBlock) {
+  return toolBlockModel(block).diffStats;
+}
+
+function toolStatusMeta(
+  status: ToolContentBlock["toolStatus"] | "success" | "error",
+): string | undefined {
+  if (status === "pending") return "running";
+  if (status === "error") return "error";
+  return undefined;
+}
+
+function recordStringValue(
+  value: ToolContentBlock["resultDetails"] | unknown,
+  key: string,
+): string | undefined {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return undefined;
+  }
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+function toolArgStringValue(
+  block: ToolContentBlock,
+  key: string,
+): string | undefined {
+  if (!block.toolArgs || typeof block.toolArgs !== "object") return undefined;
+  if (Array.isArray(block.toolArgs)) return undefined;
+  const candidate = (block.toolArgs as Record<string, unknown>)[key];
+  return typeof candidate === "string" ? candidate : undefined;
+}
+
+function toolBlockPath(block: ToolContentBlock): string | undefined {
+  return toolArgStringValue(block, "path");
+}
+
+function toolBlockDiff(block: ToolContentBlock): string | undefined {
+  return recordStringValue(block.resultDetails, "diff")?.replace(/\r/g, "").trim();
+}
+
+function toolBlockTextResult(block: ToolContentBlock): string {
+  const diff = toolBlockDiff(block);
+  if (diff) return diff;
+
+  const text = (block.resultBlocks ?? [])
+    .flatMap(item => (item.kind === "text" ? [item.text] : []))
+    .join("\n")
+    .replace(/\r/g, "")
+    .trim();
+  if (text) return text;
+
+  return block.resultText?.replace(/\r/g, "").trim() ?? "";
+}
+
+function toolBlockImages(block: ToolContentBlock): ImageContentBlock[] {
+  return (block.resultBlocks ?? []).filter(
+    (item): item is ImageContentBlock => item.kind === "image",
+  );
+}
+
+function toolBlockEmptyState(block: ToolContentBlock): string {
+  return block.toolStatus === "pending"
+    ? "Waiting for tool result."
+    : "No text result.";
+}
+
 function toolResultText(msg: TranscriptEntry): string {
   return contentBlocks(msg)
     .flatMap(block => (block.kind === "text" ? [block.text] : []))
@@ -381,15 +489,32 @@ function toolResultPreview(msg: TranscriptEntry): string {
   return previewText(toolResultText(msg), 6);
 }
 
-function toolResultCanExpand(msg: TranscriptEntry): boolean {
-  const text = toolResultText(msg).replace(/\r/g, "").trim();
-  return Boolean(text) && toolResultPreview(msg) !== text;
-}
-
 function toolResultImages(msg: TranscriptEntry): ImageContentBlock[] {
   return contentBlocks(msg).filter(
     (block): block is ImageContentBlock => block.kind === "image",
   );
+}
+
+function toolResultName(msg: TranscriptEntry): string {
+  return msg.toolName?.trim() || "tool";
+}
+
+function toolResultMeta(msg: TranscriptEntry): string | undefined {
+  const preview = compactInlineText(toolResultPreview(msg));
+  if (preview) return preview;
+  const images = toolResultImages(msg);
+  if (images.length > 0) {
+    return `${images.length} image${images.length === 1 ? "" : "s"}`;
+  }
+  return toolStatusMeta(msg.isError ? "error" : "success");
+}
+
+function errorSummaryLabel(msg: TranscriptEntry): string {
+  return isAbortedMessage(msg) ? "cancelled" : "error";
+}
+
+function errorSummaryMeta(msg: TranscriptEntry): string | undefined {
+  return compactInlineText(errorMessageText(msg), 120);
 }
 
 function openImageLightbox(
@@ -710,89 +835,109 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
             <span class="message-role">{{ roleLabel(item.message.role) }}</span>
           </div>
           <div class="message-content tool-row">
-            <div class="tool-result-card">
-              <div class="tool-result-card-header">
-                <div class="tool-result-card-heading">
-                  <span class="tool-result-card-label">{{
-                    roleLabel(item.message.role)
+            <div
+              class="tool-inline"
+              :data-status="item.message.isError ? 'error' : 'success'"
+            >
+              <button
+                type="button"
+                class="tool-inline-toggle"
+                @click="
+                  toggleToolBlock(
+                    messageStableKey(item.message, item.messageIndex),
+                    -1,
+                  )
+                "
+                :aria-expanded="
+                  isToolBlockExpanded(
+                    messageStableKey(item.message, item.messageIndex),
+                    -1,
+                  )
+                "
+              >
+                <span class="tool-inline-caret" aria-hidden="true">{{
+                  isToolBlockExpanded(
+                    messageStableKey(item.message, item.messageIndex),
+                    -1,
+                  )
+                    ? "v"
+                    : ">"
+                }}</span>
+                <span class="tool-inline-summary">
+                  <span class="tool-inline-name">{{
+                    toolResultName(item.message)
                   }}</span>
-                  <span v-if="showMessageIds" class="message-debug-id">
-                    ID {{ messageIdLabel(item.message) }}
-                  </span>
-                </div>
-                <button
-                  v-if="toolResultCanExpand(item.message)"
-                  type="button"
-                  class="tool-result-card-toggle"
-                  @click="
-                    toggleToolBlock(
-                      messageStableKey(item.message, item.messageIndex),
-                      -1,
-                    )
-                  "
-                  :title="
-                    isToolBlockExpanded(
-                      messageStableKey(item.message, item.messageIndex),
-                      -1,
-                    )
-                      ? 'Collapse'
-                      : 'Expand'
-                  "
-                >
-                  {{
-                    isToolBlockExpanded(
-                      messageStableKey(item.message, item.messageIndex),
-                      -1,
-                    )
-                      ? "Hide"
-                      : "Details"
-                  }}
-                </button>
-              </div>
-              <pre
-                v-if="toolResultPreview(item.message)"
-                class="tool-result-card-preview"
-                >{{ toolResultPreview(item.message) }}</pre
-              >
+                  <span class="tool-inline-params">result</span>
+                </span>
+                <span v-if="toolResultMeta(item.message)" class="tool-inline-meta">
+                  {{ toolResultMeta(item.message) }}
+                </span>
+              </button>
+
               <div
-                v-if="toolResultImages(item.message).length > 0"
-                class="tool-result-card-images"
-              >
-                <figure
-                  v-for="(image, imageIndex) in toolResultImages(item.message)"
-                  :key="`${image.src}-${imageIndex}`"
-                  class="message-image-block"
-                >
-                  <button
-                    type="button"
-                    class="message-image-button"
-                    :aria-label="`Open image ${imageIndex + 1}`"
-                    @click="
-                      openImageLightbox(
-                        toolResultImages(item.message),
-                        imageIndex,
-                      )
-                    "
-                  >
-                    <img
-                      class="message-image"
-                      :src="image.src"
-                      :alt="image.alt"
-                      loading="lazy"
-                    />
-                  </button>
-                </figure>
-              </div>
-              <pre
                 v-if="
                   isToolBlockExpanded(
                     messageStableKey(item.message, item.messageIndex),
                     -1,
-                  ) && toolResultText(item.message).trim()
+                  )
                 "
-                class="tool-result-card-details"
-                >{{ toolResultText(item.message) }}</pre
+                class="tool-inline-details"
               >
+                <span v-if="showMessageIds" class="message-debug-id">
+                  ID {{ messageIdLabel(item.message) }}
+                </span>
+                <div
+                  v-if="toolResultImages(item.message).length > 0"
+                  class="tool-inline-images"
+                >
+                  <figure
+                    v-for="(image, imageIndex) in toolResultImages(item.message)"
+                    :key="`${image.src}-${imageIndex}`"
+                    class="message-image-block"
+                  >
+                    <button
+                      type="button"
+                      class="message-image-button"
+                      :aria-label="`Open image ${imageIndex + 1}`"
+                      @click="
+                        openImageLightbox(
+                          toolResultImages(item.message),
+                          imageIndex,
+                        )
+                      "
+                    >
+                      <img
+                        class="message-image"
+                        :src="image.src"
+                        :alt="image.alt"
+                        loading="lazy"
+                      />
+                    </button>
+                  </figure>
+                </div>
+                <section
+                  v-if="toolResultText(item.message).trim()"
+                  class="tool-inline-section"
+                >
+                  <div
+                    v-if="toolResultName(item.message) === 'bash'"
+                    class="tool-inline-code-panel"
+                  >
+                    <pre class="tool-inline-code-output">{{
+                      toolResultText(item.message)
+                    }}</pre>
+                  </div>
+                  <pre v-else class="tool-inline-pre">{{
+                    toolResultText(item.message)
+                  }}</pre>
+                </section>
+                <div
+                  v-else-if="toolResultImages(item.message).length === 0"
+                  class="tool-inline-empty"
+                >
+                  No text result.
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -805,27 +950,62 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
           :data-tree-entry-id="item.message.id ?? undefined"
         >
           <div class="message-content" :class="roleClass(item.message.role)">
-            <div
-              class="error-block"
-              :class="{ aborted: isAbortedMessage(item.message) }"
-            >
-              <div class="error-block-header">
-                <div class="error-block-heading">
-                  <span class="error-label">{{
-                    isAbortedMessage(item.message) ? "Cancelled" : "Error"
-                  }}</span>
-                  <span v-if="showMessageIds" class="message-debug-id">
-                    ID {{ messageIdLabel(item.message) }}
-                  </span>
-                </div>
-              </div>
-              <div
-                v-if="errorMessageText(item.message)"
-                class="error-block-body"
+            <div class="tool-inline" data-status="error">
+              <button
+                type="button"
+                class="tool-inline-toggle"
+                @click="
+                  toggleToolBlock(
+                    messageStableKey(item.message, item.messageIndex),
+                    -2,
+                  )
+                "
+                :aria-expanded="
+                  isToolBlockExpanded(
+                    messageStableKey(item.message, item.messageIndex),
+                    -2,
+                  )
+                "
               >
-                <span class="error-message">{{
-                  errorMessageText(item.message)
+                <span class="tool-inline-caret" aria-hidden="true">{{
+                  isToolBlockExpanded(
+                    messageStableKey(item.message, item.messageIndex),
+                    -2,
+                  )
+                    ? "v"
+                    : ">"
                 }}</span>
+                <span class="tool-inline-summary">
+                  <span class="tool-inline-name">
+                    {{ errorSummaryLabel(item.message) }}
+                  </span>
+                </span>
+                <span v-if="errorSummaryMeta(item.message)" class="tool-inline-meta">
+                  {{ errorSummaryMeta(item.message) }}
+                </span>
+              </button>
+
+              <div
+                v-if="
+                  isToolBlockExpanded(
+                    messageStableKey(item.message, item.messageIndex),
+                    -2,
+                  )
+                "
+                class="tool-inline-details"
+              >
+                <span v-if="showMessageIds" class="message-debug-id">
+                  ID {{ messageIdLabel(item.message) }}
+                </span>
+                <section
+                  v-if="errorMessageText(item.message)"
+                  class="tool-inline-section"
+                >
+                  <pre class="tool-inline-pre">{{
+                    errorMessageText(item.message)
+                  }}</pre>
+                </section>
+                <div v-else class="tool-inline-empty">No error message.</div>
               </div>
             </div>
           </div>
@@ -908,24 +1088,146 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 
                 <div
                   v-else-if="block.kind === 'tool'"
-                  class="tool-card-block"
+                  class="tool-inline-block"
                   :data-tree-entry-id="block.resultSourceMessageId"
                 >
-                  <ToolCard
-                    :block="block"
-                    :expanded="
-                      isToolBlockExpanded(
-                        messageStableKey(item.message, item.messageIndex),
-                        bIdx,
-                      )
-                    "
-                    @toggle="
-                      toggleToolBlock(
-                        messageStableKey(item.message, item.messageIndex),
-                        bIdx,
-                      )
-                    "
-                  />
+                  <div
+                    class="tool-inline"
+                    :data-status="toolBlockDescriptor(block).status"
+                  >
+                    <button
+                      type="button"
+                      class="tool-inline-toggle"
+                      @click="
+                        toggleToolBlock(
+                          messageStableKey(item.message, item.messageIndex),
+                          bIdx,
+                        )
+                      "
+                      :aria-expanded="
+                        isToolBlockExpanded(
+                          messageStableKey(item.message, item.messageIndex),
+                          bIdx,
+                        )
+                      "
+                    >
+                      <span class="tool-inline-caret" aria-hidden="true">{{
+                        isToolBlockExpanded(
+                          messageStableKey(item.message, item.messageIndex),
+                          bIdx,
+                        )
+                          ? "v"
+                          : ">"
+                      }}</span>
+                      <span class="tool-inline-summary">
+                        <span class="tool-inline-name">{{
+                          toolBlockDescriptor(block).name
+                        }}</span>
+                        <span
+                          v-if="toolBlockDescriptor(block).params"
+                          class="tool-inline-params"
+                        >
+                          {{ toolBlockDescriptor(block).params }}
+                        </span>
+                      </span>
+                      <span
+                        v-if="toolBlockDiffStats(block)"
+                        class="tool-inline-diff"
+                        :aria-label="`${toolBlockDiffStats(block)?.added ?? 0} additions, ${toolBlockDiffStats(block)?.removed ?? 0} deletions`"
+                      >
+                        <span class="tool-inline-diff-added"
+                          >+{{ toolBlockDiffStats(block)?.added }}</span
+                        >
+                        <span class="tool-inline-diff-removed"
+                          >-{{ toolBlockDiffStats(block)?.removed }}</span
+                        >
+                      </span>
+                      <span
+                        v-else-if="toolBlockDescriptor(block).meta"
+                        class="tool-inline-meta"
+                      >
+                        {{ toolBlockDescriptor(block).meta }}
+                      </span>
+                    </button>
+
+                    <div
+                      v-if="
+                        isToolBlockExpanded(
+                          messageStableKey(item.message, item.messageIndex),
+                          bIdx,
+                        )
+                      "
+                      class="tool-inline-details"
+                    >
+                      <span
+                        v-if="showMessageIds && block.resultSourceMessageId"
+                        class="message-debug-id"
+                      >
+                        ID {{ block.resultSourceMessageId }}
+                      </span>
+                      <div
+                        v-if="toolBlockImages(block).length > 0"
+                        class="tool-inline-images"
+                      >
+                        <figure
+                          v-for="(image, imageIndex) in toolBlockImages(block)"
+                          :key="`${image.src}-${imageIndex}`"
+                          class="message-image-block"
+                        >
+                          <button
+                            type="button"
+                            class="message-image-button"
+                            :aria-label="`Open image ${imageIndex + 1}`"
+                            @click="
+                              openImageLightbox(toolBlockImages(block), imageIndex)
+                            "
+                          >
+                            <img
+                              class="message-image"
+                              :src="image.src"
+                              :alt="image.alt"
+                              loading="lazy"
+                            />
+                          </button>
+                        </figure>
+                      </div>
+                      <section
+                        v-if="toolBlockTextResult(block)"
+                        class="tool-inline-section"
+                      >
+                        <DiffView
+                          v-if="block.toolName === 'edit' && toolBlockDiff(block)"
+                          :diff="toolBlockDiff(block) || ''"
+                        />
+                        <div
+                          v-else-if="block.toolName === 'read'"
+                          class="tool-inline-code-panel"
+                        >
+                          <HighlightedCode
+                            :code="toolBlockTextResult(block)"
+                            :path="toolBlockPath(block)"
+                          />
+                        </div>
+                        <div
+                          v-else-if="block.toolName === 'bash'"
+                          class="tool-inline-code-panel"
+                        >
+                          <pre class="tool-inline-code-output">{{
+                            toolBlockTextResult(block)
+                          }}</pre>
+                        </div>
+                        <pre v-else class="tool-inline-pre">{{
+                          toolBlockTextResult(block)
+                        }}</pre>
+                      </section>
+                      <div
+                        v-else-if="toolBlockImages(block).length === 0"
+                        class="tool-inline-empty"
+                      >
+                        {{ toolBlockEmptyState(block) }}
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
                 <figure
@@ -1305,25 +1607,26 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 
 .markdown-body + .markdown-body,
 .markdown-body + .thinking-block,
-.markdown-body + .tool-card-block,
+.markdown-body + .tool-inline-block,
 .markdown-body + .message-image-block,
 .markdown-body + .system-block,
 .thinking-block + .markdown-body,
-.thinking-block + .tool-card-block,
+.thinking-block + .tool-inline-block,
 .thinking-block + .message-image-block,
 .thinking-block + .system-block,
-.tool-card-block + .markdown-body,
-.tool-card-block + .thinking-block,
-.tool-card-block + .message-image-block,
-.tool-card-block + .system-block,
+.tool-inline-block + .markdown-body,
+.tool-inline-block + .thinking-block,
+.tool-inline-block + .tool-inline-block,
+.tool-inline-block + .message-image-block,
+.tool-inline-block + .system-block,
 .message-image-block + .markdown-body,
 .message-image-block + .thinking-block,
-.message-image-block + .tool-card-block,
+.message-image-block + .tool-inline-block,
 .message-image-block + .message-image-block,
 .message-image-block + .system-block,
 .system-block + .markdown-body,
 .system-block + .thinking-block,
-.system-block + .tool-card-block,
+.system-block + .tool-inline-block,
 .system-block + .message-image-block,
 .system-block + .system-block {
   margin-top: 12px;
@@ -1437,131 +1740,155 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
   word-break: break-word;
 }
 
-.error-block {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--tool-card-bg);
-}
-
-.error-block:not(.aborted) {
-  border-color: color-mix(in srgb, var(--error-border) 58%, var(--border));
-}
-
-.error-block-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.error-block-heading {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.error-label {
-  font-size: 0.64rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-subtle);
-}
-
-.error-block:not(.aborted) .error-label {
-  color: var(--error-text);
-}
-
-.error-block-body {
-  min-width: 0;
-  border: 1px solid var(--border-strong);
-  border-radius: 10px;
-  background: var(--tool-card-bg-strong);
-  overflow: auto;
-  max-height: 360px;
-}
-
-.error-block:not(.aborted) .error-block-body {
-  border-color: color-mix(in srgb, var(--error-border) 92%, var(--border));
-}
-
-.error-message {
-  display: block;
-  margin: 0;
-  padding: 10px 12px;
-  color: var(--text-muted);
-  font-size: 0.72rem;
-  line-height: 1.6;
-  white-space: pre-wrap;
-  word-break: break-word;
-}
-
-.error-block:not(.aborted) .error-message {
-  color: var(--error-text);
-}
-
 .tool-row {
   padding-left: 10px;
 }
 
-.tool-result-card {
+.tool-inline {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 12px 14px;
-  border: 1px solid var(--border);
-  border-left: 2px solid var(--border-strong);
-  border-radius: 12px;
-  background: var(--tool-card-bg);
+  gap: 8px;
 }
 
-.tool-result-card-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+.tool-inline-toggle {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr) auto;
+  align-items: baseline;
+  column-gap: 8px;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
-.tool-result-card-heading {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
+.tool-inline-toggle:hover .tool-inline-name,
+.tool-inline-toggle:hover .tool-inline-params,
+.tool-inline-toggle:hover .tool-inline-meta {
+  color: var(--text);
+}
+
+.tool-inline-toggle:focus-visible {
+  outline: none;
+}
+
+.tool-inline-toggle:focus-visible .tool-inline-name,
+.tool-inline-toggle:focus-visible .tool-inline-params,
+.tool-inline-toggle:focus-visible .tool-inline-meta {
+  text-decoration: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 1px;
+}
+
+.tool-inline-caret {
+  flex: none;
+  width: 10px;
+  font-family: var(--pi-font-mono);
+  font-size: 0.72rem;
+  line-height: 1;
+  color: var(--text-subtle);
+}
+
+.tool-inline-summary {
+  display: inline-flex;
+  align-items: baseline;
   gap: 8px;
   min-width: 0;
 }
 
-.tool-result-card-label {
-  font-size: 0.66rem;
+.tool-inline-name {
+  flex: none;
+  font-family: var(--pi-font-mono);
+  font-size: 0.72rem;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-  color: var(--text-subtle);
-}
-
-.tool-result-card-toggle {
-  padding: 5px 9px;
-  border: 1px solid var(--border);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--tool-card-bg) 72%, transparent);
-  font-size: 0.66rem;
-  color: var(--text-subtle);
-  cursor: pointer;
-}
-
-.tool-result-card-toggle:hover {
-  border-color: var(--border-strong);
+  line-height: 1.4;
   color: var(--text-muted);
 }
 
-.tool-result-card-preview,
-.tool-result-card-details {
+.tool-inline-params {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.72rem;
+  line-height: 1.4;
+  color: var(--text-subtle);
+}
+
+.tool-inline-meta,
+.tool-inline-diff {
+  flex: none;
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.66rem;
+  line-height: 1.4;
+}
+
+.tool-inline-meta {
+  color: var(--text-subtle);
+}
+
+.tool-inline-diff {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--pi-font-mono);
+  font-weight: 600;
+}
+
+.tool-inline-diff-added {
+  color: var(--diff-added-accent);
+}
+
+.tool-inline-diff-removed {
+  color: var(--diff-removed-accent);
+}
+
+.tool-inline[data-status="error"] .tool-inline-name,
+.tool-inline[data-status="error"] .tool-inline-meta {
+  color: var(--error-text);
+}
+
+.tool-inline-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-top: 2px;
+}
+
+.tool-inline-section {
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-inline-code-panel,
+.tool-inline-pre {
   margin: 0;
-  font-family: inherit;
+  border: 1px solid var(--tool-output-border);
+  border-radius: 10px;
+  background: var(--tool-output-bg);
+  overflow: auto;
+}
+
+.tool-inline-code-panel {
+  max-height: 360px;
+}
+
+.tool-inline-code-panel :deep(.highlighted-code pre),
+.tool-inline-code-panel :deep(.highlighted-code-fallback) {
+  margin: 0;
+  padding: 10px 12px;
+  background: transparent !important;
+}
+
+.tool-inline-code-output,
+.tool-inline-pre {
+  padding: 10px 12px;
+  font-family: var(--pi-font-mono);
   font-size: 0.72rem;
   line-height: 1.6;
   white-space: pre-wrap;
@@ -1569,15 +1896,31 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
   color: var(--text-muted);
 }
 
-.tool-result-card-images {
+.tool-inline-code-output {
+  margin: 0;
+}
+
+.tool-inline[data-status="error"] .tool-inline-code-panel,
+.tool-inline[data-status="error"] .tool-inline-pre {
+  border-color: color-mix(in srgb, var(--error-border) 88%, var(--tool-output-border));
+  background: color-mix(in srgb, var(--tool-output-bg) 86%, transparent);
+  color: var(--error-text);
+}
+
+.tool-inline[data-status="error"] .tool-inline-code-output {
+  color: var(--error-text);
+}
+
+.tool-inline-images {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
 }
 
-.tool-result-card-details {
-  padding-top: 10px;
-  border-top: 1px solid var(--border);
+.tool-inline-empty {
+  font-size: 0.72rem;
+  line-height: 1.5;
+  color: var(--text-subtle);
 }
 
 .toggle-icon {
@@ -1679,13 +2022,16 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
     padding: 10px 12px;
   }
 
-  .tool-result-card-header {
-    flex-direction: column;
-    align-items: stretch;
+  .tool-inline-toggle {
+    grid-template-columns: 10px minmax(0, 1fr);
+    align-items: flex-start;
+    row-gap: 2px;
   }
 
-  .tool-result-card-toggle {
-    align-self: flex-start;
+  .tool-inline-meta,
+  .tool-inline-diff {
+    grid-column: 2;
+    max-width: 100%;
   }
 
   .streaming-indicator {
@@ -1711,10 +2057,8 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
     border-radius: 16px 16px 6px 16px;
   }
 
-  .tool-result-card {
-    gap: 8px;
-    padding: 10px 12px;
-    border-radius: 10px;
+  .tool-inline-details {
+    padding-top: 2px;
   }
 
   .error-block {
@@ -1728,8 +2072,13 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
   }
 
   .error-message,
-  .tool-result-card-preview,
-  .tool-result-card-details,
+  .tool-inline-name,
+  .tool-inline-params,
+  .tool-inline-meta,
+  .tool-inline-diff,
+  .tool-inline-code-output,
+  .tool-inline-pre,
+  .tool-inline-empty,
   .thinking-content,
   .system-block-body {
     font-size: 0.68rem;

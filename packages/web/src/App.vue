@@ -906,8 +906,10 @@ onBeforeUnmount(() => {
   --panel: #161b22;
   --panel-2: #21262d;
   --panel-3: #30363d;
-  --tool-card-bg: #161b22;
-  --tool-card-bg-strong: #21262d;
+  --tool-surface: #161b22;
+  --tool-surface-strong: #21262d;
+  --tool-output-bg: #0f141b;
+  --tool-output-border: #30363d;
   --diff-added-bg: rgba(46, 160, 67, 0.15);
   --diff-added-text: #aff5b4;
   --diff-added-accent: #3fb950;
@@ -1015,8 +1017,10 @@ onBeforeUnmount(() => {
   --panel: #ffffff;
   --panel-2: #f6f8fa;
   --panel-3: #ebedf0;
-  --tool-card-bg: #f6f8fa;
-  --tool-card-bg-strong: #ebedf0;
+  --tool-surface: #f6f8fa;
+  --tool-surface-strong: #ebedf0;
+  --tool-output-bg: #f6f8fa;
+  --tool-output-border: #d0d7de;
   --diff-added-bg: rgba(26, 127, 55, 0.12);
   --diff-added-text: #116329;
   --diff-added-accent: #1a7f37;

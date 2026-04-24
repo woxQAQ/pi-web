@@ -5,96 +5,32 @@ import type {
   ToolContentBlock,
 } from "./transcript";
 
-export interface ToolCardSection {
-  label: string;
-  text: string;
-}
-
-export interface ToolCardModel {
-  label: string;
+export interface ToolInlineModel {
   title: string;
   meta?: string;
-  preview?: string;
-  status: ToolBlockStatus;
-  details: ToolCardSection[];
   diffStats?: { added: number; removed: number };
 }
 
 type ToolArgsRecord = JsonObject;
 
-const TOOL_LABELS: Record<string, string> = {
-  read: "Read file",
-  bash: "Run command",
-  edit: "Edit file",
-  write: "Write file",
-};
-
-export function buildToolCardModel(block: ToolContentBlock): ToolCardModel {
+export function buildToolInlineModel(block: ToolContentBlock): ToolInlineModel {
   const args = asRecord(block.toolArgs);
-  const title = formatToolTitle(block.toolName, args);
-  const diffStats = buildDiffStats(
-    block.toolName,
-    args,
-    block.resultDetails,
-    block.toolStatus,
-  );
-  const meta = formatToolMeta(
-    block.toolName,
-    args,
-    block.resultText,
-    block.resultDetails,
-    block.toolStatus,
-  );
-  const preview = formatToolPreview(
-    block.toolName,
-    args,
-    block.resultText,
-    block.resultDetails,
-    block.toolStatus,
-  );
-  const details = buildToolDetails(block, args);
 
   return {
-    label: TOOL_LABELS[block.toolName] ?? humanizeToolName(block.toolName),
-    title,
-    meta,
-    preview,
-    status: block.toolStatus,
-    details,
-    diffStats,
+    title: formatToolTitle(block.toolName, args),
+    meta: formatToolMeta(
+      block.toolName,
+      args,
+      block.resultText,
+      block.toolStatus,
+    ),
+    diffStats: buildDiffStats(
+      block.toolName,
+      args,
+      block.resultDetails,
+      block.toolStatus,
+    ),
   };
-}
-
-function buildToolDetails(
-  block: ToolContentBlock,
-  args: ToolArgsRecord | undefined,
-): ToolCardSection[] {
-  const details: ToolCardSection[] = [];
-  const resultText = block.resultText?.trim();
-  const writeContent = stringValue(args, "content")?.trim();
-  const resultDetails = asRecord(block.resultDetails);
-
-  if (block.toolName === "edit") {
-    const diffText = stringValue(resultDetails, "diff")?.trim();
-    if (diffText) {
-      return details;
-    }
-  }
-
-  if (
-    block.toolName === "write" &&
-    writeContent &&
-    block.toolStatus !== "error"
-  ) {
-    details.push({ label: "Content", text: writeContent });
-    if (resultText) {
-      details.push({ label: "Result", text: resultText });
-    }
-  } else if (resultText) {
-    details.push({ label: resultLabel(block.toolName), text: resultText });
-  }
-
-  return details;
 }
 
 function formatToolTitle(
@@ -142,7 +78,6 @@ function formatToolMeta(
   toolName: string,
   args: ToolArgsRecord | undefined,
   resultText: string | undefined,
-  resultDetails: JsonValue | undefined,
   status: ToolBlockStatus,
 ): string | undefined {
   switch (toolName) {
@@ -165,111 +100,6 @@ function formatToolMeta(
     default:
       return undefined;
   }
-}
-
-function formatToolPreview(
-  toolName: string,
-  args: ToolArgsRecord | undefined,
-  resultText: string | undefined,
-  resultDetails: JsonValue | undefined,
-  status: ToolBlockStatus,
-): string | undefined {
-  if (status === "pending") {
-    return pendingText(toolName);
-  }
-
-  if (toolName === "bash") {
-    return tailPreviewText(resultText);
-  }
-
-  if (toolName === "edit") {
-    const diffText = blockResultDiff(resultDetails)?.trim();
-    if (diffText) {
-      return diffText;
-    }
-  }
-
-  if (status === "error") {
-    return previewText(resultText);
-  }
-
-  if (toolName === "write") {
-    const content = stringValue(args, "content");
-    if (content?.trim()) {
-      return previewText(content);
-    }
-  }
-
-  if (toolName === "edit") {
-    const edits = Array.isArray(args?.edits) ? args.edits.length : undefined;
-    const stats = editDiffStats(args, blockResultDiff(resultDetails));
-    if (stats) {
-      const blockCount = edits ?? 1;
-      return `+${stats.added} -${stats.removed} across ${blockCount} block${blockCount === 1 ? "" : "s"}`;
-    }
-    if (resultText?.trim()) {
-      return previewText(resultText);
-    }
-    if (edits !== undefined) {
-      return `${edits} edit${edits === 1 ? "" : "s"}`;
-    }
-  }
-
-  return previewText(resultText);
-}
-
-function resultLabel(toolName: string): string {
-  switch (toolName) {
-    case "bash":
-      return "Output";
-    case "edit":
-      return "Result";
-    case "read":
-      return "Contents";
-    default:
-      return "Result";
-  }
-}
-
-function pendingText(toolName: string): string {
-  switch (toolName) {
-    case "read":
-      return "Waiting for file contents...";
-    case "bash":
-      return "Running command...";
-    case "edit":
-      return "Applying edit...";
-    case "write":
-      return "Writing file...";
-    default:
-      return "Running tool...";
-  }
-}
-
-function previewText(
-  text: string | undefined,
-  maxLines: number = 8,
-): string | undefined {
-  if (!text) return undefined;
-  const normalized = text.replace(/\r/g, "").trim();
-  if (!normalized) return undefined;
-  const lines = normalized.split("\n");
-  if (lines.length <= maxLines) return normalized;
-  const remaining = lines.length - maxLines;
-  return `${lines.slice(0, maxLines).join("\n")}\n... ${remaining} more line${remaining === 1 ? "" : "s"}`;
-}
-
-function tailPreviewText(
-  text: string | undefined,
-  maxLines: number = 6,
-): string | undefined {
-  if (!text) return undefined;
-  const normalized = text.replace(/\r/g, "").trim();
-  if (!normalized) return undefined;
-  const lines = normalized.split("\n");
-  if (lines.length <= maxLines) return normalized;
-  const remaining = lines.length - maxLines;
-  return `... ${remaining} earlier line${remaining === 1 ? "" : "s"}\n${lines.slice(-maxLines).join("\n")}`;
 }
 
 function humanizeToolName(toolName: string): string {
@@ -373,8 +203,9 @@ function diffStatsFromDiff(
       line.startsWith("+++") ||
       line.startsWith("---") ||
       line.startsWith("@@")
-    )
+    ) {
       continue;
+    }
     if (line.startsWith("+")) added += 1;
     if (line.startsWith("-")) removed += 1;
   }
