@@ -1619,12 +1619,16 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 
   .message-content.assistant,
   .message-content.tool,
-  .message-content.user,
   .message-content.system,
   .tool-row {
     margin-left: 0;
     max-width: 100%;
     padding-left: 0;
+  }
+
+  .message-content.user {
+    max-width: min(88%, 32rem);
+    margin-left: auto;
   }
 
   .message-actions {
@@ -1668,6 +1672,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
   }
 
   .message-content.user {
+    max-width: min(90%, 100%);
     padding: 10px 12px;
     border-radius: 16px 16px 6px 16px;
   }
