@@ -107,7 +107,7 @@ const emit = defineEmits<{
 @media (max-width: 900px) {
   .left-rail {
     position: absolute;
-    top: var(--mobile-header-offset, calc(env(safe-area-inset-top) + 50px));
+    top: 0;
     left: 0;
     bottom: 0;
     width: min(88vw, 360px);

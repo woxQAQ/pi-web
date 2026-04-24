@@ -54,10 +54,11 @@ const emit = defineEmits<{
 @media (max-width: 900px) {
   .right-rail {
     position: absolute;
-    top: var(--mobile-header-offset, calc(env(safe-area-inset-top) + 50px));
+    top: 0;
     right: 0;
     bottom: 0;
-    width: min(88vw, 360px);
+    width: min(100vw, 420px);
+    max-width: 100vw;
     transform: translateX(100%);
     transition: transform 0.2s ease;
     z-index: 15;
@@ -82,6 +83,13 @@ const emit = defineEmits<{
   .right-rail.open ~ .rail-backdrop {
     pointer-events: auto;
     opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .right-rail {
+    width: 100vw;
+    border-left: none;
   }
 }
 </style>

@@ -540,4 +540,113 @@ function handleSelect(entryId: string) {
   line-height: 1.4;
   color: var(--text-subtle);
 }
+
+@media (max-width: 640px) {
+  .tree-rail {
+    padding: 12px 10px max(10px, env(safe-area-inset-bottom));
+  }
+
+  .tree-header {
+    gap: 10px;
+    padding: 4px 2px 12px;
+  }
+
+  .header-kicker {
+    display: block;
+    margin: 0 0 4px;
+    font-size: 0.62rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .header-title {
+    font-size: 0.92rem;
+    line-height: 1.25;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    overflow: hidden;
+  }
+
+  .nav-button {
+    width: 32px;
+    height: 32px;
+  }
+
+  .tree-toolbar {
+    gap: 8px;
+    padding: 0 2px 10px;
+  }
+
+  .search-input {
+    height: 36px;
+    border-radius: 10px;
+    padding: 0 12px;
+    font-size: 0.9rem;
+  }
+
+  .filter-row {
+    flex-wrap: wrap;
+    gap: 6px;
+    overflow: visible;
+    padding-bottom: 0;
+  }
+
+  .filter-chip {
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 999px;
+    font-size: 0.65rem;
+  }
+
+  .tree-list {
+    padding: 0 1px 0 2px;
+  }
+
+  .tree-item {
+    min-height: 32px;
+    gap: 6px;
+    align-items: flex-start;
+    padding: 3px 2px;
+  }
+
+  .tree-content {
+    gap: 8px;
+    align-items: flex-start;
+    padding: 6px 8px;
+    border-radius: 8px;
+  }
+
+  .tree-guides {
+    min-height: 24px;
+    height: 100%;
+    padding-top: 7px;
+  }
+
+  .tree-line {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .tree-tag {
+    max-width: 100%;
+  }
+
+  .tree-preview {
+    flex-basis: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: clip;
+    overflow-wrap: anywhere;
+  }
+
+  .empty-state {
+    margin: 8px 2px 0;
+    padding: 14px 12px;
+  }
+}
 </style>
