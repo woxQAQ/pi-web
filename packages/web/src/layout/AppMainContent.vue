@@ -90,6 +90,7 @@ const emit = defineEmits<{
   cancelRevision: [];
   cancelQueued: [index: number];
   editQueued: [index: number];
+  openFileReference: [payload: { path: string; lineNumber: number }];
 }>();
 
 const chatTranscriptRef = ref<InstanceType<typeof ChatTranscript> | null>(null);
@@ -141,6 +142,7 @@ defineExpose({
       :allow-revision="allowRevision"
       @load-older="emit('loadOlderTranscript')"
       @revise="emit('reviseMessage', $event)"
+      @open-file-reference="emit('openFileReference', $event)"
     />
     <div v-if="queuedUserMessages.length > 0" class="queued-messages-strip">
       <div

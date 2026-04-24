@@ -28,6 +28,15 @@ export interface RpcWorkspaceEntry {
   kind: "file" | "directory";
 }
 
+export interface RpcWorkspaceFile {
+  path: string;
+  absolutePath: string;
+  content: string;
+  truncated: boolean;
+  totalBytes: number;
+  lineCount: number;
+}
+
 export interface RpcGitBranch {
   name: string;
   shortName: string;
@@ -296,6 +305,7 @@ export interface RpcCommandMap {
   };
   list_tree_entries: { sessionPath?: string };
   list_workspace_entries: {};
+  read_workspace_file: { path: string };
 
   /** Git */
   list_git_branches: {};
@@ -616,6 +626,7 @@ export interface RpcResponseMap {
   };
   list_tree_entries: { entries: RpcTreeEntry[]; sessionPath?: string };
   list_workspace_entries: { entries: RpcWorkspaceEntry[] };
+  read_workspace_file: RpcWorkspaceFile;
   list_git_branches: RpcGitRepoState;
   switch_git_branch: RpcGitRepoState;
   create_git_branch: RpcGitRepoState;

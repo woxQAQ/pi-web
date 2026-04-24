@@ -77,13 +77,13 @@ const emit = defineEmits<{
         type="button"
         :aria-label="
           outlineSidebarOpen
-            ? 'Collapse session outline'
-            : 'Expand session outline'
+            ? 'Collapse right sidebar'
+            : 'Expand right sidebar'
         "
         :title="
           outlineSidebarOpen
-            ? 'Collapse session outline'
-            : 'Expand session outline'
+            ? 'Collapse right sidebar'
+            : 'Expand right sidebar'
         "
         @click="emit('toggleOutlineSidebar')"
       >

@@ -106,6 +106,25 @@ function isSupportedLanguage(value: string): value is SupportedLanguage {
   return Object.hasOwn(LANGUAGE_LOADERS, value);
 }
 
+function appendClassName(value: unknown, className: string): string {
+  const classNames = new Set(
+    Array.isArray(value)
+      ? value.filter((item): item is string => typeof item === "string")
+      : typeof value === "string"
+        ? value.split(/\s+/).filter(Boolean)
+        : [],
+  );
+  classNames.add(className);
+  return [...classNames].join(" ");
+}
+
+function sanitizeHighlightedHtml(html: string): string {
+  return DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: ["pre", "code", "span"],
+    ALLOWED_ATTR: ["class", "style", "data-line"],
+  });
+}
+
 export async function highlightCodeHtml(
   code: string,
   pathOrLanguage?: string,
@@ -115,10 +134,38 @@ export async function highlightCodeHtml(
     lang: detectLanguageFromPath(pathOrLanguage),
     theme: themeMode === "light" ? LIGHT_THEME : DARK_THEME,
   });
-  return DOMPurify.sanitize(html, {
-    ALLOWED_TAGS: ["pre", "code", "span"],
-    ALLOWED_ATTR: ["class", "style"],
+  return sanitizeHighlightedHtml(html);
+}
+
+export async function highlightCodeLinesHtml(
+  code: string,
+  pathOrLanguage?: string,
+  themeMode: ThemeMode = "dark",
+  highlightedLine?: number,
+): Promise<string> {
+  const html = await codeToHtml(code, {
+    lang: detectLanguageFromPath(pathOrLanguage),
+    theme: themeMode === "light" ? LIGHT_THEME : DARK_THEME,
+    transformers: [
+      {
+        line(node, line) {
+          node.properties.class = appendClassName(
+            node.properties.class,
+            "code-line",
+          );
+          node.properties["data-line"] = String(line);
+          if (highlightedLine === line) {
+            node.properties.class = appendClassName(
+              node.properties.class,
+              "code-line-target",
+            );
+          }
+          return node;
+        },
+      },
+    ],
   });
+  return sanitizeHighlightedHtml(html);
 }
 
 export function detectLanguageFromPath(

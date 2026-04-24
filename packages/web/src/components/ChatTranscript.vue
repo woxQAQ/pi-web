@@ -55,6 +55,7 @@ const emit = defineEmits<{
       images: RpcImageContent[];
     },
   ];
+  openFileReference: [payload: { path: string; lineNumber: number }];
 }>();
 
 const container = ref<HTMLDivElement | null>(null);
@@ -1059,6 +1060,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                     v-if="block.body"
                     class="system-block-body"
                     :content="block.body"
+                    @open-file-reference="emit('openFileReference', $event)"
                   />
                 </article>
 
@@ -1093,6 +1095,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                         item.messageIndex,
                       )
                     "
+                    @open-file-reference="emit('openFileReference', $event)"
                   />
                 </div>
 
@@ -1273,6 +1276,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                       item.messageIndex,
                     )
                   "
+                  @open-file-reference="emit('openFileReference', $event)"
                 />
               </template>
             </div>

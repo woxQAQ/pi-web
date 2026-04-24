@@ -1,56 +1,97 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { X } from "lucide-vue-next";
+import { computed } from "vue";
+import FileViewerPanel from "../components/FileViewerPanel.vue";
 import SessionTreeRail from "../components/SessionTreeRail.vue";
 import type { TreeEntry } from "../composables/useBridgeClient";
+import type { RpcWorkspaceFile } from "../shared-types";
+
+type FileTab = {
+  id: string;
+  path: string;
+  lineNumber: number;
+};
 
 const props = defineProps<{
   treeEntries: readonly TreeEntry[];
   sidebarOpen: boolean;
   sessionLabel: string;
   sessionPath: string | null;
+  hasTreeTab: boolean;
+  activeTabId: string;
+  activeFileTab: FileTab | null;
+  fileTabs: readonly FileTab[];
+  readWorkspaceFile: (path: string) => Promise<RpcWorkspaceFile>;
 }>();
 
 const emit = defineEmits<{
   closeSidebar: [];
+  selectTab: [tabId: string];
+  closeFileTab: [tabId: string];
   selectTreeEntry: [entryId: string];
   refreshTree: [];
 }>();
 
-type RightSidebarTabId = "tree";
+const tabs = computed(() => [
+  ...(props.hasTreeTab ? [{ id: "tree", path: "Tree", lineNumber: 0 }] : []),
+  ...props.fileTabs,
+]);
 
-const activeTab = ref<RightSidebarTabId>("tree");
+function isTreeTab(tabId: string): boolean {
+  return tabId === "tree";
+}
 
-const rightSidebarTabs = [
-  {
-    id: "tree" as const,
-    label: "Tree",
-  },
-];
+function fileTabLabel(filePath: string): string {
+  const normalizedPath = filePath.replace(/\\/g, "/");
+  return normalizedPath.split("/").pop() ?? normalizedPath;
+}
 </script>
 
 <template>
   <aside class="right-rail" :class="{ open: sidebarOpen }">
     <div class="rail-shell">
       <div class="rail-tabs" role="tablist" aria-label="Right sidebar panels">
-        <button
-          v-for="tab in rightSidebarTabs"
-          :id="`right-rail-tab-${tab.id}`"
+        <div
+          v-for="tab in tabs"
           :key="tab.id"
-          class="rail-tab"
-          :class="{ active: activeTab === tab.id }"
-          type="button"
-          role="tab"
-          :aria-selected="activeTab === tab.id"
-          :aria-controls="`right-rail-panel-${tab.id}`"
-          @click="activeTab = tab.id"
+          class="rail-tab-item"
+          :class="{ active: activeTabId === tab.id }"
         >
-          <span class="rail-tab-label">{{ tab.label }}</span>
-        </button>
+          <button
+            :id="`right-rail-tab-${tab.id}`"
+            class="rail-tab"
+            type="button"
+            role="tab"
+            :aria-selected="activeTabId === tab.id"
+            :aria-controls="`right-rail-panel-${tab.id}`"
+            :title="
+              isTreeTab(tab.id)
+                ? 'Session tree'
+                : `${tab.path}:${tab.lineNumber}`
+            "
+            @click="emit('selectTab', tab.id)"
+          >
+            <span class="rail-tab-label">
+              {{ isTreeTab(tab.id) ? "Tree" : fileTabLabel(tab.path) }}
+            </span>
+          </button>
+          <button
+            v-if="!isTreeTab(tab.id)"
+            type="button"
+            class="rail-tab-close"
+            :class="{ active: activeTabId === tab.id }"
+            :aria-label="`Close ${tab.path}`"
+            :title="`Close ${tab.path}`"
+            @click.stop="emit('closeFileTab', tab.id)"
+          >
+            <X class="rail-tab-close-icon" aria-hidden="true" />
+          </button>
+        </div>
       </div>
 
       <div class="rail-panel">
         <div
-          v-if="activeTab === 'tree'"
+          v-if="activeTabId === 'tree' && hasTreeTab"
           id="right-rail-panel-tree"
           class="tab-panel"
           role="tabpanel"
@@ -62,6 +103,19 @@ const rightSidebarTabs = [
             :session-path="sessionPath"
             @select="emit('selectTreeEntry', $event)"
             @refresh="emit('refreshTree')"
+          />
+        </div>
+        <div
+          v-else-if="activeFileTab"
+          :id="`right-rail-panel-${activeFileTab.id}`"
+          class="tab-panel"
+          role="tabpanel"
+          :aria-labelledby="`right-rail-tab-${activeFileTab.id}`"
+        >
+          <FileViewerPanel
+            :file-path="activeFileTab.path"
+            :line-number="activeFileTab.lineNumber"
+            :read-workspace-file="readWorkspaceFile"
           />
         </div>
       </div>
@@ -93,8 +147,17 @@ const rightSidebarTabs = [
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 0px 12px 0;
+  padding: 0 12px 0;
   border-bottom: 1px solid var(--border);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.rail-tab-item {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  flex-shrink: 0;
 }
 
 .rail-tab {
@@ -117,17 +180,20 @@ const rightSidebarTabs = [
     border-color 0.12s ease;
 }
 
-.rail-tab:hover {
+.rail-tab:hover,
+.rail-tab-close:hover {
   color: var(--text);
 }
 
-.rail-tab:focus-visible {
+.rail-tab:focus-visible,
+.rail-tab-close:focus-visible {
   outline: none;
   color: var(--text);
   border-color: var(--accent);
 }
 
-.rail-tab.active {
+.rail-tab-item.active .rail-tab,
+.rail-tab-item.active .rail-tab-close {
   color: var(--text);
   border-color: var(--accent);
 }
@@ -136,6 +202,29 @@ const rightSidebarTabs = [
   font-size: 0.73rem;
   font-weight: 600;
   line-height: 1;
+}
+
+.rail-tab-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 34px;
+  margin-left: 4px;
+  padding: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--text-subtle);
+  cursor: pointer;
+  transition:
+    color 0.12s ease,
+    border-color 0.12s ease;
+}
+
+.rail-tab-close-icon {
+  width: 13px;
+  height: 13px;
 }
 
 .rail-panel {
@@ -162,7 +251,7 @@ const rightSidebarTabs = [
     top: 0;
     right: 0;
     bottom: 0;
-    width: min(100vw, 420px);
+    width: min(100vw, 520px);
     max-width: 100vw;
     transform: translateX(100%);
     transition: transform 0.2s ease;
@@ -202,13 +291,13 @@ const rightSidebarTabs = [
     padding: 10px 10px 0;
   }
 
-  .rail-tab {
+  .rail-tab,
+  .rail-tab-close {
     height: 38px;
   }
 
   .rail-tab-label {
     font-size: 0.79rem;
   }
-
 }
 </style>

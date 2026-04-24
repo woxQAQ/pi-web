@@ -14,6 +14,7 @@ import type {
   RpcTreeEntry,
   RpcTreeTrackColumn,
   RpcWorkspaceEntry,
+  RpcWorkspaceFile,
   RpcExtensionUIRequest,
   RpcExtensionUIResponse,
   RpcGitBranch,
@@ -1031,6 +1032,20 @@ function summarizeErrorMessage(message: string, fallback: string): string {
   return line.length > 220 ? `${line.slice(0, 217)}...` : line;
 }
 
+async function readWorkspaceFile(path: string): Promise<RpcWorkspaceFile> {
+  const response = await sendCommand({ type: "read_workspace_file", path });
+  if (!response.success) {
+    throw new Error(response.error ?? "Failed to read workspace file");
+  }
+
+  const data = response.data;
+  if (!data || typeof data !== "object") {
+    throw new Error("Failed to parse workspace file contents");
+  }
+
+  return data as RpcWorkspaceFile;
+}
+
 async function loadGitRepoState(
   force: boolean = false,
 ): Promise<RpcGitRepoState | null> {
@@ -1891,6 +1906,7 @@ export function useBridgeClient() {
     sendPrompt,
     loadOlderTranscriptPage,
     fetchWorkspaceEntries,
+    readWorkspaceFile,
     loadWorkspaceSessions,
     refreshWorkspaceSessions,
     loadGitRepoState,

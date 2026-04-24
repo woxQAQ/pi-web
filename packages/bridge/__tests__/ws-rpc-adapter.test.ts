@@ -2287,6 +2287,84 @@ describe("WsRpcAdapter", () => {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });
 
+    it("should handle read_workspace_file command", async () => {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "pi-web-read-file-test-"),
+      );
+      const filePath = path.join(tmpDir, "src", "App.vue");
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, "<template>\n  <main />\n</template>\n");
+      context.ctx.cwd = tmpDir;
+
+      const command: RpcCommand = {
+        id: "cmd-read-file",
+        type: "read_workspace_file",
+        path: "src/App.vue",
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = sendCalls[sendCalls.length - 1][0] as string;
+      const response = JSON.parse(lastCall);
+
+      expect(response.payload.command).toBe("read_workspace_file");
+      expect(response.payload.success).toBe(true);
+      expect(response.payload.data).toMatchObject({
+        path: "src/App.vue",
+        absolutePath: filePath,
+        truncated: false,
+        totalBytes: fs.statSync(filePath).size,
+        lineCount: 4,
+      });
+      expect(response.payload.data.content).toContain("<main />");
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it("should reject read_workspace_file outside the workspace", async () => {
+      const tmpDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "pi-web-read-file-guard-test-"),
+      );
+      const outsideDir = fs.mkdtempSync(
+        path.join(os.tmpdir(), "pi-web-outside-file-test-"),
+      );
+      const outsideFile = path.join(outsideDir, "outside.txt");
+      fs.writeFileSync(outsideFile, "outside\n");
+      context.ctx.cwd = tmpDir;
+
+      const command: RpcCommand = {
+        id: "cmd-read-file-outside",
+        type: "read_workspace_file",
+        path: outsideFile,
+      };
+      (
+        ws as unknown as { trigger: (event: string, data: Buffer) => void }
+      ).trigger(
+        "message",
+        Buffer.from(JSON.stringify({ type: "command", payload: command })),
+      );
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls;
+      const lastCall = sendCalls[sendCalls.length - 1][0] as string;
+      const response = JSON.parse(lastCall);
+
+      expect(response.payload.command).toBe("read_workspace_file");
+      expect(response.payload.success).toBe(false);
+      expect(response.payload.error).toContain("inside the current workspace");
+
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      fs.rmSync(outsideDir, { recursive: true, force: true });
+    });
+
     it("should handle list_tree_entries command", async () => {
       (
         context.ctx.sessionManager.getBranch as ReturnType<typeof vi.fn>

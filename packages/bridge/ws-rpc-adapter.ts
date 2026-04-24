@@ -49,6 +49,7 @@ import type {
   RpcTranscriptUpsertEvent,
   RpcTreeEntry,
   RpcWorkspaceEntry,
+  RpcWorkspaceFile,
   RpcTreeTrackColumn,
   ServerMessage,
   WsClient,
@@ -804,6 +805,100 @@ function listWorkspaceEntries(cwd: string): RpcWorkspaceEntry[] {
   const filePaths =
     listWorkspaceFilesWithRipgrep(cwd) ?? listWorkspaceFilesFallback(cwd);
   return collectWorkspaceEntries(filePaths);
+}
+
+const MAX_WORKSPACE_FILE_BYTES = 256 * 1024;
+
+function isPathInsideRoot(rootPath: string, candidatePath: string): boolean {
+  if (candidatePath === rootPath) {
+    return true;
+  }
+  const rootPrefix = rootPath.endsWith(path.sep)
+    ? rootPath
+    : `${rootPath}${path.sep}`;
+  return candidatePath.startsWith(rootPrefix);
+}
+
+function resolveWorkspaceFile(
+  cwd: string,
+  requestedPath: string,
+): { resolvedPath: string; displayPath: string } | { error: string } {
+  const trimmedPath = requestedPath.trim();
+  if (!trimmedPath) {
+    return { error: "File path cannot be empty" };
+  }
+
+  const workspaceRoot = fs.realpathSync.native(cwd);
+  const absolutePath = path.isAbsolute(trimmedPath)
+    ? path.resolve(trimmedPath)
+    : path.resolve(workspaceRoot, trimmedPath);
+  if (!fs.existsSync(absolutePath)) {
+    return { error: `File not found: ${trimmedPath}` };
+  }
+
+  const resolvedPath = fs.realpathSync.native(absolutePath);
+  if (!isPathInsideRoot(workspaceRoot, resolvedPath)) {
+    return { error: "File must be inside the current workspace" };
+  }
+
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(resolvedPath);
+  } catch {
+    return { error: `Failed to stat file: ${trimmedPath}` };
+  }
+
+  if (!stats.isFile()) {
+    return { error: `Not a file: ${trimmedPath}` };
+  }
+
+  return {
+    resolvedPath,
+    displayPath: normalizeWorkspacePath(path.relative(workspaceRoot, resolvedPath)),
+  };
+}
+
+function readWorkspaceFile(
+  cwd: string,
+  requestedPath: string,
+): RpcWorkspaceFile | { error: string } {
+  let resolved:
+    | { resolvedPath: string; displayPath: string }
+    | { error: string };
+  try {
+    resolved = resolveWorkspaceFile(cwd, requestedPath);
+  } catch {
+    return { error: "Failed to resolve workspace file" };
+  }
+  if ("error" in resolved) {
+    return resolved;
+  }
+
+  let contentBuffer: Buffer;
+  try {
+    contentBuffer = fs.readFileSync(resolved.resolvedPath);
+  } catch {
+    return { error: `Failed to read file: ${requestedPath}` };
+  }
+
+  if (contentBuffer.includes(0)) {
+    return { error: "Binary file preview is not supported" };
+  }
+
+  const truncated = contentBuffer.length > MAX_WORKSPACE_FILE_BYTES;
+  const previewBuffer = truncated
+    ? contentBuffer.subarray(0, MAX_WORKSPACE_FILE_BYTES)
+    : contentBuffer;
+  const content = previewBuffer.toString("utf8");
+
+  return {
+    path: resolved.displayPath,
+    absolutePath: resolved.resolvedPath,
+    content,
+    truncated,
+    totalBytes: contentBuffer.length,
+    lineCount: content.split(/\r?\n/).length,
+  };
 }
 
 function runGitCommand(
@@ -4695,6 +4790,30 @@ export class WsRpcAdapter {
           command: "list_workspace_entries" as const,
           success: true as const,
           data: { entries: this.workspaceEntriesCache },
+        };
+      }
+
+      case "read_workspace_file": {
+        const result = readWorkspaceFile(
+          this.sessionRuntime.currentGitCwd(),
+          command.path,
+        );
+        if ("error" in result) {
+          return {
+            id: correlationId,
+            type: "response" as const,
+            command: "read_workspace_file" as const,
+            success: false as const,
+            error: result.error,
+          };
+        }
+
+        return {
+          id: correlationId,
+          type: "response" as const,
+          command: "read_workspace_file" as const,
+          success: true as const,
+          data: result,
         };
       }
 

@@ -54,5 +54,6 @@ export type {
   RpcTranscriptToolCallBlock,
   RpcTranscriptToolResultBlock,
   RpcWorkspaceEntry,
+  RpcWorkspaceFile,
   ServerMessage,
 } from "../../bridge/types";

@@ -21,6 +21,13 @@ import type { RpcModelInfo } from "./utils/models";
 import { parseCompactSlashCommand } from "./utils/slashCommands";
 
 type ThemeMode = "dark" | "light";
+type RightSidebarTabId = string;
+
+type FileViewerTab = {
+  id: string;
+  path: string;
+  lineNumber: number;
+};
 
 const {
   connectionStatus,
@@ -59,6 +66,7 @@ const {
   switchSession,
   newSession,
   fetchWorkspaceEntries,
+  readWorkspaceFile,
   loadWorkspaceSessions,
   refreshWorkspaceSessions,
   loadGitRepoState,
@@ -107,9 +115,13 @@ const activeSessionLabel = computed(() => {
     "Untitled session"
   );
 });
+const TREE_TAB_ID = "tree";
+
 const sidebarOpen = ref(false);
 const leftSidebarCollapsed = ref(false);
 const outlineSidebarOpen = ref(false);
+const activeRightSidebarTabId = ref<RightSidebarTabId>(TREE_TAB_ID);
+const fileViewerTabs = ref<FileViewerTab[]>([]);
 const mainContentRef = ref<InstanceType<typeof AppMainContent> | null>(null);
 const pendingRevision = ref<{
   entryId: string;
@@ -131,8 +143,8 @@ const LEFT_RAIL_MIN_WIDTH = 260;
 const LEFT_RAIL_MAX_WIDTH = 520;
 const LEFT_RAIL_DEFAULT_WIDTH = 320;
 const RIGHT_RAIL_MIN_WIDTH = 240;
-const RIGHT_RAIL_MAX_WIDTH = 420;
-const RIGHT_RAIL_DEFAULT_WIDTH = 300;
+const RIGHT_RAIL_MAX_WIDTH = 760;
+const RIGHT_RAIL_DEFAULT_WIDTH = 420;
 const MIN_CENTER_COLUMN_WIDTH = 360;
 
 type RailSide = "left" | "right";
@@ -205,12 +217,21 @@ const nextThemeLabel = computed<ThemeMode>(() =>
 const debugModeLabel = computed(() =>
   debugMode.value ? "Disable debug mode" : "Enable debug mode",
 );
+const hasRightSidebarContent = computed(
+  () => hasSessionOutline.value || fileViewerTabs.value.length > 0,
+);
+const activeFileViewerTab = computed(() =>
+  fileViewerTabs.value.find(tab => tab.id === activeRightSidebarTabId.value) ??
+  null,
+);
 const showLeftRailResizer = computed(
   () => !compactLayout.value && !leftSidebarCollapsed.value,
 );
 const showRightRailResizer = computed(
   () =>
-    !compactLayout.value && hasSessionOutline.value && outlineSidebarOpen.value,
+    !compactLayout.value &&
+    hasRightSidebarContent.value &&
+    outlineSidebarOpen.value,
 );
 const appShellStyle = computed(() => {
   if (compactLayout.value) {
@@ -226,7 +247,7 @@ const appShellStyle = computed(() => {
 const appBodyStyle = computed(() => {
   if (
     compactLayout.value ||
-    !hasSessionOutline.value ||
+    !hasRightSidebarContent.value ||
     !outlineSidebarOpen.value
   ) {
     return undefined;
@@ -242,6 +263,100 @@ const leftRailResizerStyle = computed(() => ({
 const rightRailResizerStyle = computed(() => ({
   right: `${rightRailWidth.value - 5}px`,
 }));
+
+function fileViewerTabId(path: string): string {
+  return `file:${path.replace(/\\/g, "/")}`;
+}
+
+function defaultRightSidebarTabId(): RightSidebarTabId | null {
+  if (hasSessionOutline.value) {
+    return TREE_TAB_ID;
+  }
+  return fileViewerTabs.value[0]?.id ?? null;
+}
+
+function ensureActiveRightSidebarTab() {
+  if (
+    activeRightSidebarTabId.value === TREE_TAB_ID &&
+    hasSessionOutline.value
+  ) {
+    return;
+  }
+
+  const activeFileTab = fileViewerTabs.value.find(
+    tab => tab.id === activeRightSidebarTabId.value,
+  );
+  if (activeFileTab) {
+    return;
+  }
+
+  activeRightSidebarTabId.value = defaultRightSidebarTabId() ?? TREE_TAB_ID;
+}
+
+function openFileViewer(path: string, lineNumber: number) {
+  const trimmedPath = path.trim();
+  if (!trimmedPath) {
+    return;
+  }
+
+  const nextLineNumber = Number.isInteger(lineNumber) && lineNumber > 0
+    ? lineNumber
+    : 1;
+  const id = fileViewerTabId(trimmedPath);
+  const existingIndex = fileViewerTabs.value.findIndex(tab => tab.id === id);
+  if (existingIndex >= 0) {
+    const nextTabs = [...fileViewerTabs.value];
+    nextTabs[existingIndex] = {
+      ...nextTabs[existingIndex],
+      lineNumber: nextLineNumber,
+    };
+    fileViewerTabs.value = nextTabs;
+  } else {
+    fileViewerTabs.value = [
+      ...fileViewerTabs.value,
+      {
+        id,
+        path: trimmedPath,
+        lineNumber: nextLineNumber,
+      },
+    ];
+  }
+
+  activeRightSidebarTabId.value = id;
+  outlineSidebarOpen.value = true;
+  if (compactLayout.value) {
+    sidebarOpen.value = false;
+  } else {
+    rightRailWidth.value = clampRailWidth("right", rightRailWidth.value);
+  }
+}
+
+function closeFileViewerTab(tabId: string) {
+  const currentIndex = fileViewerTabs.value.findIndex(tab => tab.id === tabId);
+  if (currentIndex === -1) {
+    return;
+  }
+
+  const nextTabs = fileViewerTabs.value.filter(tab => tab.id !== tabId);
+  fileViewerTabs.value = nextTabs;
+
+  if (activeRightSidebarTabId.value !== tabId) {
+    return;
+  }
+
+  const fallbackTab = nextTabs[currentIndex] ?? nextTabs[currentIndex - 1];
+  if (fallbackTab) {
+    activeRightSidebarTabId.value = fallbackTab.id;
+    return;
+  }
+
+  if (hasSessionOutline.value) {
+    activeRightSidebarTabId.value = TREE_TAB_ID;
+    return;
+  }
+
+  outlineSidebarOpen.value = false;
+}
 
 watch(theme, value => {
   if (typeof window !== "undefined") {
@@ -284,34 +399,55 @@ watch(
 );
 
 watch(hasSessionOutline, visible => {
-  if (!visible) {
+  if (!visible && activeRightSidebarTabId.value === TREE_TAB_ID) {
+    const fallbackTab = fileViewerTabs.value[0];
+    if (fallbackTab) {
+      activeRightSidebarTabId.value = fallbackTab.id;
+      return;
+    }
+  }
+
+  if (!visible && fileViewerTabs.value.length === 0) {
+    outlineSidebarOpen.value = false;
+    return;
+  }
+
+  ensureActiveRightSidebarTab();
+});
+
+watch(fileViewerTabs, tabs => {
+  if (tabs.length === 0 && !hasSessionOutline.value) {
     outlineSidebarOpen.value = false;
   }
+  ensureActiveRightSidebarTab();
 });
 
-watch([hasSessionOutline, outlineSidebarOpen, leftSidebarCollapsed], () => {
-  if (compactLayout.value) {
-    if (activeRailResize.value) {
-      stopRailResize();
+watch(
+  [hasRightSidebarContent, outlineSidebarOpen, leftSidebarCollapsed],
+  () => {
+    if (compactLayout.value) {
+      if (activeRailResize.value) {
+        stopRailResize();
+      }
+      return;
     }
-    return;
-  }
 
-  if (activeRailResize.value?.side === "left" && leftSidebarCollapsed.value) {
-    stopRailResize();
-    return;
-  }
+    if (activeRailResize.value?.side === "left" && leftSidebarCollapsed.value) {
+      stopRailResize();
+      return;
+    }
 
-  if (
-    activeRailResize.value?.side === "right" &&
-    (!hasSessionOutline.value || !outlineSidebarOpen.value)
-  ) {
-    stopRailResize();
-    return;
-  }
+    if (
+      activeRailResize.value?.side === "right" &&
+      (!hasRightSidebarContent.value || !outlineSidebarOpen.value)
+    ) {
+      stopRailResize();
+      return;
+    }
 
-  normalizeRailWidths();
-});
+    normalizeRailWidths();
+  },
+);
 
 const compatWarningVisible = ref(false);
 
@@ -329,7 +465,7 @@ function maxRailWidth(side: RailSide): number {
   if (side === "left") {
     const reservedRightWidth =
       !compactLayout.value &&
-      hasSessionOutline.value &&
+      hasRightSidebarContent.value &&
       outlineSidebarOpen.value
         ? rightRailWidth.value
         : 0;
@@ -380,7 +516,7 @@ function startRailResize(side: RailSide, event: PointerEvent) {
   if (side === "left" && leftSidebarCollapsed.value) return;
   if (
     side === "right" &&
-    (!hasSessionOutline.value || !outlineSidebarOpen.value)
+    (!hasRightSidebarContent.value || !outlineSidebarOpen.value)
   ) {
     return;
   }
@@ -530,14 +666,31 @@ async function handleDeleteSession(sessionPath: string) {
 function toggleOutlineSidebar() {
   const nextOpen = !outlineSidebarOpen.value;
   outlineSidebarOpen.value = nextOpen;
-  if (nextOpen) {
-    if (compactLayout.value) {
-      sidebarOpen.value = false;
-    } else {
-      rightRailWidth.value = clampRailWidth("right", rightRailWidth.value);
-    }
+  if (!nextOpen) {
+    return;
+  }
+
+  ensureActiveRightSidebarTab();
+  if (compactLayout.value) {
+    sidebarOpen.value = false;
+  } else {
+    rightRailWidth.value = clampRailWidth("right", rightRailWidth.value);
+  }
+
+  if (activeRightSidebarTabId.value === TREE_TAB_ID) {
     handleRefreshTree();
   }
+}
+
+function handleRightSidebarTabSelect(tabId: string) {
+  activeRightSidebarTabId.value = tabId;
+  if (tabId === TREE_TAB_ID) {
+    handleRefreshTree();
+  }
+}
+
+function handleOpenFileReference(payload: { path: string; lineNumber: number }) {
+  openFileViewer(payload.path, payload.lineNumber);
 }
 
 function handleRefreshTree() {
@@ -790,7 +943,7 @@ onBeforeUnmount(() => {
         :debug-mode="debugMode"
         :debug-mode-label="debugModeLabel"
         :sidebar-collapsed="leftSidebarCollapsed"
-        :show-outline-toggle="hasSessionOutline"
+        :show-outline-toggle="hasRightSidebarContent"
         :outline-sidebar-open="outlineSidebarOpen"
         @toggle-sidebar="toggleSessionSidebar"
         @toggle-sidebar-collapse="toggleLeftSidebarCollapse"
@@ -808,8 +961,8 @@ onBeforeUnmount(() => {
       <div
         class="app-body"
         :class="{
-          'has-right-rail': hasSessionOutline,
-          'right-rail-open': hasSessionOutline && outlineSidebarOpen,
+          'has-right-rail': hasRightSidebarContent,
+          'right-rail-open': hasRightSidebarContent && outlineSidebarOpen,
         }"
         :style="appBodyStyle"
       >
@@ -861,6 +1014,7 @@ onBeforeUnmount(() => {
           @select-model="handleModelSelect"
           @select-thinking-level="handleThinkingLevelSelect"
           @toggle-auto-compaction="handleAutoCompactionToggle"
+          @open-file-reference="handleOpenFileReference"
         />
 
         <div
@@ -868,18 +1022,25 @@ onBeforeUnmount(() => {
           class="rail-resizer right"
           :class="{ active: activeRailResize?.side === 'right' }"
           :style="rightRailResizerStyle"
-          title="Drag to resize session outline. Double-click to reset."
+          title="Drag to resize the right sidebar. Double-click to reset."
           @pointerdown="startRailResize('right', $event)"
           @dblclick="resetRailWidth('right')"
         ></div>
 
         <AppRightSidebar
-          v-if="hasSessionOutline && outlineSidebarOpen"
+          v-if="hasRightSidebarContent && outlineSidebarOpen"
           :tree-entries="treeEntries"
           :sidebar-open="outlineSidebarOpen"
           :session-label="activeSessionLabel"
           :session-path="activeSessionPath"
+          :has-tree-tab="hasSessionOutline"
+          :active-tab-id="activeRightSidebarTabId"
+          :active-file-tab="activeFileViewerTab"
+          :file-tabs="fileViewerTabs"
+          :read-workspace-file="readWorkspaceFile"
           @close-sidebar="outlineSidebarOpen = false"
+          @select-tab="handleRightSidebarTabSelect"
+          @close-file-tab="closeFileViewerTab"
           @select-tree-entry="handleTreeEntrySelect"
           @refresh-tree="handleRefreshTree"
         />

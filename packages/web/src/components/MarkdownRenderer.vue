@@ -10,9 +10,15 @@ import {
   watch,
 } from "vue";
 import { highlightCodeHtml, readThemeMode } from "../utils/codeHighlight";
+import { parseInlineFileReference } from "../utils/fileReferences";
+
 const props = defineProps<{
   content: string;
   deferMermaidErrors?: boolean;
+}>();
+
+const emit = defineEmits<{
+  openFileReference: [payload: { path: string; lineNumber: number }];
 }>();
 
 type MermaidModule = typeof import("mermaid").default;
@@ -77,6 +83,10 @@ function codeBlockPlaceholder(
   return `<div class="markdown-code-block" data-code-index="${index}" aria-live="polite"><pre><code${className}>${escapeHtml(source)}</code></pre></div>`;
 }
 
+function fileReferenceLink(label: string, path: string, lineNumber: number): string {
+  return `<a class="markdown-file-ref" href="#" data-file-path="${escapeHtml(path)}" data-file-line="${lineNumber}" title="Open ${escapeHtml(path)} at line ${lineNumber}"><code>${escapeHtml(label)}</code></a>`;
+}
+
 function sanitizeMarkdownHtml(html: string): string {
   return DOMPurify.sanitize(html, {
     ALLOWED_TAGS: [
@@ -124,6 +134,8 @@ function sanitizeMarkdownHtml(html: string): string {
       "class",
       "data-mermaid-index",
       "data-code-index",
+      "data-file-path",
+      "data-file-line",
       "aria-live",
     ],
   });
@@ -145,6 +157,19 @@ function renderMarkdown(raw: string): RenderedMarkdown {
 
     const index = codeBlocks.push({ text: token.text, lang }) - 1;
     return codeBlockPlaceholder(index, token.text, lang);
+  };
+
+  renderer.codespan = token => {
+    const fileReference = parseInlineFileReference(token.text);
+    if (!fileReference) {
+      return `<code>${escapeHtml(token.text)}</code>`;
+    }
+
+    return fileReferenceLink(
+      token.text,
+      fileReference.path,
+      fileReference.lineNumber,
+    );
   };
 
   const html = marked.parse(raw, {
@@ -484,6 +509,27 @@ function ensureThemeObserver() {
   });
 }
 
+function handleClick(event: MouseEvent) {
+  const target =
+    event.target instanceof Element
+      ? event.target.closest<HTMLAnchorElement>(
+          "a[data-file-path][data-file-line]",
+        )
+      : null;
+  if (!target) {
+    return;
+  }
+
+  event.preventDefault();
+  const path = target.dataset.filePath?.trim();
+  const lineNumber = Number.parseInt(target.dataset.fileLine ?? "", 10);
+  if (!path || !Number.isInteger(lineNumber) || lineNumber < 1) {
+    return;
+  }
+
+  emit("openFileReference", { path, lineNumber });
+}
+
 const renderedMarkdown = computed(() => renderMarkdown(props.content));
 
 onMounted(() => {
@@ -513,6 +559,7 @@ watch(
     ref="markdownBody"
     class="markdown-body"
     v-html="renderedMarkdown.html"
+    @click="handleClick"
   ></div>
 </template>
 
@@ -595,6 +642,33 @@ watch(
   border-radius: 4px;
   background: var(--panel-2);
   color: var(--text);
+}
+
+.markdown-body a.markdown-file-ref {
+  color: inherit;
+  text-decoration: none;
+}
+
+.markdown-body a.markdown-file-ref code {
+  color: color-mix(in srgb, var(--accent-hover) 80%, var(--text));
+  border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
+  background: color-mix(in srgb, var(--surface-active) 64%, var(--panel-2));
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    color 0.12s ease,
+    background 0.12s ease;
+}
+
+.markdown-body a.markdown-file-ref:hover code,
+.markdown-body a.markdown-file-ref:focus-visible code {
+  color: var(--accent-hover);
+  border-color: color-mix(in srgb, var(--accent) 52%, var(--border-strong));
+  background: color-mix(in srgb, var(--surface-active) 88%, var(--panel-2));
+}
+
+.markdown-body a.markdown-file-ref:focus-visible {
+  outline: none;
 }
 
 .markdown-body pre {
