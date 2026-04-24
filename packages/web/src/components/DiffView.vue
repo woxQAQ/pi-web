@@ -48,9 +48,9 @@ function classifyLine(
 <style scoped>
 .diff-view {
   margin: 0;
-  border: 1px solid var(--border-strong);
+  border: 1px solid var(--tool-output-border);
   border-radius: 10px;
-  background: var(--tool-card-bg-strong);
+  background: var(--tool-output-bg);
   overflow: auto;
   max-height: 360px;
 }
@@ -79,25 +79,35 @@ function classifyLine(
 }
 
 .diff-line[data-kind="header"] td {
-  background: var(--diff-header-bg);
+  background: color-mix(in srgb, var(--tool-output-bg) 92%, var(--border));
   color: var(--text-subtle);
 }
 
 .diff-line[data-kind="hunk"] td {
-  border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
-  background: var(--diff-hunk-bg);
+  border-top: 1px solid
+    color-mix(in srgb, var(--tool-output-border) 82%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--tool-output-border) 82%, transparent);
+  background: color-mix(in srgb, var(--tool-output-bg) 84%, var(--border));
   color: var(--text);
 }
 
 .diff-line[data-kind="added"] td {
-  background: var(--diff-added-bg);
+  background: color-mix(
+    in srgb,
+    var(--diff-added-bg) 72%,
+    var(--tool-output-bg)
+  );
   box-shadow: inset 3px 0 0 var(--diff-added-accent);
   color: var(--diff-added-text);
 }
 
 .diff-line[data-kind="removed"] td {
-  background: var(--diff-removed-bg);
+  background: color-mix(
+    in srgb,
+    var(--diff-removed-bg) 72%,
+    var(--tool-output-bg)
+  );
   box-shadow: inset 3px 0 0 var(--diff-removed-accent);
   color: var(--diff-removed-text);
 }
