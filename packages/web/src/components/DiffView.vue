@@ -84,20 +84,30 @@ function classifyLine(
 }
 
 .diff-line[data-kind="hunk"] td {
-  border-top: 1px solid color-mix(in srgb, var(--tool-output-border) 82%, transparent);
-  border-bottom: 1px solid color-mix(in srgb, var(--tool-output-border) 82%, transparent);
+  border-top: 1px solid
+    color-mix(in srgb, var(--tool-output-border) 82%, transparent);
+  border-bottom: 1px solid
+    color-mix(in srgb, var(--tool-output-border) 82%, transparent);
   background: color-mix(in srgb, var(--tool-output-bg) 84%, var(--border));
   color: var(--text);
 }
 
 .diff-line[data-kind="added"] td {
-  background: color-mix(in srgb, var(--diff-added-bg) 72%, var(--tool-output-bg));
+  background: color-mix(
+    in srgb,
+    var(--diff-added-bg) 72%,
+    var(--tool-output-bg)
+  );
   box-shadow: inset 3px 0 0 var(--diff-added-accent);
   color: var(--diff-added-text);
 }
 
 .diff-line[data-kind="removed"] td {
-  background: color-mix(in srgb, var(--diff-removed-bg) 72%, var(--tool-output-bg));
+  background: color-mix(
+    in srgb,
+    var(--diff-removed-bg) 72%,
+    var(--tool-output-bg)
+  );
   box-shadow: inset 3px 0 0 var(--diff-removed-accent);
   color: var(--diff-removed-text);
 }

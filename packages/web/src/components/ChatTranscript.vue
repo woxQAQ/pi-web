@@ -450,7 +450,9 @@ function toolBlockPath(block: ToolContentBlock): string | undefined {
 }
 
 function toolBlockDiff(block: ToolContentBlock): string | undefined {
-  return recordStringValue(block.resultDetails, "diff")?.replace(/\r/g, "").trim();
+  return recordStringValue(block.resultDetails, "diff")
+    ?.replace(/\r/g, "")
+    .trim();
 }
 
 function toolBlockTextResult(block: ToolContentBlock): string {
@@ -869,7 +871,10 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                   }}</span>
                   <span class="tool-inline-params">result</span>
                 </span>
-                <span v-if="toolResultMeta(item.message)" class="tool-inline-meta">
+                <span
+                  v-if="toolResultMeta(item.message)"
+                  class="tool-inline-meta"
+                >
                   {{ toolResultMeta(item.message) }}
                 </span>
               </button>
@@ -891,7 +896,9 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                   class="tool-inline-images"
                 >
                   <figure
-                    v-for="(image, imageIndex) in toolResultImages(item.message)"
+                    v-for="(image, imageIndex) in toolResultImages(
+                      item.message,
+                    )"
                     :key="`${image.src}-${imageIndex}`"
                     class="message-image-block"
                   >
@@ -980,7 +987,10 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                     {{ errorSummaryLabel(item.message) }}
                   </span>
                 </span>
-                <span v-if="errorSummaryMeta(item.message)" class="tool-inline-meta">
+                <span
+                  v-if="errorSummaryMeta(item.message)"
+                  class="tool-inline-meta"
+                >
                   {{ errorSummaryMeta(item.message) }}
                 </span>
               </button>
@@ -1179,7 +1189,10 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                             class="message-image-button"
                             :aria-label="`Open image ${imageIndex + 1}`"
                             @click="
-                              openImageLightbox(toolBlockImages(block), imageIndex)
+                              openImageLightbox(
+                                toolBlockImages(block),
+                                imageIndex,
+                              )
                             "
                           >
                             <img
@@ -1196,7 +1209,9 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
                         class="tool-inline-section"
                       >
                         <DiffView
-                          v-if="block.toolName === 'edit' && toolBlockDiff(block)"
+                          v-if="
+                            block.toolName === 'edit' && toolBlockDiff(block)
+                          "
                           :diff="toolBlockDiff(block) || ''"
                         />
                         <div
@@ -1902,7 +1917,11 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 
 .tool-inline[data-status="error"] .tool-inline-code-panel,
 .tool-inline[data-status="error"] .tool-inline-pre {
-  border-color: color-mix(in srgb, var(--error-border) 88%, var(--tool-output-border));
+  border-color: color-mix(
+    in srgb,
+    var(--error-border) 88%,
+    var(--tool-output-border)
+  );
   background: color-mix(in srgb, var(--tool-output-bg) 86%, transparent);
   color: var(--error-text);
 }
