@@ -496,7 +496,7 @@ function listStoredSessionFiles(): string[] {
 }
 
 function workspaceSessionDirName(workspacePath: string): string {
-  return `--${workspacePath.replace(/^[\/\\]/, "").replace(/[\/\\:]/g, "-")}--`;
+  return `--${workspacePath.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`;
 }
 
 function listWorkspaceSessionFiles(workspacePath: string): string[] {
