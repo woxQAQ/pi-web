@@ -684,7 +684,7 @@
           title={hasAttachments ? "Add more images" : "Attach images"}
           onclick={handleFilePickerOpen}
         >
-          <ImagePlus class="attach-icon" aria-hidden="true" size={14} />
+          <ImagePlus class="attach-icon" aria-hidden="true" size={16} />
         </button>
         <textarea
           bind:this={textareaRef}
@@ -964,10 +964,10 @@
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-    width: 32px;
-    height: 32px;
-    margin-top: 6px;
-    border-radius: 12px;
+    width: 24px;
+    height: 24px;
+    margin-top: 8px;
+    border-radius: 10px;
     border: none;
     background: var(--bg);
     color: var(--text-subtle);
@@ -988,7 +988,7 @@
   .composer-main-row {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
+    gap: 6px;
     min-width: 0;
   }
 
@@ -998,7 +998,7 @@
     flex: 1;
     min-width: 0;
     max-height: 160px;
-    padding: 9px 6px 10px;
+    padding: 9px 0 10px;
     border: none;
     background: transparent;
     color: var(--text);
@@ -1178,8 +1178,8 @@
     .composer-main-row { gap: 8px; align-items: flex-end; }
 
     .attach-btn {
-      width: 30px;
-      height: 30px;
+      width: 26px;
+      height: 26px;
       margin-top: 0;
       border-radius: 10px;
     }
