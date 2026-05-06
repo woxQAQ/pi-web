@@ -1,0 +1,162 @@
+<script lang="ts">
+  import { FolderPlus, RefreshCw } from "lucide-svelte";
+  import SessionRail from "../components/SessionRail.svelte";
+  import type { SessionEntry } from "../composables/bridgeStore.svelte";
+
+  let {
+    sessions,
+    activeSessionPath,
+    runningSessionPaths,
+    workspaceSessionCursors,
+    sidebarOpen = false,
+    collapsed = false,
+    onCloseSidebar = () => {},
+    onRegisterWorkspace = () => {},
+    onSelectSession = (_: string) => {},
+    onRefreshSessions = () => {},
+    onLoadOlderSessions = (_: {
+      workspacePath: string;
+      cursor?: string | null;
+    }) => {},
+    onNewSession = (_: string) => {},
+    onRenameSession = (_: string, __: string) => {},
+    onDeleteSession = (_: string) => {},
+  }: {
+    sessions: readonly SessionEntry[];
+    activeSessionPath: string | null;
+    runningSessionPaths: readonly string[];
+    workspaceSessionCursors: Readonly<Record<string, string | null>>;
+    sidebarOpen?: boolean;
+    collapsed?: boolean;
+    onCloseSidebar?: () => void;
+    onRegisterWorkspace?: () => void;
+    onSelectSession?: (sessionPath: string) => void;
+    onRefreshSessions?: () => void;
+    onLoadOlderSessions?: (payload: {
+      workspacePath: string;
+      cursor?: string | null;
+    }) => void;
+    onNewSession?: (workspacePath: string) => void;
+    onRenameSession?: (sessionPath: string, name: string) => void;
+    onDeleteSession?: (sessionPath: string) => void;
+  } = $props();
+</script>
+
+<aside class="left-rail" class:open={sidebarOpen} class:collapsed>
+  <SessionRail
+    {sessions}
+    {activeSessionPath}
+    {runningSessionPaths}
+    {workspaceSessionCursors}
+    onSelect={(sp: string) => onSelectSession(sp)}
+    onRename={(e: { sessionPath: string; name: string }) => onRenameSession(e.sessionPath, e.name)}
+    onDelete={(sp: string) => onDeleteSession(sp)}
+    onNewSession={(wp: string) => onNewSession(wp)}
+    onLoadOlderSessions={(e: { workspacePath: string; cursor?: string | null }) => onLoadOlderSessions(e)}
+  >
+    {#snippet headerActions()}
+      <button
+        class="rail-button"
+        type="button"
+        aria-label="Open workspace"
+        title="Open workspace"
+        onclick={onRegisterWorkspace}
+      >
+        <FolderPlus size={16} aria-hidden="true" />
+      </button>
+      <button
+        class="rail-button"
+        type="button"
+        aria-label="Refresh sessions"
+        title="Refresh sessions"
+        onclick={onRefreshSessions}
+      >
+          <RefreshCw size={16} aria-hidden="true" />
+      </button>
+    {/snippet}
+  </SessionRail>
+</aside>
+<div class="rail-backdrop" onclick={onCloseSidebar}></div>
+
+<style>
+  .left-rail {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    background: var(--rail-bg);
+    border-right: 1px solid var(--border);
+    overflow: hidden;
+  }
+
+  .left-rail.collapsed {
+    display: none;
+  }
+
+  .rail-button {
+    width: 28px;
+    height: 28px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: transparent;
+    color: var(--text-subtle);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease;
+  }
+
+  .rail-button:hover {
+    background: var(--panel-2);
+    border-color: var(--border-strong);
+    color: var(--text-muted);
+  }
+
+  .rail-backdrop {
+    display: none;
+  }
+
+  @media (max-width: 900px) {
+    .left-rail {
+      position: absolute;
+      top: var(--mobile-header-offset, 0px);
+      left: 0;
+      bottom: 0;
+      width: min(88vw, 360px);
+      transform: translateX(-100%);
+      transition: transform 0.2s ease;
+      z-index: 15;
+    }
+
+    .left-rail.collapsed {
+      display: flex;
+    }
+
+    .left-rail.open {
+      transform: translateX(0);
+      box-shadow: var(--shadow);
+    }
+
+    .rail-backdrop {
+      display: block;
+      position: absolute;
+      inset: var(--mobile-header-offset, 0px) 0 0 0;
+      background: var(--backdrop);
+      z-index: 14;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .left-rail.open ~ .rail-backdrop {
+      pointer-events: auto;
+      opacity: 1;
+    }
+  }
+</style>

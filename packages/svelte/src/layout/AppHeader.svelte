@@ -1,0 +1,350 @@
+<script lang="ts">
+  import {
+    Bug,
+    Menu,
+    Moon,
+    Palette,
+    PanelLeftClose,
+    PanelLeftOpen,
+    PanelRightClose,
+    PanelRightOpen,
+    Sun,
+  } from "lucide-svelte";
+  import type { ThemeMode } from "../themes";
+
+  let {
+    theme,
+    nextThemeLabel,
+    sessionTitle,
+    workspaceName,
+    showDebugToggle = false,
+    debugMode = false,
+    debugModeLabel = "",
+    sidebarCollapsed = false,
+    showOutlineToggle = false,
+    outlineSidebarOpen = false,
+    onToggleSidebar = () => {},
+    onToggleSidebarCollapse = () => {},
+    onToggleOutlineSidebar = () => {},
+    onToggleTheme = () => {},
+    onOpenThemeSettings = () => {},
+    onToggleDebugMode = () => {},
+  }: {
+    theme: "dark" | "light";
+    nextThemeLabel: ThemeMode;
+    sessionTitle: string;
+    workspaceName: string | null;
+    showDebugToggle?: boolean;
+    debugMode?: boolean;
+    debugModeLabel?: string;
+    sidebarCollapsed?: boolean;
+    showOutlineToggle?: boolean;
+    outlineSidebarOpen?: boolean;
+    onToggleSidebar?: () => void;
+    onToggleSidebarCollapse?: () => void;
+    onToggleOutlineSidebar?: () => void;
+    onToggleTheme?: () => void;
+    onOpenThemeSettings?: () => void;
+    onToggleDebugMode?: () => void;
+  } = $props();
+</script>
+
+<header class="app-header">
+  <div class="header-leading">
+    <button
+      class="hamburger"
+      aria-label="Toggle sidebar"
+      onclick={onToggleSidebar}
+    >
+      <Menu class="hamburger-icon" aria-hidden="true" size={18} />
+    </button>
+    <button
+      class="sidebar-collapse"
+      type="button"
+      aria-label={sidebarCollapsed
+        ? "Expand sessions sidebar"
+        : "Collapse sessions sidebar"}
+      title={sidebarCollapsed
+        ? "Expand sessions sidebar"
+        : "Collapse sessions sidebar"}
+      onclick={onToggleSidebarCollapse}
+    >
+      {#if sidebarCollapsed}
+        <PanelLeftOpen class="sidebar-collapse-icon" aria-hidden="true" size={16} />
+      {:else}
+        <PanelLeftClose class="sidebar-collapse-icon" aria-hidden="true" size={16} />
+      {/if}
+    </button>
+    <div class="header-brand">
+      {#if workspaceName}
+        <p class="workspace-name">{workspaceName}</p>
+      {/if}
+      <h1 class="app-title">{sessionTitle}</h1>
+    </div>
+  </div>
+  <div class="header-status">
+    {#if showOutlineToggle}
+      <button
+        class="outline-toggle"
+        type="button"
+        aria-label={outlineSidebarOpen
+          ? "Collapse right sidebar"
+          : "Expand right sidebar"}
+        title={outlineSidebarOpen
+          ? "Collapse right sidebar"
+          : "Expand right sidebar"}
+        onclick={onToggleOutlineSidebar}
+      >
+        {#if outlineSidebarOpen}
+          <PanelRightClose class="outline-toggle-icon" aria-hidden="true" size={16} />
+        {:else}
+          <PanelRightOpen class="outline-toggle-icon" aria-hidden="true" size={16} />
+        {/if}
+      </button>
+    {/if}
+    {#if showDebugToggle}
+      <button
+        class="debug-toggle"
+        class:active={debugMode}
+        type="button"
+        aria-label={debugModeLabel}
+        title={debugModeLabel}
+        onclick={onToggleDebugMode}
+      >
+        <Bug class="debug-icon" aria-hidden="true" size={16} />
+        <span class="debug-label">Debug</span>
+      </button>
+    {/if}
+    <button
+      class="appearance-toggle"
+      type="button"
+      aria-label="Open appearance settings"
+      title="Open appearance settings"
+      onclick={onOpenThemeSettings}
+    >
+      <Palette class="appearance-icon" aria-hidden="true" size={16} />
+    </button>
+    <button
+      class="theme-toggle"
+      type="button"
+      aria-label={`Switch to ${nextThemeLabel} theme`}
+      title={`Switch to ${nextThemeLabel} theme`}
+      onclick={onToggleTheme}
+    >
+      {#if theme === "dark"}
+        <Sun class="theme-icon" aria-hidden="true" size={16} />
+      {:else}
+        <Moon class="theme-icon" aria-hidden="true" size={16} />
+      {/if}
+    </button>
+  </div>
+</header>
+
+<style>
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    height: 48px;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-elevated);
+    flex-shrink: 0;
+    z-index: 20;
+  }
+
+  .header-leading {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+  }
+
+  .hamburger {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .hamburger-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .header-brand {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+  }
+
+  .workspace-name,
+  .app-title {
+    margin: 0;
+    max-width: min(100%, 48vw);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .workspace-name {
+    font-size: 0.68rem;
+    line-height: 1.1;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--text-subtle);
+  }
+
+  .app-title {
+    font-size: 0.95rem;
+    line-height: 1;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    color: var(--text);
+  }
+
+  .header-status {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-collapse,
+  .outline-toggle,
+  .debug-toggle,
+  .appearance-toggle,
+  .theme-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 26px;
+    padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--panel);
+    font-size: 0.72rem;
+    color: var(--text-subtle);
+    cursor: pointer;
+    transition:
+      background 0.15s ease,
+      border-color 0.15s ease,
+      color 0.15s ease,
+      transform 0.15s ease;
+  }
+
+  .debug-toggle {
+    padding-right: 12px;
+  }
+
+  .sidebar-collapse:hover,
+  .outline-toggle:hover,
+  .debug-toggle:hover,
+  .appearance-toggle:hover,
+  .theme-toggle:hover {
+    background: var(--surface-hover);
+    border-color: var(--border-strong);
+    color: var(--text-muted);
+    transform: translateY(-1px);
+  }
+
+  .sidebar-collapse:focus-visible,
+  .outline-toggle:focus-visible,
+  .debug-toggle:focus-visible,
+  .appearance-toggle:focus-visible,
+  .theme-toggle:focus-visible {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px var(--focus-ring);
+  }
+
+  .debug-toggle.active {
+    border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
+    color: var(--text);
+    background: var(--surface-active);
+  }
+
+  .sidebar-collapse,
+  .outline-toggle,
+  .appearance-toggle,
+  .theme-toggle {
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+  }
+
+  .sidebar-collapse-icon,
+  .outline-toggle-icon,
+  .debug-icon,
+  .appearance-icon,
+  .theme-icon {
+    width: 16px;
+    height: 16px;
+  }
+
+  @media (max-width: 900px) {
+    .hamburger {
+      display: flex;
+    }
+
+    .sidebar-collapse {
+      display: none;
+    }
+
+    .app-header {
+      height: auto;
+      padding: calc(env(safe-area-inset-top) + 8px) 12px 10px;
+    }
+
+    .header-status {
+      gap: 8px;
+    }
+
+    .debug-label {
+      display: none;
+    }
+
+    .debug-toggle {
+      padding-right: 10px;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .app-header {
+      padding-inline: 10px;
+      gap: 10px;
+    }
+
+    .header-leading {
+      gap: 10px;
+    }
+
+    .workspace-name,
+    .app-title {
+      max-width: min(100%, 42vw);
+    }
+
+    .hamburger,
+    .outline-toggle,
+    .appearance-toggle,
+    .theme-toggle {
+      width: 30px;
+      height: 30px;
+    }
+
+    .debug-toggle {
+      height: 28px;
+      padding: 0 9px;
+      font-size: 0.68rem;
+    }
+  }
+</style>
