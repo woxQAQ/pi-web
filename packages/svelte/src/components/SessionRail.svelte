@@ -42,6 +42,8 @@
   const UNKNOWN_WORKSPACE_ID = "unknown-workspace";
   const MENU_WIDTH = 136;
   const MENU_HEIGHT = 80;
+  const WORKSPACE_FOLDER_ICON_SIZE = 15;
+  const WORKSPACE_FOLDER_ICON_STYLE = "display: block; flex-shrink: 0;";
 
   interface WorkspaceGroup {
     id: string;
@@ -251,6 +253,11 @@
     closeMenu();
   }
 
+  function handleOlderSessionsOverlayClick(event: MouseEvent) {
+    if (event.target !== event.currentTarget) return;
+    closeOlderSessions();
+  }
+
   function isSessionRunning(sessionPath: string): boolean {
     return runningSessionPaths.includes(sessionPath);
   }
@@ -361,9 +368,21 @@
               onclick={() => toggleWorkspace(workspace.id)}
             >
               {#if workspace.isExpanded}
-                <FolderOpen class="workspace-icon" aria-hidden="true" size={14} />
+                <FolderOpen
+                  class="workspace-icon"
+                  aria-hidden="true"
+                  size={WORKSPACE_FOLDER_ICON_SIZE}
+                  color="var(--text-subtle)"
+                  style={WORKSPACE_FOLDER_ICON_STYLE}
+                />
               {:else}
-                <Folder class="workspace-icon" aria-hidden="true" size={14} />
+                <Folder
+                  class="workspace-icon"
+                  aria-hidden="true"
+                  size={WORKSPACE_FOLDER_ICON_SIZE}
+                  color="var(--text-subtle)"
+                  style={WORKSPACE_FOLDER_ICON_STYLE}
+                />
               {/if}
               <span class="workspace-copy">
                 <span class="workspace-name">{workspace.name}</span>
@@ -450,7 +469,7 @@
 {#if activeOlderWorkspace}
   <div
     class="older-modal-overlay"
-    onclick={closeOlderSessions}
+    onclick={handleOlderSessionsOverlayClick}
     onkeydown={(e) => e.key === "Escape" && closeOlderSessions()}
   >
     <section

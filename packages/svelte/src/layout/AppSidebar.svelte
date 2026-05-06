@@ -4,6 +4,9 @@
   import SessionRail from "../components/SessionRail.svelte";
   import type { SessionEntry } from "../composables/bridgeStore.svelte";
 
+  const WORKSPACE_FOLDER_ICON_SIZE = 15;
+  const WORKSPACE_FOLDER_ICON_STYLE = "display: block;";
+
   let {
     sessions,
     activeSessionPath,
@@ -63,7 +66,12 @@
         title="Open workspace"
         onclick={onRegisterWorkspace}
       >
-        <FolderPlus size={16} aria-hidden="true" />
+        <FolderPlus
+          size={WORKSPACE_FOLDER_ICON_SIZE}
+          color="var(--text-subtle)"
+          style={WORKSPACE_FOLDER_ICON_STYLE}
+          aria-hidden="true"
+        />
       </button>
       <button
         class="rail-button"
