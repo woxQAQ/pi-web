@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RpcImageContent } from "@pi-web/bridge/types";
-  import { Pencil, Sparkle } from "lucide-svelte";
+  import Pencil from "lucide-svelte/icons/pencil";
+  import Sparkle from "lucide-svelte/icons/sparkle";
   import { onMount } from "svelte";
   import type { TranscriptEntry } from "../composables/bridgeStore.svelte";
   import { userMessageCopyText } from "../utils/messageCopy";
@@ -567,7 +568,7 @@
 
   // Effects
   $effect(() => {
-    sessionPath;
+    void sessionPath;
     if (sessionPath && previousSessionPath !== null && previousSessionPath !== sessionPath) {
       rememberSessionScroll(previousSessionPath);
     }
@@ -586,7 +587,14 @@
   $effect(() => { previousSessionPath = sessionPath; });
 
   $effect(() => {
-    sessionPath; messages; hasOlder; initialLoading; pageLoading; showBusyIndicator;
+    void [
+      sessionPath,
+      messages,
+      hasOlder,
+      initialLoading,
+      pageLoading,
+      showBusyIndicator,
+    ];
     void syncViewportAfterRender();
   });
 

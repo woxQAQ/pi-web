@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { PanelRightClose, RefreshCw } from "lucide-svelte";
+  import PanelRightClose from "lucide-svelte/icons/panel-right-close";
+  import RefreshCw from "lucide-svelte/icons/refresh-cw";
   import type { TreeEntry } from "../composables/bridgeStore.svelte";
   import {
     filterTreeEntries,
@@ -37,7 +38,7 @@
   ];
 
   $effect(() => {
-    sessionPath;
+    void sessionPath;
     query = "";
     filterMode = "default";
   });

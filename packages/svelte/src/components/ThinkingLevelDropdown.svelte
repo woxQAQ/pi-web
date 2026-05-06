@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { RpcThinkingLevel } from "@pi-web/bridge/types";
-  import { Check, ChevronDown } from "lucide-svelte";
+  import Check from "lucide-svelte/icons/check";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
   import {
     DEFAULT_THINKING_LEVEL,
     THINKING_LEVEL_OPTIONS,
@@ -169,7 +170,7 @@
   });
 
   $effect(() => {
-    value;
+    void value;
     if (!isOpen) return;
     syncHighlightedIndex();
     scrollToHighlighted();

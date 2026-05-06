@@ -110,9 +110,7 @@
   });
 
   $effect(() => {
-    file?.content;
-    file?.path;
-    activeLineNumber;
+    void [file?.content, file?.path, activeLineNumber];
     void renderCode();
   });
 </script>

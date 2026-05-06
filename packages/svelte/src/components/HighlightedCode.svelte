@@ -27,8 +27,7 @@
   }
 
   $effect(() => {
-    code;
-    path;
+    void [code, path];
     void renderCode();
   });
 

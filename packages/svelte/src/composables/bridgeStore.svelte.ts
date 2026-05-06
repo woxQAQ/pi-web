@@ -334,16 +334,16 @@ let hasSessionOutline = $derived(
 
 let visiblePendingTranscriptConfigEvent = $derived.by(
   (): PendingTranscriptSessionEvent | null => {
-  const pending = _pendingTranscriptConfigEvent;
-  if (!pending) return null;
-  return pending.sessionPath === _transcriptSessionPath
-    ? {
-        key: pending.key,
-        model: pending.model,
-        thinkingLevel: pending.thinkingLevel,
-        insertAfterMessageKey: pending.insertAfterMessageKey,
-      }
-    : null;
+    const pending = _pendingTranscriptConfigEvent;
+    if (!pending) return null;
+    return pending.sessionPath === _transcriptSessionPath
+      ? {
+          key: pending.key,
+          model: pending.model,
+          thinkingLevel: pending.thinkingLevel,
+          insertAfterMessageKey: pending.insertAfterMessageKey,
+        }
+      : null;
   },
 );
 
@@ -510,10 +510,6 @@ function handleSessionRoutePopState() {
   void applySessionRouteFromLocation();
 }
 
-function syncDisplayedSessionRoute(mode: "push" | "replace" = "replace") {
-  writeSessionRoutePath(getDisplayedSessionPath(), mode);
-}
-
 function startSessionRouteSync() {
   // Route sync is done manually at state change points (switchSession, newSession, etc.),
   // not via $effect to avoid infinite loops with history.replaceState → popstate.
@@ -541,7 +537,10 @@ function applyQueuedMessages(
   _queuedUserMessages = [...followUp];
   if (_sessionState) {
     const sc = options?.steeringCount ?? 0;
-    _sessionState = { ..._sessionState, pendingMessageCount: sc + followUp.length };
+    _sessionState = {
+      ..._sessionState,
+      pendingMessageCount: sc + followUp.length,
+    };
   }
 }
 
@@ -569,9 +568,7 @@ function setSessionRunning(sessionPath: string | null, isRunning: boolean) {
 }
 
 function syncRunningSessionsFromEntries(entries: readonly SessionEntry[]) {
-  _runningSessionPaths = entries
-    .filter(s => s.isRunning)
-    .map(s => s.path);
+  _runningSessionPaths = entries.filter(s => s.isRunning).map(s => s.path);
 }
 
 function mergeSessionEntries(
@@ -643,7 +640,8 @@ function reconcilePendingTranscriptConfigEvent() {
     next.thinkingLevel = undefined;
   }
 
-  _pendingTranscriptConfigEvent = next.model || next.thinkingLevel ? next : null;
+  _pendingTranscriptConfigEvent =
+    next.model || next.thinkingLevel ? next : null;
 }
 
 function updatePendingTranscriptConfigEvent(change: {
@@ -678,7 +676,8 @@ function updatePendingTranscriptConfigEvent(change: {
     next.thinkingLevel = change.thinkingLevel ?? undefined;
   }
 
-  _pendingTranscriptConfigEvent = next.model || next.thinkingLevel ? next : null;
+  _pendingTranscriptConfigEvent =
+    next.model || next.thinkingLevel ? next : null;
 }
 
 function sendEnvelope(msg: ClientMessage) {
@@ -787,7 +786,10 @@ function applyTranscriptPage(
     const merged = normalized.filter(
       entry => !existingKeys.has(entry.transcriptKey),
     );
-    _rawTranscript = [...merged, ...currentRawTranscriptEntries()] as TranscriptEntry[];
+    _rawTranscript = [
+      ...merged,
+      ...currentRawTranscriptEntries(),
+    ] as TranscriptEntry[];
   } else {
     _rawTranscript = normalized;
   }
@@ -809,18 +811,17 @@ function applyTranscriptPage(
 }
 
 function shouldReplaceSessionTranscript(sessionPath: string | null): boolean {
-  return (
-    _rawTranscript.length === 0 ||
-    _transcriptSessionPath !== sessionPath
-  );
+  return _rawTranscript.length === 0 || _transcriptSessionPath !== sessionPath;
 }
 
 function applySessionTranscriptPage(page: RpcTranscriptPage) {
   if (
     page.messages.length === 0 &&
     !shouldReplaceSessionTranscript(page.sessionPath ?? null) &&
-    currentRawTranscriptEntries().some(e =>
-      typeof e.transcriptKey === "string" && e.transcriptKey.startsWith("live:"),
+    currentRawTranscriptEntries().some(
+      e =>
+        typeof e.transcriptKey === "string" &&
+        e.transcriptKey.startsWith("live:"),
     )
   ) {
     _transcriptHasOlder = page.hasOlder;
@@ -839,7 +840,11 @@ function applyTreeEntriesUpdate(
   sessionPath: string | null,
   options?: { force?: boolean },
 ) {
-  if (!options?.force && _activeTreeSessionPath && _activeTreeSessionPath !== sessionPath) {
+  if (
+    !options?.force &&
+    _activeTreeSessionPath &&
+    _activeTreeSessionPath !== sessionPath
+  ) {
     return;
   }
   _treeEntries = [...entries];
@@ -867,7 +872,9 @@ function applySessionSnapshotResponse(
   applySessionTranscriptPage(data.transcript);
   if (data.sessionPath) _liveSessionPath = data.sessionPath;
   if (Array.isArray(data.treeEntries)) {
-    applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null, { force: true });
+    applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null, {
+      force: true,
+    });
   } else if (data.sessionPath) {
     _activeTreeSessionPath = data.sessionPath;
   }
@@ -890,7 +897,12 @@ function applySessionSnapshotResponse(
 }
 
 async function loadOlderTranscriptPage() {
-  if (_transcriptPageLoading || !_transcriptHasOlder || !_transcriptOldestCursor) return;
+  if (
+    _transcriptPageLoading ||
+    !_transcriptHasOlder ||
+    !_transcriptOldestCursor
+  )
+    return;
   _transcriptPageLoading = true;
   try {
     const resp = await sendCommand({
@@ -909,7 +921,10 @@ function upsertTranscriptMessage(
   entry: TranscriptEntry | RpcTranscriptMessage,
   sessionPath: string | null = _transcriptSessionPath,
 ) {
-  const normalized = normalizeTranscriptEntry(entry, `live:${_rawTranscript.length}`);
+  const normalized = normalizeTranscriptEntry(
+    entry,
+    `live:${_rawTranscript.length}`,
+  );
   if (shouldReplaceSessionTranscript(sessionPath)) {
     _transcriptSessionPath = sessionPath;
   }
@@ -972,14 +987,22 @@ function sendPrompt(
   });
 }
 
-async function dequeueQueuedMessage(idx: number): Promise<RpcQueuedMessage | null> {
+async function dequeueQueuedMessage(
+  idx: number,
+): Promise<RpcQueuedMessage | null> {
   if (!Number.isInteger(idx) || idx < 0) return null;
 
   try {
-    const resp = await sendCommand({ type: "dequeue_follow_up_message", index: idx });
+    const resp = await sendCommand({
+      type: "dequeue_follow_up_message",
+      index: idx,
+    });
     if (!resp.success) {
       pushNotification(
-        summarizeErrorMessage(resp.error ?? "Failed to update queued messages", "Failed to update queued messages"),
+        summarizeErrorMessage(
+          resp.error ?? "Failed to update queued messages",
+          "Failed to update queued messages",
+        ),
         "error",
       );
       return null;
@@ -991,13 +1014,24 @@ async function dequeueQueuedMessage(idx: number): Promise<RpcQueuedMessage | nul
     if (removed) {
       _queuedUserMessages = _queuedUserMessages.filter((_, qi) => qi !== idx);
       if (_sessionState) {
-        _sessionState = { ..._sessionState, pendingMessageCount: Math.max(0, _sessionState.pendingMessageCount - 1) };
+        _sessionState = {
+          ..._sessionState,
+          pendingMessageCount: Math.max(
+            0,
+            _sessionState.pendingMessageCount - 1,
+          ),
+        };
       }
     }
     return removed;
   } catch (error) {
     pushNotification(
-      summarizeErrorMessage(error instanceof Error ? error.message : "Failed to update queued messages", "Failed to update queued messages"),
+      summarizeErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Failed to update queued messages",
+        "Failed to update queued messages",
+      ),
       "error",
     );
     return null;
@@ -1030,7 +1064,11 @@ export async function fetchWorkspaceEntries(
 
   if (!shouldRefresh) return _workspaceEntries;
 
-  if (workspaceEntriesRequest && workspaceEntriesRequestContextKey === ck && !force) {
+  if (
+    workspaceEntriesRequest &&
+    workspaceEntriesRequestContextKey === ck &&
+    !force
+  ) {
     return workspaceEntriesRequest;
   }
 
@@ -1064,16 +1102,20 @@ export async function fetchWorkspaceEntries(
   return workspaceEntriesRequest;
 }
 
-export async function readWorkspaceFile(path: string): Promise<RpcWorkspaceFile> {
+export async function readWorkspaceFile(
+  path: string,
+): Promise<RpcWorkspaceFile> {
   const wp = getDisplayedWorkspacePath();
   const resp = await sendCommand({
     type: "read_workspace_file",
     path,
     ...(wp ? { workspacePath: wp } : {}),
   });
-  if (!resp.success) throw new Error(resp.error ?? "Failed to read workspace file");
+  if (!resp.success)
+    throw new Error(resp.error ?? "Failed to read workspace file");
   const data = resp.data;
-  if (!data || typeof data !== "object") throw new Error("Failed to parse workspace file contents");
+  if (!data || typeof data !== "object")
+    throw new Error("Failed to parse workspace file contents");
   return data as RpcWorkspaceFile;
 }
 
@@ -1089,7 +1131,10 @@ export async function loadGitRepoState(
     .then(resp => {
       if (!resp.success) {
         pushNotification(
-          summarizeErrorMessage(resp.error ?? "Failed to load git branches", "Failed to load git branches"),
+          summarizeErrorMessage(
+            resp.error ?? "Failed to load git branches",
+            "Failed to load git branches",
+          ),
           "error",
         );
         return _gitRepoState;
@@ -1102,7 +1147,9 @@ export async function loadGitRepoState(
     .catch(error => {
       pushNotification(
         summarizeErrorMessage(
-          error instanceof Error ? error.message : "Failed to load git branches",
+          error instanceof Error
+            ? error.message
+            : "Failed to load git branches",
           "Failed to load git branches",
         ),
         "error",
@@ -1136,13 +1183,19 @@ export async function switchGitBranch(
     const resp = await sendCommand({ type: "switch_git_branch", branchName });
     if (!resp.success) {
       pushNotification(
-        summarizeErrorMessage(resp.error ?? "Failed to switch git branch", "Failed to switch git branch"),
+        summarizeErrorMessage(
+          resp.error ?? "Failed to switch git branch",
+          "Failed to switch git branch",
+        ),
         "error",
       );
       return null;
     }
     const state = normalizeGitRepoState(resp.data);
-    if (!state) { pushNotification("Failed to parse git branch data", "error"); return null; }
+    if (!state) {
+      pushNotification("Failed to parse git branch data", "error");
+      return null;
+    }
     applyGitRepoMutation(state);
     return state;
   } catch (error) {
@@ -1169,13 +1222,19 @@ export async function createGitBranch(
     const resp = await sendCommand({ type: "create_git_branch", branchName });
     if (!resp.success) {
       pushNotification(
-        summarizeErrorMessage(resp.error ?? "Failed to create git branch", "Failed to create git branch"),
+        summarizeErrorMessage(
+          resp.error ?? "Failed to create git branch",
+          "Failed to create git branch",
+        ),
         "error",
       );
       return null;
     }
     const state = normalizeGitRepoState(resp.data);
-    if (!state) { pushNotification("Failed to parse git branch data", "error"); return null; }
+    if (!state) {
+      pushNotification("Failed to parse git branch data", "error");
+      return null;
+    }
     applyGitRepoMutation(state);
     return state;
   } catch (error) {
@@ -1243,21 +1302,31 @@ export async function newSession(workspacePath: string): Promise<RpcResponse> {
   return resp;
 }
 
-export function registerWorkspace(workspacePath?: string): Promise<RpcResponse> {
-  return sendCommand({ type: "register_workspace", workspacePath }, { timeoutMs: 300_000 });
+export function registerWorkspace(
+  workspacePath?: string,
+): Promise<RpcResponse> {
+  return sendCommand(
+    { type: "register_workspace", workspacePath },
+    { timeoutMs: 300_000 },
+  );
 }
 
 export async function compactSession(customInstructions?: string) {
   _compactingRequestCount += 1;
 
   try {
-    const resp = await sendCommand({ type: "compact", customInstructions }, { timeoutMs: 120_000 });
+    const resp = await sendCommand(
+      { type: "compact", customInstructions },
+      { timeoutMs: 120_000 },
+    );
     if (!resp.success) {
       appendCompactErrorMessage(resp.error ?? "Unknown compaction error");
     }
     return resp;
   } catch (error) {
-    appendCompactErrorMessage(error instanceof Error ? error.message : String(error));
+    appendCompactErrorMessage(
+      error instanceof Error ? error.message : String(error),
+    );
     throw error;
   } finally {
     _compactingRequestCount = Math.max(0, _compactingRequestCount - 1);
@@ -1268,7 +1337,9 @@ export async function setThinkingLevel(level: RpcThinkingLevel) {
   const resp = await sendCommand({ type: "set_thinking_level", level });
   if (resp.success) {
     _currentThinkingLevel = normalizeThinkingLevel(level);
-    updatePendingTranscriptConfigEvent({ thinkingLevel: _currentThinkingLevel });
+    updatePendingTranscriptConfigEvent({
+      thinkingLevel: _currentThinkingLevel,
+    });
   }
   return resp;
 }
@@ -1335,7 +1406,10 @@ function handleResponse(payload: RpcResponse) {
           | (RpcTranscriptPage & { direction: "latest" | "older" })
           | undefined;
         if (data) {
-          applyTranscriptPage(data, data.direction === "older" ? "prepend" : "replace");
+          applyTranscriptPage(
+            data,
+            data.direction === "older" ? "prepend" : "replace",
+          );
         }
         break;
       }
@@ -1346,7 +1420,9 @@ function handleResponse(payload: RpcResponse) {
           const prevWp = getWorkspaceEntriesContextKey();
           _liveSessionPath = data.sessionFile ?? null;
           const isBrowsingDifferent = Boolean(
-            _activeTreeSessionPath && data.sessionFile && _activeTreeSessionPath !== data.sessionFile,
+            _activeTreeSessionPath &&
+            data.sessionFile &&
+            _activeTreeSessionPath !== data.sessionFile,
           );
           _sessionState = isBrowsingDifferent
             ? {
@@ -1354,7 +1430,8 @@ function handleResponse(payload: RpcResponse) {
                 sessionId: _sessionState?.sessionId ?? data.sessionId,
                 sessionName: _sessionState?.sessionName ?? data.sessionName,
                 sessionFile: _activeTreeSessionPath ?? data.sessionFile,
-                workspacePath: _sessionState?.workspacePath ?? data.workspacePath,
+                workspacePath:
+                  _sessionState?.workspacePath ?? data.workspacePath,
               }
             : data;
           updateCurrentModel(data.model);
@@ -1366,18 +1443,21 @@ function handleResponse(payload: RpcResponse) {
             _activeTreeSessionPath = data.sessionFile;
           }
           if (prevSp !== getDisplayedSessionPath()) resetGitRepoState();
-          if (prevWp !== getWorkspaceEntriesContextKey()) invalidateWorkspaceEntries();
+          if (prevWp !== getWorkspaceEntriesContextKey())
+            invalidateWorkspaceEntries();
         }
         break;
       }
       case "list_sessions": {
-        const data = payload.data as {
-          sessions?: SessionEntry[];
-          workspacePath?: string;
-          nextCursor?: string;
-          workspaceCursors?: Record<string, string | null>;
-          merge?: "replace" | "append";
-        } | undefined;
+        const data = payload.data as
+          | {
+              sessions?: SessionEntry[];
+              workspacePath?: string;
+              nextCursor?: string;
+              workspaceCursors?: Record<string, string | null>;
+              merge?: "replace" | "append";
+            }
+          | undefined;
         if (Array.isArray(data?.sessions)) {
           _sessions =
             data.merge === "append"
@@ -1386,11 +1466,21 @@ function handleResponse(payload: RpcResponse) {
           syncRunningSessionsFromEntries(_sessions);
 
           if (data.workspaceCursors) {
-            _workspaceSessionCursors = { ..._workspaceSessionCursors, ...data.workspaceCursors };
+            _workspaceSessionCursors = {
+              ..._workspaceSessionCursors,
+              ...data.workspaceCursors,
+            };
           } else {
-            const wp = data.workspacePath ?? data.sessions.map(s => s.workspacePath ?? s.workspaceId).find(Boolean);
+            const wp =
+              data.workspacePath ??
+              data.sessions
+                .map(s => s.workspacePath ?? s.workspaceId)
+                .find(Boolean);
             if (wp) {
-              _workspaceSessionCursors = { ..._workspaceSessionCursors, [wp]: data.nextCursor ?? null };
+              _workspaceSessionCursors = {
+                ..._workspaceSessionCursors,
+                [wp]: data.nextCursor ?? null,
+              };
             }
           }
         }
@@ -1404,12 +1494,17 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "list_tree_entries": {
-        const data = payload.data as { entries: TreeEntry[]; sessionPath?: string } | undefined;
-        if (data) applyTreeEntriesUpdate(data.entries, data.sessionPath ?? null);
+        const data = payload.data as
+          | { entries: TreeEntry[]; sessionPath?: string }
+          | undefined;
+        if (data)
+          applyTreeEntriesUpdate(data.entries, data.sessionPath ?? null);
         break;
       }
       case "new_session": {
-        const data = payload.data as Parameters<typeof applySessionSnapshotResponse>[0] | undefined;
+        const data = payload.data as
+          | Parameters<typeof applySessionSnapshotResponse>[0]
+          | undefined;
         if (!applySessionSnapshotResponse(data)) {
           replaceTranscript([], null);
           _transcriptHasOlder = false;
@@ -1429,13 +1524,17 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "get_commands": {
-        const data = payload.data as { commands: RpcSlashCommand[] } | undefined;
+        const data = payload.data as
+          | { commands: RpcSlashCommand[] }
+          | undefined;
         if (data) _commands = data.commands;
         break;
       }
       case "list_workspace_entries": {
         if (payload.id && workspaceEntriesRequestId !== payload.id) break;
-        const data = payload.data as { entries?: RpcWorkspaceEntry[] } | undefined;
+        const data = payload.data as
+          | { entries?: RpcWorkspaceEntry[] }
+          | undefined;
         _workspaceEntries = Array.isArray(data?.entries) ? data.entries : [];
         _workspaceEntriesLoaded = true;
         workspaceEntriesLoadedContextKey =
@@ -1447,7 +1546,8 @@ function handleResponse(payload: RpcResponse) {
       case "list_git_branches": {
         const state = normalizeGitRepoState(payload.data);
         _gitRepoState = state;
-        if (!state) pushNotification("Failed to parse git branch data", "error");
+        if (!state)
+          pushNotification("Failed to parse git branch data", "error");
         break;
       }
       case "switch_git_branch": {
@@ -1496,7 +1596,8 @@ function handleEvent(payload: RpcBridgeEvent) {
     }
     case "transcript_upsert": {
       const data = payload as RpcTranscriptUpsertEvent;
-      if (data.message) upsertTranscriptMessage(data.message, data.sessionPath ?? null);
+      if (data.message)
+        upsertTranscriptMessage(data.message, data.sessionPath ?? null);
       if (Array.isArray(data.treeEntries)) {
         applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null);
       }
@@ -1504,7 +1605,11 @@ function handleEvent(payload: RpcBridgeEvent) {
     }
     case "session_stats": {
       const data = payload as RpcSessionStatsEvent;
-      if (!_activeTreeSessionPath || !data.sessionPath || _activeTreeSessionPath === data.sessionPath) {
+      if (
+        !_activeTreeSessionPath ||
+        !data.sessionPath ||
+        _activeTreeSessionPath === data.sessionPath
+      ) {
         const stats = normalizeSessionStats(data.stats);
         if (stats) _sessionStats = stats;
       }
@@ -1583,7 +1688,11 @@ function handleExtensionUIRequest(payload: RpcExtensionUIRequest) {
     case "notify":
       _notifications = [
         ..._notifications,
-        { message: payload.message, notifyType: payload.notifyType, id: payload.id },
+        {
+          message: payload.message,
+          notifyType: payload.notifyType,
+          id: payload.id,
+        },
       ];
       break;
     case "setTitle":
@@ -1593,13 +1702,19 @@ function handleExtensionUIRequest(payload: RpcExtensionUIRequest) {
       _prefillText = payload.text;
       break;
     case "setStatus":
-      _statusEntries = { ..._statusEntries, [payload.statusKey]: payload.statusText ?? "" };
+      _statusEntries = {
+        ..._statusEntries,
+        [payload.statusKey]: payload.statusText ?? "",
+      };
       break;
     case "setWidget":
       if (payload.widgetLines) {
         _widgetEntries = {
           ..._widgetEntries,
-          [payload.widgetKey]: { lines: payload.widgetLines, placement: payload.widgetPlacement },
+          [payload.widgetKey]: {
+            lines: payload.widgetLines,
+            placement: payload.widgetPlacement,
+          },
         };
       } else {
         const { [payload.widgetKey]: _, ...rest } = _widgetEntries;
@@ -1619,17 +1734,28 @@ async function fetchInitialState() {
 
   try {
     const bootstrap = [
-      sendCommand({ type: "list_sessions", scope: "workspaces", limit: 10, includeActive: true }),
+      sendCommand({
+        type: "list_sessions",
+        scope: "workspaces",
+        limit: 10,
+        includeActive: true,
+      }),
       sendCommand({ type: "get_available_models" }),
       sendCommand({ type: "get_commands" }),
     ];
 
     if (routeSessionPath) {
-      const resp = await sendCommand({ type: "switch_session", sessionPath: routeSessionPath });
+      const resp = await sendCommand({
+        type: "switch_session",
+        sessionPath: routeSessionPath,
+      });
       await Promise.all(bootstrap);
       if (!resp.success) {
         pushNotification(
-          summarizeErrorMessage(resp.error ?? "Failed to restore session from URL", "Failed to restore session from URL"),
+          summarizeErrorMessage(
+            resp.error ?? "Failed to restore session from URL",
+            "Failed to restore session from URL",
+          ),
           "error",
         );
         writeSessionRoutePath(null, "replace");
@@ -1715,44 +1841,120 @@ if (!ws && !disposed) {
 
 export function initBridge() {
   return {
-    get connectionStatus() { return connectionStatus; },
-    get transcript() { return transcript; },
-    get transcriptHasOlder() { return transcriptHasOlder; },
-    get transcriptInitialLoading() { return transcriptInitialLoading; },
-    get transcriptPageLoading() { return transcriptPageLoading; },
-    get pendingTranscriptConfigEvent() { return visiblePendingTranscriptConfigEvent; },
-    get sessionState() { return sessionState; },
-    get sessions() { return sessions; },
-    get treeEntries() { return treeEntries; },
-    get activeTreeSessionPath() { return activeTreeSessionPath; },
-    get liveSessionPath() { return liveSessionPath; },
-    get runningSessionPaths() { return runningSessionPaths; },
-    get workspaceSessionCursors() { return workspaceSessionCursors; },
-    get commands() { return commands; },
-    get workspaceEntries() { return workspaceEntries; },
-    get workspaceEntriesLoading() { return workspaceEntriesLoading; },
-    get availableModels() { return availableModels; },
-    get currentModel() { return currentModel; },
-    get currentThinkingLevel() { return currentThinkingLevel; },
-    get isStreaming() { return isStreaming; },
-    get isCompacting() { return isCompacting; },
-    get sessionStats() { return sessionStats; },
-    get gitRepoState() { return gitRepoState; },
-    get gitRepoLoading() { return gitRepoLoading; },
-    get gitBranchSwitching() { return gitBranchSwitching; },
-    get pendingMessageCount() { return pendingMessageCount; },
-    get queuedUserMessages() { return queuedUserMessages; },
-    get isReconnecting() { return isReconnecting; },
-    get reconnectCount() { return reconnectCount; },
-    get lastDisconnectReason() { return lastDisconnectReason; },
-    get connectionError() { return connectionError; },
-    get pendingExtensionRequest() { return pendingExtensionRequest; },
-    get notifications() { return notifications; },
-    get statusEntries() { return statusEntries; },
-    get widgetEntries() { return widgetEntries; },
-    get prefillText() { return prefillText; },
-    get activeSessionPath() { return activeSessionPath; },
-    get hasSessionOutline() { return hasSessionOutline; },
+    get connectionStatus() {
+      return connectionStatus;
+    },
+    get transcript() {
+      return transcript;
+    },
+    get transcriptHasOlder() {
+      return transcriptHasOlder;
+    },
+    get transcriptInitialLoading() {
+      return transcriptInitialLoading;
+    },
+    get transcriptPageLoading() {
+      return transcriptPageLoading;
+    },
+    get pendingTranscriptConfigEvent() {
+      return visiblePendingTranscriptConfigEvent;
+    },
+    get sessionState() {
+      return sessionState;
+    },
+    get sessions() {
+      return sessions;
+    },
+    get treeEntries() {
+      return treeEntries;
+    },
+    get activeTreeSessionPath() {
+      return activeTreeSessionPath;
+    },
+    get liveSessionPath() {
+      return liveSessionPath;
+    },
+    get runningSessionPaths() {
+      return runningSessionPaths;
+    },
+    get workspaceSessionCursors() {
+      return workspaceSessionCursors;
+    },
+    get commands() {
+      return commands;
+    },
+    get workspaceEntries() {
+      return workspaceEntries;
+    },
+    get workspaceEntriesLoading() {
+      return workspaceEntriesLoading;
+    },
+    get availableModels() {
+      return availableModels;
+    },
+    get currentModel() {
+      return currentModel;
+    },
+    get currentThinkingLevel() {
+      return currentThinkingLevel;
+    },
+    get isStreaming() {
+      return isStreaming;
+    },
+    get isCompacting() {
+      return isCompacting;
+    },
+    get sessionStats() {
+      return sessionStats;
+    },
+    get gitRepoState() {
+      return gitRepoState;
+    },
+    get gitRepoLoading() {
+      return gitRepoLoading;
+    },
+    get gitBranchSwitching() {
+      return gitBranchSwitching;
+    },
+    get pendingMessageCount() {
+      return pendingMessageCount;
+    },
+    get queuedUserMessages() {
+      return queuedUserMessages;
+    },
+    get isReconnecting() {
+      return isReconnecting;
+    },
+    get reconnectCount() {
+      return reconnectCount;
+    },
+    get lastDisconnectReason() {
+      return lastDisconnectReason;
+    },
+    get connectionError() {
+      return connectionError;
+    },
+    get pendingExtensionRequest() {
+      return pendingExtensionRequest;
+    },
+    get notifications() {
+      return notifications;
+    },
+    get statusEntries() {
+      return statusEntries;
+    },
+    get widgetEntries() {
+      return widgetEntries;
+    },
+    get prefillText() {
+      return prefillText;
+    },
+    get activeSessionPath() {
+      return activeSessionPath;
+    },
+    get hasSessionOutline() {
+      return hasSessionOutline;
+    },
     sendCommand,
     sendPrompt,
     loadOlderTranscriptPage,
@@ -1776,5 +1978,6 @@ export function initBridge() {
     editQueuedMessage,
     respondToUIRequest,
     dismissNotification,
+    disconnect,
   };
 }

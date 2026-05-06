@@ -21,7 +21,7 @@
   let hasItems = $derived(items.length > 0);
 
   $effect(() => {
-    items;
+    void items;
     highlightedIndex = 0;
   });
 

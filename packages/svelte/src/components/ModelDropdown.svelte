@@ -1,5 +1,7 @@
 <script lang="ts">
-  import { Bot, Check, Search } from "lucide-svelte";
+  import Bot from "lucide-svelte/icons/bot";
+  import Check from "lucide-svelte/icons/check";
+  import Search from "lucide-svelte/icons/search";
   import { onMount } from "svelte";
   import { filterModels, getModelKey, type RpcModelInfo } from "../utils/models";
 
@@ -140,13 +142,13 @@
   });
 
   $effect(() => {
-    searchText;
+    void searchText;
     highlightedIndex = 0;
     scrollToHighlighted();
   });
 
   $effect(() => {
-    selectedModel;
+    void selectedModel;
     if (!isOpen) return;
     syncHighlightedIndex();
     scrollToHighlighted();

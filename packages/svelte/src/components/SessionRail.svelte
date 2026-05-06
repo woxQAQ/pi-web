@@ -1,13 +1,11 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import {
-    Folder,
-    FolderOpen,
-    Pencil,
-    Plus,
-    Search,
-    Trash2,
-  } from "lucide-svelte";
+  import Folder from "lucide-svelte/icons/folder";
+  import FolderOpen from "lucide-svelte/icons/folder-open";
+  import Pencil from "lucide-svelte/icons/pencil";
+  import Plus from "lucide-svelte/icons/plus";
+  import Search from "lucide-svelte/icons/search";
+  import Trash2 from "lucide-svelte/icons/trash-2";
   import type { SessionEntry } from "../composables/bridgeStore.svelte";
 
   let {

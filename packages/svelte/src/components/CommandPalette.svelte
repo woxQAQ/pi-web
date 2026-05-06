@@ -27,7 +27,7 @@
   });
 
   $effect(() => {
-    filter;
+    void filter;
     highlightedIndex = 0;
   });
 

@@ -1,15 +1,13 @@
 <script lang="ts">
-  import {
-    Bug,
-    Menu,
-    Moon,
-    Palette,
-    PanelLeftClose,
-    PanelLeftOpen,
-    PanelRightClose,
-    PanelRightOpen,
-    Sun,
-  } from "lucide-svelte";
+  import Bug from "lucide-svelte/icons/bug";
+  import Menu from "lucide-svelte/icons/menu";
+  import Moon from "lucide-svelte/icons/moon";
+  import Palette from "lucide-svelte/icons/palette";
+  import PanelLeftClose from "lucide-svelte/icons/panel-left-close";
+  import PanelLeftOpen from "lucide-svelte/icons/panel-left-open";
+  import PanelRightClose from "lucide-svelte/icons/panel-right-close";
+  import PanelRightOpen from "lucide-svelte/icons/panel-right-open";
+  import Sun from "lucide-svelte/icons/sun";
   import type { ThemeMode } from "../themes";
 
   let {

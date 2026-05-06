@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { X } from "lucide-svelte";
+  import X from "lucide-svelte/icons/x";
 
   let { visible = false }: { visible?: boolean } = $props();
   let dismissed = $state(false);

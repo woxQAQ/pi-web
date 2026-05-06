@@ -409,8 +409,7 @@
   });
 
   $effect(() => {
-    renderedMarkdown;
-    deferMermaidErrors;
+    void [renderedMarkdown, deferMermaidErrors];
     void renderMermaidBlocks();
     void renderCodeBlocks();
   });
@@ -433,48 +432,49 @@
     word-break: break-word;
   }
 
-  .markdown-body > *:first-child {
+  /* Markdown children are injected via {@html}, so descendant selectors must stay global. */
+  :global(.markdown-body > *:first-child) {
     margin-top: 0;
   }
 
-  .markdown-body > *:last-child {
+  :global(.markdown-body > *:last-child) {
     margin-bottom: 0;
   }
 
-  .markdown-body p {
+  :global(.markdown-body p) {
     margin: 0.4em 0;
   }
 
-  .markdown-body h1,
-  .markdown-body h2,
-  .markdown-body h3,
-  .markdown-body h4,
-  .markdown-body h5,
-  .markdown-body h6 {
+  :global(.markdown-body h1),
+  :global(.markdown-body h2),
+  :global(.markdown-body h3),
+  :global(.markdown-body h4),
+  :global(.markdown-body h5),
+  :global(.markdown-body h6) {
     margin: 1.2em 0 0.4em;
     font-weight: 600;
     line-height: 1.3;
     color: var(--text);
   }
 
-  .markdown-body h1 { font-size: 1.4em; }
-  .markdown-body h2 { font-size: 1.25em; }
-  .markdown-body h3 { font-size: 1.1em; }
-  .markdown-body h4 { font-size: 1em; }
+  :global(.markdown-body h1) { font-size: 1.4em; }
+  :global(.markdown-body h2) { font-size: 1.25em; }
+  :global(.markdown-body h3) { font-size: 1.1em; }
+  :global(.markdown-body h4) { font-size: 1em; }
 
-  .markdown-body ul,
-  .markdown-body ol {
+  :global(.markdown-body ul),
+  :global(.markdown-body ol) {
     margin: 0.5em 0;
     padding-left: 1.6em;
   }
 
-  .markdown-body ul { list-style: disc; }
-  .markdown-body ol { list-style: decimal; }
+  :global(.markdown-body ul) { list-style: disc; }
+  :global(.markdown-body ol) { list-style: decimal; }
 
-  .markdown-body li { margin: 0.2em 0; }
-  .markdown-body li > p { margin: 0.3em 0; }
+  :global(.markdown-body li) { margin: 0.2em 0; }
+  :global(.markdown-body li > p) { margin: 0.3em 0; }
 
-  .markdown-body blockquote {
+  :global(.markdown-body blockquote) {
     margin: 0.6em 0;
     padding: 0.4em 1em;
     border-left: 3px solid var(--border-strong);
@@ -483,9 +483,9 @@
     border-radius: 0 6px 6px 0;
   }
 
-  .markdown-body blockquote p { margin: 0.2em 0; }
+  :global(.markdown-body blockquote p) { margin: 0.2em 0; }
 
-  .markdown-body code {
+  :global(.markdown-body code) {
     font-family: var(--pi-font-mono);
     font-size: 0.85em;
     padding: 0.15em 0.4em;
@@ -494,12 +494,12 @@
     color: var(--text);
   }
 
-  .markdown-body a.markdown-file-ref {
+  :global(.markdown-body a.markdown-file-ref) {
     color: inherit;
     text-decoration: none;
   }
 
-  .markdown-body a.markdown-file-ref code {
+  :global(.markdown-body a.markdown-file-ref code) {
     color: color-mix(in srgb, var(--accent) 82%, var(--text));
     border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent);
     background: color-mix(in srgb, var(--surface-active) 64%, var(--panel-2));
@@ -510,14 +510,18 @@
       background 0.12s ease;
   }
 
-  .markdown-body a.markdown-file-ref:hover code,
-  .markdown-body a.markdown-file-ref:focus-visible code {
+  :global(.markdown-body a.markdown-file-ref:hover code),
+  :global(.markdown-body a.markdown-file-ref:focus-visible code) {
     color: var(--accent-hover);
     border-color: color-mix(in srgb, var(--accent) 52%, var(--border-strong));
     background: color-mix(in srgb, var(--surface-active) 88%, var(--panel-2));
   }
 
-  .markdown-body pre {
+  :global(.markdown-body a.markdown-file-ref:focus-visible) {
+    outline: none;
+  }
+
+  :global(.markdown-body pre) {
     margin: 0.6em 0;
     padding: 14px 16px;
     border-radius: 8px;
@@ -527,7 +531,7 @@
     line-height: 1.5;
   }
 
-  .markdown-body pre code {
+  :global(.markdown-body pre code) {
     display: block;
     padding: 0;
     border-radius: 0;
@@ -538,7 +542,7 @@
     overflow-wrap: normal;
   }
 
-  .markdown-body .mermaid-block {
+  :global(.markdown-body .mermaid-block) {
     margin: 0.7em 0;
     padding: 14px 16px;
     border: 1px solid var(--border);
@@ -547,9 +551,9 @@
     overflow: hidden;
   }
 
-  .markdown-body .mermaid-block-rendered { text-align: center; }
+  :global(.markdown-body .mermaid-block-rendered) { text-align: center; }
 
-  .markdown-body .mermaid-block-toolbar {
+  :global(.markdown-body .mermaid-block-toolbar) {
     display: flex;
     align-items: center;
     justify-content: flex-end;
@@ -557,7 +561,7 @@
     margin: 0 0 10px;
   }
 
-  .markdown-body .mermaid-zoom-button {
+  :global(.markdown-body .mermaid-zoom-button) {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -574,17 +578,17 @@
     cursor: pointer;
   }
 
-  .markdown-body .mermaid-zoom-button:hover:not(:disabled) {
+  :global(.markdown-body .mermaid-zoom-button:hover:not(:disabled)) {
     border-color: var(--border-strong);
     color: var(--text);
   }
 
-  .markdown-body .mermaid-zoom-button:disabled {
+  :global(.markdown-body .mermaid-zoom-button:disabled) {
     opacity: 0.45;
     cursor: not-allowed;
   }
 
-  .markdown-body .mermaid-zoom-label {
+  :global(.markdown-body .mermaid-zoom-label) {
     min-width: 42px;
     color: var(--text-subtle);
     font-size: 0.68rem;
@@ -592,12 +596,12 @@
     text-align: center;
   }
 
-  .markdown-body .mermaid-diagram-scroll {
+  :global(.markdown-body .mermaid-diagram-scroll) {
     overflow-x: auto;
     overflow-y: hidden;
   }
 
-  .markdown-body .mermaid-block svg {
+  :global(.markdown-body .mermaid-block svg) {
     display: block;
     width: min(100%, var(--mermaid-svg-width, 760px));
     max-width: 100%;
@@ -605,75 +609,75 @@
     margin: 0 auto;
   }
 
-  .markdown-body .mermaid-block-status {
+  :global(.markdown-body .mermaid-block-status) {
     margin-bottom: 10px;
     color: var(--text-subtle);
     font-size: 0.76rem;
   }
 
-  .markdown-body .mermaid-source {
+  :global(.markdown-body .mermaid-source) {
     margin: 0;
     padding: 0;
     border: none;
     background: transparent;
   }
 
-  .markdown-body .mermaid-block-rendered .mermaid-block-status,
-  .markdown-body .mermaid-block-rendered .mermaid-source { display: none; }
+  :global(.markdown-body .mermaid-block-rendered .mermaid-block-status),
+  :global(.markdown-body .mermaid-block-rendered .mermaid-source) { display: none; }
 
-  .markdown-body .mermaid-block-error {
+  :global(.markdown-body .mermaid-block-error) {
     border-color: color-mix(in srgb, var(--error-border) 72%, var(--border));
   }
 
-  .markdown-body a {
+  :global(.markdown-body a) {
     color: var(--text-muted);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
 
-  .markdown-body a:hover { color: var(--text); }
+  :global(.markdown-body a:hover) { color: var(--text); }
 
-  .markdown-body hr {
+  :global(.markdown-body hr) {
     margin: 1.2em 0;
     border: none;
     border-top: 1px solid var(--border);
   }
 
-  .markdown-body table {
+  :global(.markdown-body table) {
     margin: 0.6em 0;
     border-collapse: collapse;
     width: 100%;
     font-size: 0.85em;
   }
 
-  .markdown-body th,
-  .markdown-body td {
+  :global(.markdown-body th),
+  :global(.markdown-body td) {
     padding: 8px 12px;
     border: 1px solid var(--border);
     text-align: left;
   }
 
-  .markdown-body th {
+  :global(.markdown-body th) {
     background: var(--panel);
     font-weight: 600;
     color: var(--text);
   }
 
-  .markdown-body img {
+  :global(.markdown-body img) {
     max-width: 100%;
     border-radius: 6px;
   }
 
-  .markdown-body strong { font-weight: 600; color: var(--text); }
-  .markdown-body em { font-style: italic; }
+  :global(.markdown-body strong) { font-weight: 600; color: var(--text); }
+  :global(.markdown-body em) { font-style: italic; }
 
-  .markdown-body del {
+  :global(.markdown-body del) {
     text-decoration: line-through;
     color: var(--text-subtle);
   }
 
-  .markdown-body details { margin: 0.5em 0; }
-  .markdown-body summary {
+  :global(.markdown-body details) { margin: 0.5em 0; }
+  :global(.markdown-body summary) {
     cursor: pointer;
     font-size: 0.85em;
     color: var(--text-muted);

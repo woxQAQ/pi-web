@@ -1,13 +1,11 @@
 <script lang="ts">
   import type { RpcGitBranch, RpcGitRepoState } from "@pi-web/bridge/types";
-  import {
-    Check,
-    ChevronDown,
-    GitBranchIcon,
-    LoaderCircle,
-    Plus,
-    RefreshCw,
-  } from "lucide-svelte";
+  import Check from "lucide-svelte/icons/check";
+  import ChevronDown from "lucide-svelte/icons/chevron-down";
+  import GitBranchIcon from "lucide-svelte/icons/git-branch";
+  import LoaderCircle from "lucide-svelte/icons/loader-circle";
+  import Plus from "lucide-svelte/icons/plus";
+  import RefreshCw from "lucide-svelte/icons/refresh-cw";
 
   let {
     label = null as string | null,
@@ -264,14 +262,14 @@
   });
 
   $effect(() => {
-    filteredBranches;
+    void filteredBranches;
     if (highlightedIndex >= filteredBranches.length)
       highlightedIndex = Math.max(0, filteredBranches.length - 1);
     scrollToHighlighted();
   });
 
   $effect(() => {
-    repoState;
+    void repoState;
     if (!isOpen) return;
     syncHighlightedIndex();
     void tick().then(() => {

@@ -5,7 +5,10 @@
     RpcThinkingLevel,
     RpcWorkspaceEntry,
   } from "@pi-web/bridge/types";
-  import { CornerDownLeft, ImagePlus, Square, X } from "lucide-svelte";
+  import CornerDownLeft from "lucide-svelte/icons/corner-down-left";
+  import ImagePlus from "lucide-svelte/icons/image-plus";
+  import Square from "lucide-svelte/icons/square";
+  import X from "lucide-svelte/icons/x";
   import type { ConnectionStatus } from "../composables/bridgeStore.svelte";
   import {
     COMPOSER_ATTACHMENT_ACCEPT,
@@ -518,7 +521,7 @@
 
   // Effects
   $effect(() => {
-    inputText;
+    void inputText;
     resizeTextarea();
     queueMicrotask(() => syncCursorFromTextarea());
   });
@@ -529,8 +532,7 @@
   });
 
   $effect(() => {
-    mentionContext;
-    workspaceContextKey;
+    void [mentionContext, workspaceContextKey];
     const mk = getMentionKey(mentionContext);
     if (mk && mk !== (dismissedMentionKey ?? undefined)) dismissedMentionKey = null;
 
@@ -547,7 +549,7 @@
 
   let previousRevision: typeof revision = null;
   $effect(() => {
-    revision;
+    void revision;
     if (!revision) {
       revisionBackup = null;
       previousRevision = null;
@@ -566,7 +568,7 @@
   });
 
   $effect(() => {
-    editQueuedPayload;
+    void editQueuedPayload;
     if (!editQueuedPayload) return;
     inputText = editQueuedPayload.text;
     attachments = attachmentsFromRpcImages(editQueuedPayload.images);

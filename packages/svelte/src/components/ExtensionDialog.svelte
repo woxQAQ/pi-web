@@ -3,7 +3,7 @@
     RpcExtensionUIRequest,
     RpcExtensionUIResponse,
   } from "@pi-web/bridge/types";
-  import { X } from "lucide-svelte";
+  import X from "lucide-svelte/icons/x";
 
   type DialogExtensionUIRequest = Extract<
     RpcExtensionUIRequest,

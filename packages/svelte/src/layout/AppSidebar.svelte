@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { FolderPlus, RefreshCw } from "lucide-svelte";
+  import FolderPlus from "lucide-svelte/icons/folder-plus";
+  import RefreshCw from "lucide-svelte/icons/refresh-cw";
   import SessionRail from "../components/SessionRail.svelte";
   import type { SessionEntry } from "../composables/bridgeStore.svelte";
 
