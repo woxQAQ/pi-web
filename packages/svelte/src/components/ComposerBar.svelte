@@ -1,5 +1,6 @@
 <script lang="ts">
   import type {
+    RpcGitRepoState,
     RpcImageContent,
     RpcSlashCommand,
     RpcThinkingLevel,
@@ -33,6 +34,7 @@
     type WorkspaceMentionSuggestion,
   } from "../utils/workspaceMentions";
   import CommandPalette from "./CommandPalette.svelte";
+  import GitBranchDropdown from "./GitBranchDropdown.svelte";
   import ModelDropdown from "./ModelDropdown.svelte";
   import ThinkingLevelDropdown from "./ThinkingLevelDropdown.svelte";
   import WorkspaceMentionPalette from "./WorkspaceMentionPalette.svelte";
@@ -74,6 +76,17 @@
     onSelectModel = (_: RpcModelInfo) => {},
     onSelectThinkingLevel = (_: RpcThinkingLevel) => {},
     onToggleAutoCompaction = (_: boolean) => {},
+    gitBranch = null as string | null,
+    gitRepoState = null as RpcGitRepoState | null,
+    gitRepoLoading = false,
+    gitBranchSwitching = false,
+    gitActionsDisabled = false,
+    refreshGitRepoState = (_?: boolean) =>
+      Promise.resolve(null as RpcGitRepoState | null),
+    switchGitBranch = (_: string) =>
+      Promise.resolve(null as RpcGitRepoState | null),
+    createGitBranch = (_: string) =>
+      Promise.resolve(null as RpcGitRepoState | null),
   } = $props();
 
   const MAX_TEXTAREA_HEIGHT = 160;
@@ -128,7 +141,7 @@
   });
   let currentModelText = $derived.by(() => {
     if (!selectedModel) return models.length > 0 ? "choose model" : "no models";
-    return `${selectedModel.provider}/${selectedModel.id}`;
+    return selectedModel.name ?? selectedModel.id;
   });
   let normalizedInputText = $derived(normalizeSubmittedText(inputText));
   let hasAttachments = $derived(attachments.length > 0);
@@ -668,7 +681,6 @@
         <button
           type="button"
           class="attach-btn"
-          class:active={hasAttachments}
           title={hasAttachments ? "Add more images" : "Attach images"}
           onclick={handleFilePickerOpen}
         >
@@ -695,6 +707,16 @@
 
       <div class="composer-footer-row">
         <div class="composer-status-cluster">
+          <GitBranchDropdown
+            label={gitBranch}
+            repoState={gitRepoState}
+            loading={gitRepoLoading}
+            switching={gitBranchSwitching}
+            disabled={gitActionsDisabled}
+            refresh={refreshGitRepoState}
+            switchBranch={switchGitBranch}
+            createBranch={createGitBranch}
+          />
           <ModelDropdown
             {models}
             {selectedModel}
@@ -772,11 +794,9 @@
     border-radius: 18px;
     border: 1px solid var(--border);
     background: var(--bg);
-    box-shadow: var(--shadow-raised);
     transition:
       border-color 0.15s ease,
-      background 0.15s ease,
-      box-shadow 0.15s ease;
+      background 0.15s ease;
   }
 
   .revision-banner {
@@ -824,17 +844,11 @@
   .composer-dock:focus-within {
     border-color: var(--border-strong);
     background: var(--bg);
-    box-shadow:
-      0 0 0 2px var(--focus-ring-muted),
-      var(--shadow-raised);
   }
 
   .composer-dock.drag-active {
     border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
     background: var(--bg);
-    box-shadow:
-      0 0 0 2px var(--focus-ring),
-      var(--shadow-raised);
   }
 
   .composer-dock.disabled { opacity: 0.74; }
@@ -954,7 +968,7 @@
     height: 32px;
     margin-top: 6px;
     border-radius: 12px;
-    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border: none;
     background: var(--bg);
     color: var(--text-subtle);
     cursor: pointer;
@@ -967,15 +981,8 @@
 
   .attachment-chip-remove:hover,
   .attach-btn:hover:not(:disabled) {
-    border-color: var(--border-strong);
     background: var(--bg);
     color: var(--text);
-  }
-
-  .attach-btn.active {
-    color: var(--text);
-    border-color: color-mix(in srgb, var(--accent) 24%, var(--border-strong));
-    background: var(--bg);
   }
 
   .composer-main-row {
@@ -1020,7 +1027,7 @@
     width: 25px;
     height: 25px;
     border-radius: 12px;
-    border: 1px solid var(--border);
+    border: none;
     background: var(--bg);
     color: var(--text);
     cursor: pointer;
@@ -1033,19 +1040,16 @@
 
   .send-btn:hover:not(:disabled) {
     background: var(--bg);
-    border-color: var(--border-strong);
     transform: translateY(-1px);
   }
 
   .send-btn.stop {
-    border-color: color-mix(in srgb, var(--error-border) 92%, var(--border));
     background: var(--bg);
     color: var(--error-text);
   }
 
   .send-btn.stop:hover:not(:disabled) {
     background: var(--bg);
-    border-color: color-mix(in srgb, var(--error-border) 100%, var(--border-strong));
   }
 
   .send-btn:disabled {
@@ -1083,7 +1087,7 @@
     height: 26px;
     padding: 0 10px;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border: none;
     background: var(--bg);
     color: var(--text-subtle);
     cursor: pointer;
@@ -1096,16 +1100,13 @@
   }
 
   .toggle-chip:hover:not(.disabled) {
-    border-color: var(--border-strong);
     background: var(--bg);
     color: var(--text);
   }
 
   .toggle-chip:focus-within {
-    border-color: var(--accent);
     background: var(--bg);
     color: var(--text);
-    box-shadow: 0 0 0 3px var(--focus-ring);
   }
 
   .toggle-chip.disabled { opacity: 0.45; cursor: not-allowed; }

@@ -1,28 +1,15 @@
 <script lang="ts">
   import type {
-    RpcGitRepoState,
     RpcSessionStats,
     RpcWorkspaceEnvironment,
   } from "@pi-web/bridge/types";
-  import GitBranchDropdown from "./GitBranchDropdown.svelte";
 
   const statsGap = 8;
   const statsSlack = 4;
 
   let {
     stats = null as RpcSessionStats | null,
-    gitBranch = null as string | null,
     workspaceEnvironments = [] as RpcWorkspaceEnvironment[],
-    gitRepoState = null as RpcGitRepoState | null,
-    gitRepoLoading = false,
-    gitBranchSwitching = false,
-    gitActionsDisabled = false,
-    refreshGitRepoState = (_?: boolean) =>
-      Promise.resolve(null as RpcGitRepoState | null),
-    switchGitBranch = (_: string) =>
-      Promise.resolve(null as RpcGitRepoState | null),
-    createGitBranch = (_: string) =>
-      Promise.resolve(null as RpcGitRepoState | null),
   } = $props();
 
   let statsLeadingEl = $state<HTMLDivElement | null>(null);
@@ -60,7 +47,6 @@
   let cacheWriteLabel = $derived(
     stats && stats.cacheWriteTokens > 0 ? `W${compactTokens(stats.cacheWriteTokens)}` : null,
   );
-  let gitBranchLabel = $derived(gitBranch?.trim() ? gitBranch.trim() : null);
   let wsEnvs = $derived(
     (workspaceEnvironments ?? []).filter(e => Boolean(e?.label?.trim())),
   );
@@ -73,7 +59,7 @@
       costLabel != null,
   );
   let hasLeadingContent = $derived(
-    gitBranchLabel != null || wsEnvs.length > 0,
+    wsEnvs.length > 0,
   );
   let hasVisibleContent = $derived(hasLeadingContent || hasStatsContent);
   let barColor = $derived.by(() => {
@@ -142,18 +128,6 @@
         class="stats-leading"
         class:empty-leading={!hasLeadingContent}
       >
-        {#if gitBranchLabel}
-          <GitBranchDropdown
-            label={gitBranchLabel}
-            repoState={gitRepoState}
-            loading={gitRepoLoading}
-            switching={gitBranchSwitching}
-            disabled={gitActionsDisabled}
-            refresh={refreshGitRepoState}
-            switchBranch={switchGitBranch}
-            createBranch={createGitBranch}
-          />
-        {/if}
         {#each wsEnvs as environment (`${environment.type}:${environment.label}`)}
           <div
             class="stat-chip env-chip"

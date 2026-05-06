@@ -221,15 +221,7 @@
 
   <SessionStatsBar
     stats={sessionStats}
-    gitBranch={sessionState?.gitBranch ?? null}
     workspaceEnvironments={sessionState?.workspaceEnvironments ?? []}
-    {gitRepoState}
-    {gitRepoLoading}
-    {gitBranchSwitching}
-    gitActionsDisabled={connectionStatus !== "connected" || isStreaming || isCompacting}
-    {refreshGitRepoState}
-    {switchGitBranch}
-    {createGitBranch}
   />
 
   <ComposerBar
@@ -254,6 +246,14 @@
     onSelectModel={onSelectModel}
     onSelectThinkingLevel={onSelectThinkingLevel}
     onToggleAutoCompaction={onToggleAutoCompaction}
+    gitBranch={sessionState?.gitBranch ?? null}
+    {gitRepoState}
+    {gitRepoLoading}
+    {gitBranchSwitching}
+    gitActionsDisabled={connectionStatus !== "connected" || isStreaming || isCompacting}
+    {refreshGitRepoState}
+    {switchGitBranch}
+    {createGitBranch}
   />
 </main>
 

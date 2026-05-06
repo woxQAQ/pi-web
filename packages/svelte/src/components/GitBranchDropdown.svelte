@@ -406,8 +406,8 @@
     height: 26px;
     padding: 0 10px;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 50%, transparent);
-    background: color-mix(in srgb, var(--panel) 60%, transparent);
+    border: none;
+    background: transparent;
     color: var(--text-muted);
     cursor: pointer;
     transition:
@@ -417,21 +417,17 @@
   }
 
   .git-trigger:hover:not(:disabled) {
-    border-color: var(--border-strong);
     background: var(--surface-hover);
     color: var(--text);
   }
 
   .git-trigger[aria-expanded="true"] {
-    border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
     background: var(--surface-active);
     color: var(--text);
   }
 
   .git-trigger:focus-visible {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--focus-ring);
     color: var(--text);
   }
 

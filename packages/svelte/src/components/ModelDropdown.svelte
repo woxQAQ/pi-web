@@ -1,9 +1,9 @@
 <script lang="ts">
-  import Bot from "lucide-svelte/icons/bot";
   import Check from "lucide-svelte/icons/check";
   import Search from "lucide-svelte/icons/search";
   import { onMount } from "svelte";
   import { filterModels, getModelKey, type RpcModelInfo } from "../utils/models";
+  import ProviderIcon from "./ProviderIcon.svelte";
 
   let {
     models = [] as readonly RpcModelInfo[],
@@ -165,8 +165,10 @@
     aria-haspopup="dialog"
     onclick={toggleDropdown}
   >
-    <Bot class="model-trigger-icon" aria-hidden="true" size={14} />
-    {#if label}
+    {#if selectedModel}
+      <ProviderIcon provider={selectedModel.provider} size={14} />
+      <span class="model-trigger-label">{label}</span>
+    {:else if label}
       <span class="model-trigger-label">{label}</span>
     {:else}
       <span class="sr-only">Select model</span>
@@ -199,6 +201,7 @@
                 onclick={() => selectModel(model)}
                 onmouseenter={() => (highlightedIndex = index)}
               >
+                <ProviderIcon provider={model.provider} size={16} />
                 <div class="model-option-copy">
                   <span class="model-option-name">{model.name}</span>
                   <span class="model-option-meta"
@@ -234,44 +237,33 @@
     height: 24px;
     padding: 0 9px;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border: none;
     background: var(--bg);
     color: var(--text-subtle);
     cursor: pointer;
     transition:
       background 0.15s ease,
-      border-color 0.15s ease,
       color 0.15s ease,
       transform 0.15s ease;
   }
 
   .model-trigger:hover:not(:disabled) {
     background: var(--bg);
-    border-color: var(--border-strong);
     color: var(--text);
   }
 
   .model-trigger[aria-expanded="true"] {
     background: var(--bg);
-    border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
     color: var(--text);
   }
 
   .model-trigger:focus-visible {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--focus-ring);
   }
 
   .model-trigger:disabled {
     opacity: 0.45;
     cursor: not-allowed;
-  }
-
-  .model-trigger-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
   }
 
   .model-trigger-label {
@@ -393,6 +385,7 @@
     flex-direction: column;
     gap: 2px;
     min-width: 0;
+    flex: 1;
   }
 
   .model-option-name,

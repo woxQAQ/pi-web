@@ -247,7 +247,7 @@
     height: 24px;
     padding: 0 9px;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
+    border: none;
     background: var(--bg);
     color: var(--text-subtle);
     cursor: pointer;
@@ -260,21 +260,17 @@
   }
 
   .thinking-trigger:hover:not(:disabled) {
-    border-color: var(--border-strong);
     background: var(--bg);
     color: var(--text);
   }
 
   .thinking-trigger[aria-expanded="true"] {
-    border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
     background: var(--bg);
     color: var(--text);
   }
 
   .thinking-trigger:focus-visible {
     outline: none;
-    border-color: var(--accent);
-    box-shadow: 0 0 0 3px var(--focus-ring);
     color: var(--text);
   }
 
