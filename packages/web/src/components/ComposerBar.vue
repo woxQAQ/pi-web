@@ -6,7 +6,14 @@ import type {
   RpcWorkspaceEntry,
 } from "@pi-web/bridge/types";
 import { CornerDownLeft, ImagePlus, Square, X } from "lucide-vue-next";
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import {
+  computed,
+  nextTick,
+  onBeforeUnmount,
+  onMounted,
+  ref,
+  watch,
+} from "vue";
 import type { ConnectionStatus } from "../composables/useBridgeClient";
 import {
   COMPOSER_ATTACHMENT_ACCEPT,
@@ -80,6 +87,7 @@ const TEXTAREA_HEIGHT_BUFFER = 4;
 
 const inputText = ref("");
 const composerRootRef = ref<HTMLDivElement | null>(null);
+const composerInnerWrapRef = ref<HTMLDivElement | null>(null);
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const fileInputRef = ref<HTMLInputElement | null>(null);
 const isDisabled = computed(() => props.connectionStatus !== "connected");
@@ -88,6 +96,7 @@ const mentionPaletteRef = ref<InstanceType<
   typeof WorkspaceMentionPalette
 > | null>(null);
 const attachments = ref<ComposerAttachment[]>([]);
+const paletteMaxHeight = ref(320);
 const isDragActive = ref(false);
 const attachmentNotice = ref<string | null>(null);
 const cursorOffset = ref(0);
@@ -166,6 +175,7 @@ const revisionBackup = ref<{
 
 let attachmentNoticeTimer: ReturnType<typeof setTimeout> | null = null;
 let dragDepth = 0;
+let composerResizeObserver: ResizeObserver | null = null;
 
 function restoredAttachmentExtension(mimeType: string): string {
   switch (mimeType) {
@@ -282,6 +292,19 @@ function resizeTextarea() {
   });
 }
 
+function updatePaletteMaxHeight() {
+  if (typeof window === "undefined") return;
+
+  const host = composerInnerWrapRef.value ?? composerRootRef.value;
+  if (!host) return;
+
+  const rect = host.getBoundingClientRect();
+  const viewportTop = window.visualViewport?.offsetTop ?? 0;
+  const availableHeight = Math.floor(rect.top - viewportTop - 16);
+
+  paletteMaxHeight.value = Math.max(0, Math.min(320, availableHeight));
+}
+
 function shouldRevealComposer(): boolean {
   if (typeof window === "undefined") return false;
   const el = composerRootRef.value;
@@ -329,6 +352,7 @@ watch(inputText, () => {
   resizeTextarea();
   nextTick(() => {
     syncCursorFromTextarea();
+    updatePaletteMaxHeight();
   });
 });
 
@@ -359,6 +383,16 @@ watch(
 
     mentionInteractionWorkspaceKey.value = nextInteractionKey;
     void props.ensureWorkspaceEntries();
+  },
+);
+
+watch(
+  [showCommandPalette, showMentionPalette],
+  ([showCommand, showMention]) => {
+    if (!showCommand && !showMention) return;
+    nextTick(() => {
+      updatePaletteMaxHeight();
+    });
   },
 );
 
@@ -733,8 +767,31 @@ function handleInputKeydown(e: KeyboardEvent) {
   }
 }
 
+onMounted(() => {
+  if (typeof window === "undefined") return;
+
+  updatePaletteMaxHeight();
+
+  if (typeof ResizeObserver !== "undefined") {
+    composerResizeObserver = new ResizeObserver(() => {
+      updatePaletteMaxHeight();
+    });
+    if (composerInnerWrapRef.value) {
+      composerResizeObserver.observe(composerInnerWrapRef.value);
+    }
+  }
+
+  window.addEventListener("resize", updatePaletteMaxHeight);
+  window.visualViewport?.addEventListener("resize", updatePaletteMaxHeight);
+  window.visualViewport?.addEventListener("scroll", updatePaletteMaxHeight);
+});
+
 onBeforeUnmount(() => {
   clearAttachmentNotice();
+  composerResizeObserver?.disconnect();
+  window.removeEventListener("resize", updatePaletteMaxHeight);
+  window.visualViewport?.removeEventListener("resize", updatePaletteMaxHeight);
+  window.visualViewport?.removeEventListener("scroll", updatePaletteMaxHeight);
 });
 
 resizeTextarea();
@@ -742,7 +799,11 @@ resizeTextarea();
 
 <template>
   <div ref="composerRootRef" class="composer-bar">
-    <div class="composer-inner-wrap">
+    <div
+      ref="composerInnerWrapRef"
+      class="composer-inner-wrap"
+      :style="{ '--composer-palette-max-height': `${paletteMaxHeight}px` }"
+    >
       <CommandPalette
         v-if="showCommandPalette"
         ref="commandPaletteRef"

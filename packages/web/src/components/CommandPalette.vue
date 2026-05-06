@@ -112,7 +112,7 @@ defineExpose({ handleKeydown });
   left: 0;
   right: 0;
   bottom: calc(100% + 8px);
-  max-height: 320px;
+  max-height: var(--composer-palette-max-height, 320px);
   overflow-y: auto;
   background: var(--panel);
   border: 1px solid var(--border);
