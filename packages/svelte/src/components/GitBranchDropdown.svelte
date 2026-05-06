@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { RpcGitBranch, RpcGitRepoState } from "@pi-web/bridge/types";
   import Check from "lucide-svelte/icons/check";
-  import ChevronDown from "lucide-svelte/icons/chevron-down";
   import GitBranchIcon from "lucide-svelte/icons/git-branch";
   import LoaderCircle from "lucide-svelte/icons/loader-circle";
   import Plus from "lucide-svelte/icons/plus";
@@ -300,12 +299,6 @@
           aria-hidden="true"
           size={12}
         />
-      {:else}
-        <ChevronDown
-          class="git-trigger-caret"
-          aria-hidden="true"
-          size={12}
-        />
       {/if}
     </button>
 
@@ -448,7 +441,6 @@
   }
 
   .git-trigger-icon,
-  .git-trigger-caret,
   .git-trigger-spinner {
     width: 12px;
     height: 12px;
