@@ -36,11 +36,6 @@
   let currentModeLabel = $derived(
     mode === "dark" ? "Dark theme" : "Light theme",
   );
-  let currentModeCopy = $derived(
-    mode === "dark"
-      ? "Choose the palette used while the app stays in dark mode."
-      : "Choose the palette used while the app stays in light mode.",
-  );
   let defaultThemeId = $derived(
     mode === "dark" ? "pi-base46-dark" : "pi-base46-light",
   );
@@ -97,27 +92,23 @@
                 {currentModeLabel}
               </h2>
             </div>
-            <p class="theme-dialog-copy">
-              {currentModeCopy} Use the header toggle to switch between
-              dark and light modes.
-            </p>
           </div>
           <button
             class="theme-dialog-close"
             type="button"
             aria-label="Close theme settings"
-          onclick={() => onClose()}
+            onclick={() => onClose()}
           >
             <X aria-hidden="true" size={15} />
           </button>
         </div>
 
-        <div class="theme-section-meta">
+        <!-- <div class="theme-section-meta">
           <span class="theme-section-label">{currentModeLabel}</span>
           <span class="theme-section-subtle">
             {displayThemes.length} themes available
           </span>
-        </div>
+        </div> -->
 
         <div class="theme-grid">
           {#each displayThemes as item (item.theme.id)}
@@ -185,7 +176,7 @@
 
   .theme-dialog-top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 16px;
@@ -232,13 +223,12 @@
     justify-content: center;
     width: 32px;
     height: 32px;
-    border: 1px solid var(--border);
+    border: none;
     border-radius: 999px;
-    background: color-mix(in srgb, var(--panel-2) 88%, var(--panel));
+    background: transparent;
     color: var(--text-subtle);
     cursor: pointer;
     transition:
-      border-color 0.15s ease,
       color 0.15s ease,
       transform 0.15s ease;
   }
@@ -271,17 +261,17 @@
 
   .theme-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 10px;
   }
 
   .theme-card {
     display: grid;
-    gap: 8px;
-    padding: 12px;
+    gap: 6px;
+    padding: 10px;
     text-align: left;
     border: 1px solid color-mix(in srgb, var(--border) 84%, transparent);
-    border-radius: 16px;
+    border-radius: 14px;
     background: color-mix(in srgb, var(--panel) 92%, var(--panel-2) 8%);
     color: inherit;
     cursor: pointer;
@@ -312,13 +302,14 @@
   .theme-card-preview {
     display: grid;
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    gap: 7px;
+    gap: 6px;
   }
 
   .theme-swatch {
     display: block;
-    height: 24px;
-    border-radius: 9px;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 999px;
     border: 1px solid rgba(255, 255, 255, 0.06);
   }
 
@@ -326,24 +317,24 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 10px;
+    gap: 8px;
   }
 
   .theme-card-title {
     color: var(--text);
-    font-size: 0.88rem;
+    font-size: 0.84rem;
     font-weight: 600;
   }
 
   .theme-card-badge {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
-    padding: 3px 8px;
+    gap: 4px;
+    padding: 2px 7px;
     border-radius: 999px;
     background: color-mix(in srgb, var(--accent) 18%, transparent);
     color: var(--accent-hover);
-    font-size: 0.66rem;
+    font-size: 0.62rem;
     font-weight: 600;
   }
 

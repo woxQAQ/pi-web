@@ -46,7 +46,7 @@
     "ws": "^8.20.0"
   },
   "devDependencies": {
-    "@mariozechner/pi-coding-agent": "^0.65.0",
+    "@mariozechner/pi-coding-agent": "^0.65.2",
     "@pi-web/bridge": "workspace:*",
     "@types/node": "^24.3.0",
     "@typescript/native-preview": "7.0.0-dev.20260413.1",
