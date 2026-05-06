@@ -1244,6 +1244,37 @@
     background: var(--panel);
   }
 
+  :global(.markdown-body) + :global(.markdown-body),
+  :global(.markdown-body) + .thinking-block,
+  :global(.markdown-body) + .tool-inline-block,
+  :global(.markdown-body) + .message-image-block,
+  :global(.markdown-body) + .system-block,
+  .thinking-block + :global(.markdown-body),
+  .thinking-block + .thinking-block,
+  .thinking-block + .tool-inline-block,
+  .thinking-block + .message-image-block,
+  .thinking-block + .system-block,
+  .tool-inline-block + :global(.markdown-body),
+  .tool-inline-block + .thinking-block,
+  .tool-inline-block + .message-image-block,
+  .tool-inline-block + .system-block,
+  .message-image-block + :global(.markdown-body),
+  .message-image-block + .thinking-block,
+  .message-image-block + .tool-inline-block,
+  .message-image-block + .message-image-block,
+  .message-image-block + .system-block,
+  .system-block + :global(.markdown-body),
+  .system-block + .thinking-block,
+  .system-block + .tool-inline-block,
+  .system-block + .message-image-block,
+  .system-block + .system-block {
+    margin-top: 4px;
+  }
+
+  .tool-inline-block + .tool-inline-block {
+    margin-top: 6px;
+  }
+
   .thinking-block { padding-left: 0; }
 
   .system-block {
