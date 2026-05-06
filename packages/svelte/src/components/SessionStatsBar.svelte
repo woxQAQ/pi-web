@@ -6,6 +6,9 @@
   } from "@pi-web/bridge/types";
   import GitBranchDropdown from "./GitBranchDropdown.svelte";
 
+  const statsGap = 8;
+  const statsSlack = 4;
+
   let {
     stats = null as RpcSessionStats | null,
     gitBranch = null as string | null,
@@ -21,6 +24,12 @@
     createGitBranch = (_: string) =>
       Promise.resolve(null as RpcGitRepoState | null),
   } = $props();
+
+  let statsLeadingEl = $state<HTMLDivElement | null>(null);
+  let statsInnerWidth = $state(0);
+  let statsLeadingScrollWidth = $state(0);
+  let fullStatsWidth = $state(0);
+  let compactStatsWidth = $state(0);
 
   function compactTokens(count: number) {
     if (count < 1_000) return `${count}`;
@@ -63,23 +72,75 @@
       contextPercent != null ||
       costLabel != null,
   );
-  let hasVisibleContent = $derived(
-    gitBranchLabel != null || wsEnvs.length > 0 || hasStatsContent,
+  let hasLeadingContent = $derived(
+    gitBranchLabel != null || wsEnvs.length > 0,
   );
+  let hasVisibleContent = $derived(hasLeadingContent || hasStatsContent);
   let barColor = $derived.by(() => {
     if (contextPercent == null) return "var(--text-subtle)";
     if (contextPercent < 50) return "var(--text-subtle)";
     if (contextPercent < 80) return "var(--warning)";
     return "var(--danger)";
   });
+  let statLabels = $derived.by(() => {
+    const labels: string[] = [];
+    if (inputLabel) labels.push(inputLabel);
+    if (outputLabel) labels.push(outputLabel);
+    if (cacheReadLabel) labels.push(cacheReadLabel);
+    if (cacheWriteLabel) labels.push(cacheWriteLabel);
+    if (costLabel) labels.push(costLabel);
+    return labels;
+  });
+  let contextSummaryLabel = $derived(
+    contextPercent != null && windowLabel
+      ? `${contextPercent.toFixed(1)}%/${windowLabel}`
+      : null,
+  );
+  let compactStatsLabel = $derived(
+    statLabels.length > 0 ? statLabels.join(" | ") : null,
+  );
+  let mergedStatsLabel = $derived.by(() => {
+    const labels: string[] = [];
+    if (contextSummaryLabel) labels.push(contextSummaryLabel);
+    labels.push(...statLabels);
+    return labels.length > 0 ? labels.join(" | ") : null;
+  });
+  let availableTrailingWidth = $derived(
+    Math.max(
+      statsInnerWidth -
+        (hasLeadingContent ? statsLeadingScrollWidth + statsGap : 0),
+      0,
+    ),
+  );
+  let statsDisplayMode = $derived.by(() => {
+    if (!hasStatsContent) return "full";
+    if (!fullStatsWidth || availableTrailingWidth + statsSlack >= fullStatsWidth) {
+      return "full";
+    }
+    if (
+      compactStatsWidth &&
+      availableTrailingWidth + statsSlack >= compactStatsWidth
+    ) {
+      return "compact";
+    }
+    return "merged";
+  });
+
+  $effect(() => {
+    void statsInnerWidth;
+    void gitBranchLabel;
+    void wsEnvs;
+    statsLeadingScrollWidth = statsLeadingEl?.scrollWidth ?? 0;
+  });
 </script>
 
 {#if hasVisibleContent}
   <div class="stats-bar">
-    <div class="stats-inner">
+    <div class="stats-inner" bind:clientWidth={statsInnerWidth}>
       <div
+        bind:this={statsLeadingEl}
         class="stats-leading"
-        class:empty-leading={!(gitBranchLabel || wsEnvs.length > 0)}
+        class:empty-leading={!hasLeadingContent}
       >
         {#if gitBranchLabel}
           <GitBranchDropdown
@@ -103,49 +164,129 @@
         {/each}
       </div>
       {#if hasStatsContent}
-        <div class="stats-trailing">
-          {#if inputLabel}
-            <div class="stat-chip token-chip">
-              <span class="stat-label">{inputLabel}</span>
-            </div>
-          {/if}
-          {#if outputLabel}
-            <div class="stat-chip token-chip">
-              <span class="stat-label">{outputLabel}</span>
-            </div>
-          {/if}
-          {#if cacheReadLabel}
-            <div class="stat-chip token-chip">
-              <span class="stat-label">{cacheReadLabel}</span>
-            </div>
-          {/if}
-          {#if cacheWriteLabel}
-            <div class="stat-chip token-chip">
-              <span class="stat-label">{cacheWriteLabel}</span>
-            </div>
-          {/if}
-          {#if costLabel}
-            <div class="stat-chip cost-chip">
-              <span class="stat-label">{costLabel}</span>
-            </div>
-          {/if}
-          {#if contextPercent != null}
-            <div class="stat-chip context-chip">
-              <div class="context-bar-track">
-                <div
-                  class="context-bar-fill"
-                  style="width: {contextPercent}%; background: {barColor}"
-                ></div>
+        <div
+          class="stats-trailing"
+          class:compact={statsDisplayMode !== "full"}
+          class:merged={statsDisplayMode === "merged"}
+        >
+          {#if statsDisplayMode === "full"}
+            {#if inputLabel}
+              <div class="stat-chip token-chip">
+                <span class="stat-label">{inputLabel}</span>
               </div>
-              <span class="stat-label">
-                {contextPercent.toFixed(1)}%/{windowLabel}
-              </span>
+            {/if}
+            {#if outputLabel}
+              <div class="stat-chip token-chip">
+                <span class="stat-label">{outputLabel}</span>
+              </div>
+            {/if}
+            {#if cacheReadLabel}
+              <div class="stat-chip token-chip">
+                <span class="stat-label">{cacheReadLabel}</span>
+              </div>
+            {/if}
+            {#if cacheWriteLabel}
+              <div class="stat-chip token-chip">
+                <span class="stat-label">{cacheWriteLabel}</span>
+              </div>
+            {/if}
+            {#if costLabel}
+              <div class="stat-chip cost-chip">
+                <span class="stat-label">{costLabel}</span>
+              </div>
+            {/if}
+            {#if contextPercent != null}
+              <div class="stat-chip context-chip">
+                <div class="context-bar-track">
+                  <div
+                    class="context-bar-fill"
+                    style="width: {contextPercent}%; background: {barColor}"
+                  ></div>
+                </div>
+                <span class="stat-label">{contextSummaryLabel}</span>
+              </div>
+            {/if}
+          {:else if statsDisplayMode === "compact"}
+            {#if compactStatsLabel}
+              <div
+                class="stat-chip token-chip combined-chip"
+                title={compactStatsLabel}
+              >
+                <span class="stat-label combined-label">{compactStatsLabel}</span>
+              </div>
+            {/if}
+            {#if contextPercent != null}
+              <div class="stat-chip context-chip compact-context-chip">
+                <span class="stat-label">{contextSummaryLabel}</span>
+              </div>
+            {/if}
+          {:else if mergedStatsLabel}
+            <div
+              class="stat-chip context-chip summary-chip"
+              title={mergedStatsLabel}
+            >
+              <span class="stat-label combined-label">{mergedStatsLabel}</span>
             </div>
           {/if}
         </div>
       {/if}
     </div>
   </div>
+
+  {#if hasStatsContent}
+    <div class="stats-measure" aria-hidden="true">
+      <div class="stats-trailing" bind:clientWidth={fullStatsWidth}>
+        {#if inputLabel}
+          <div class="stat-chip token-chip">
+            <span class="stat-label">{inputLabel}</span>
+          </div>
+        {/if}
+        {#if outputLabel}
+          <div class="stat-chip token-chip">
+            <span class="stat-label">{outputLabel}</span>
+          </div>
+        {/if}
+        {#if cacheReadLabel}
+          <div class="stat-chip token-chip">
+            <span class="stat-label">{cacheReadLabel}</span>
+          </div>
+        {/if}
+        {#if cacheWriteLabel}
+          <div class="stat-chip token-chip">
+            <span class="stat-label">{cacheWriteLabel}</span>
+          </div>
+        {/if}
+        {#if costLabel}
+          <div class="stat-chip cost-chip">
+            <span class="stat-label">{costLabel}</span>
+          </div>
+        {/if}
+        {#if contextPercent != null}
+          <div class="stat-chip context-chip">
+            <div class="context-bar-track">
+              <div
+                class="context-bar-fill"
+                style="width: {contextPercent}%; background: {barColor}"
+              ></div>
+            </div>
+            <span class="stat-label">{contextSummaryLabel}</span>
+          </div>
+        {/if}
+      </div>
+      <div class="stats-trailing compact" bind:clientWidth={compactStatsWidth}>
+        {#if compactStatsLabel}
+          <div class="stat-chip token-chip combined-chip">
+            <span class="stat-label combined-label">{compactStatsLabel}</span>
+          </div>
+        {/if}
+        {#if contextPercent != null}
+          <div class="stat-chip context-chip compact-context-chip">
+            <span class="stat-label">{contextSummaryLabel}</span>
+          </div>
+        {/if}
+      </div>
+    </div>
+  {/if}
 {/if}
 
 <style>
@@ -163,6 +304,7 @@
     align-items: center;
     gap: 8px;
     width: min(960px, 100%);
+    min-width: 0;
     margin: 0 auto;
   }
 
@@ -171,6 +313,8 @@
     align-items: center;
     gap: 8px;
     min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
   }
 
   .env-chip {
@@ -189,6 +333,12 @@
     gap: 8px;
     margin-left: auto;
     min-width: 0;
+    max-width: 100%;
+    flex: 0 0 auto;
+  }
+
+  .stats-trailing.compact {
+    overflow: hidden;
   }
 
   .stat-chip {
@@ -200,6 +350,7 @@
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
     background: color-mix(in srgb, var(--panel) 60%, transparent);
+    min-width: 0;
   }
 
   .context-chip {
@@ -209,6 +360,16 @@
   .token-chip,
   .cost-chip {
     border-color: color-mix(in srgb, var(--border) 50%, transparent);
+  }
+
+  .combined-chip,
+  .summary-chip {
+    max-width: 100%;
+  }
+
+  .compact-context-chip,
+  .summary-chip {
+    gap: 0;
   }
 
   .context-bar-track {
@@ -236,37 +397,47 @@
     white-space: nowrap;
   }
 
+  .combined-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .stats-measure {
+    position: absolute;
+    left: -9999px;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: max-content;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  .stats-measure .stats-trailing {
+    margin-left: 0;
+    max-width: none;
+    width: max-content;
+    overflow: visible;
+  }
+
+  .stats-measure .stat-chip {
+    flex-shrink: 0;
+  }
+
   @media (max-width: 900px) {
     .stats-bar {
       justify-content: flex-start;
       padding: 6px 16px 0;
-      overflow-x: auto;
-      overscroll-behavior-x: contain;
-      scrollbar-width: none;
-    }
-
-    .stats-bar::-webkit-scrollbar {
-      display: none;
     }
 
     .stats-inner {
-      width: max-content;
-      min-width: 100%;
-      flex-wrap: nowrap;
       gap: 6px;
     }
 
     .stats-leading,
-    .stats-trailing,
-    .stat-chip {
-      flex-shrink: 0;
-    }
-
     .stats-trailing {
-      width: max-content;
-      margin-left: auto;
-      justify-content: flex-end;
-      flex-wrap: nowrap;
       gap: 6px;
     }
   }
