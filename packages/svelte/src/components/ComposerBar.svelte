@@ -615,11 +615,7 @@
       {#if revision}
         <div class="revision-banner">
           <div class="revision-banner-copy">
-            <span class="revision-kicker">Revising earlier message</span>
             <p class="revision-preview">{revision.preview}</p>
-            {#if revision.hasImages}
-              <p class="revision-note">Original images were restored for this revision.</p>
-            {/if}
           </div>
           <button
             type="button"
@@ -785,7 +781,7 @@
 
   .revision-banner {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
     padding: 10px 12px;
@@ -796,30 +792,11 @@
 
   .revision-banner-copy { min-width: 0; }
 
-  .revision-kicker {
-    display: inline-flex;
-    align-items: center;
-    margin: 0 0 4px;
-    font-size: 0.68rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    color: var(--text-subtle);
-  }
-
-  .revision-preview,
-  .revision-note { margin: 0; }
-
   .revision-preview {
+    margin: 0;
     font-size: 0.82rem;
     line-height: 1.45;
     color: var(--text);
-  }
-
-  .revision-note {
-    margin-top: 4px;
-    font-size: 0.72rem;
-    line-height: 1.45;
-    color: var(--text-subtle);
   }
 
   .revision-cancel-button {
