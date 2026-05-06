@@ -1361,12 +1361,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
 
 .session-event-line {
   height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent,
-    color-mix(in srgb, var(--border) 88%, transparent),
-    transparent
-  );
+  background: color-mix(in srgb, var(--border) 88%, transparent);
 }
 
 .session-event-body {
@@ -1394,7 +1389,7 @@ defineExpose({ preserveScroll, rememberSessionScroll, scrollToMessageId });
   border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
   border-radius: 10px;
   background: color-mix(in srgb, var(--panel) 76%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, white 20%, transparent);
+  box-shadow: none;
   font-size: 0.72rem;
   line-height: 1.2;
   color: var(--text-muted);
