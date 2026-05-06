@@ -38,7 +38,7 @@ jobs:
         run: pi install .
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build publishable package
+      - name: Build publishable package with the Svelte web client
         run: pnpm run build:server && pnpm run build:web
       - name: Smoke test /web through pi
         run: pnpm run smoke:pi-web

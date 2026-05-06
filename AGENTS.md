@@ -9,16 +9,20 @@ This is a pnpm workspace monorepo with the following packages:
 
 - `@pi-web/bridge` (`packages/bridge/`) — WebSocket RPC bridge server
 - `@pi-web/bin` (`packages/bin/`) — Pi extension entry point
-- `@pi-web/web` (`packages/web/`) — Vue 3 web client
+- `@pi-web/svelte` (`packages/svelte/`) — Svelte 5 web client, current release mainline
+- `@pi-web/web` (`packages/web/`) — Legacy Vue 3 web client, will be deprecated future.
 
 ## Commands
 
 - `pnpm run check` — type-check with `tsgo`
-- `pnpm run build` — build everything (bridge → bin → web)
+- `pnpm run build` — build everything (bridge → bin → published web client)
 - `pnpm run build:bridge` — build bridge package
 - `pnpm run build:bin` — build bin package (Vite library mode)
-- `pnpm run build:web` — build Vue client to `web-dist/`
-- `pnpm run dev:web` — Vite dev server for the web UI
+- `pnpm run build:svelte` — build Svelte client to `web-dist/`
+- `pnpm run build:web` — build the published web client (`packages/svelte/`)
+- `pnpm run build:vue` — build the legacy Vue client to `web-dist/`
+- `pnpm run dev:web` — start the published web client dev server (`packages/svelte/`)
+- `pnpm run dev:vue` — start the legacy Vue client dev server
 - `pnpm test` / `pnpm run test:watch` — run Vitest test suite
 - `pnpm fmt` / `pnpm run fmt:check` — format/check with `oxfmt`
 - `pnpm lint` / `pnpm run lint:fix` — lint/fix with `oxlint`
@@ -30,7 +34,8 @@ This is a pnpm workspace monorepo with the following packages:
 - `packages/bridge/` — HTTP server, WebSocket RPC bridge, auth, terminal log
   view
   - Compiled with tsc → `dist/bridge/`
-- `packages/web/` — Vue 3 client (Vite + vitest)
+- `packages/svelte/` — Svelte 5 client (Vite + vitest), published to `web-dist/`
+- `packages/web/` — Legacy Vue 3 client (Vite + vitest)
 
 ## Important Tips
 
@@ -41,6 +46,6 @@ This is a pnpm workspace monorepo with the following packages:
 - Use git conventional commits specification when commit
 - Do not use `nl -ba $file | rg -n $pattern`, use `cat $file | rg -n $pattern`
   instead
-- If you apply any edits on vue codes in `@packages/web/src`, run
+- If you apply any edits on the published Svelte UI in `packages/svelte/src`, run
   `pnpm run build:web`
 - Use `@pi-web/bridge` imports, not relative paths between packages

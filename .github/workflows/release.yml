@@ -43,7 +43,7 @@ jobs:
         run: pnpm test
       - name: Build server bundle
         run: pnpm run build:server
-      - name: Build web bundle
+      - name: Build published Svelte web bundle
         run: pnpm run build:web
       - name: Pack npm tarball
         run: pnpm pack --pack-destination .artifacts
