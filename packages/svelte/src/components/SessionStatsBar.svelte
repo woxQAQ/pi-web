@@ -26,6 +26,10 @@
     return `${Math.round(count / 1_000_000)}M`;
   }
 
+  function formatTokens(count: number) {
+    return count.toLocaleString("en-US");
+  }
+
   let contextPercent = $derived(
     stats?.percent != null ? Math.min(stats.percent, 100) : null,
   );
@@ -38,14 +42,34 @@
   let inputLabel = $derived(
     stats && stats.inputTokens > 0 ? `↑${compactTokens(stats.inputTokens)}` : null,
   );
+  let inputTitle = $derived(
+    stats && stats.inputTokens > 0
+      ? `Input tokens: ${formatTokens(stats.inputTokens)}`
+      : null,
+  );
   let outputLabel = $derived(
     stats && stats.outputTokens > 0 ? `↓${compactTokens(stats.outputTokens)}` : null,
+  );
+  let outputTitle = $derived(
+    stats && stats.outputTokens > 0
+      ? `Output tokens: ${formatTokens(stats.outputTokens)}`
+      : null,
   );
   let cacheReadLabel = $derived(
     stats && stats.cacheReadTokens > 0 ? `R${compactTokens(stats.cacheReadTokens)}` : null,
   );
+  let cacheReadTitle = $derived(
+    stats && stats.cacheReadTokens > 0
+      ? `Cache read tokens: ${formatTokens(stats.cacheReadTokens)}`
+      : null,
+  );
   let cacheWriteLabel = $derived(
     stats && stats.cacheWriteTokens > 0 ? `W${compactTokens(stats.cacheWriteTokens)}` : null,
+  );
+  let cacheWriteTitle = $derived(
+    stats && stats.cacheWriteTokens > 0
+      ? `Cache write tokens: ${formatTokens(stats.cacheWriteTokens)}`
+      : null,
   );
   let wsEnvs = $derived(
     (workspaceEnvironments ?? []).filter(e => Boolean(e?.label?.trim())),
@@ -82,6 +106,13 @@
       ? `${contextPercent.toFixed(1)}%/${windowLabel}`
       : null,
   );
+  let contextTitle = $derived.by(() => {
+    if (contextPercent == null || !stats) return null;
+    if (stats.tokens != null && stats.tokens > 0) {
+      return `Context usage: ${formatTokens(stats.tokens)} of ${formatTokens(stats.contextWindow)} tokens (${contextPercent.toFixed(1)}%)`;
+    }
+    return `Context window: ${formatTokens(stats.contextWindow)} tokens (${contextPercent.toFixed(1)}% used)`;
+  });
   let compactStatsLabel = $derived(
     statLabels.length > 0 ? statLabels.join(" | ") : null,
   );
@@ -114,7 +145,6 @@
 
   $effect(() => {
     void statsInnerWidth;
-    void gitBranchLabel;
     void wsEnvs;
     statsLeadingScrollWidth = statsLeadingEl?.scrollWidth ?? 0;
   });
@@ -145,22 +175,22 @@
         >
           {#if statsDisplayMode === "full"}
             {#if inputLabel}
-              <div class="stat-chip token-chip">
+              <div class="stat-chip token-chip" title={inputTitle}>
                 <span class="stat-label">{inputLabel}</span>
               </div>
             {/if}
             {#if outputLabel}
-              <div class="stat-chip token-chip">
+              <div class="stat-chip token-chip" title={outputTitle}>
                 <span class="stat-label">{outputLabel}</span>
               </div>
             {/if}
             {#if cacheReadLabel}
-              <div class="stat-chip token-chip">
+              <div class="stat-chip token-chip" title={cacheReadTitle}>
                 <span class="stat-label">{cacheReadLabel}</span>
               </div>
             {/if}
             {#if cacheWriteLabel}
-              <div class="stat-chip token-chip">
+              <div class="stat-chip token-chip" title={cacheWriteTitle}>
                 <span class="stat-label">{cacheWriteLabel}</span>
               </div>
             {/if}
@@ -170,7 +200,7 @@
               </div>
             {/if}
             {#if contextPercent != null}
-              <div class="stat-chip context-chip">
+              <div class="stat-chip context-chip" title={contextTitle}>
                 <div class="context-bar-track">
                   <div
                     class="context-bar-fill"
@@ -190,7 +220,10 @@
               </div>
             {/if}
             {#if contextPercent != null}
-              <div class="stat-chip context-chip compact-context-chip">
+              <div
+                class="stat-chip context-chip compact-context-chip"
+                title={contextTitle}
+              >
                 <span class="stat-label">{contextSummaryLabel}</span>
               </div>
             {/if}
@@ -323,7 +356,7 @@
     padding: 0 10px;
     border-radius: 999px;
     border: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
-    background: color-mix(in srgb, var(--panel) 60%, transparent);
+    background: var(--bg);
     min-width: 0;
   }
 
