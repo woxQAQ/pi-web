@@ -794,7 +794,7 @@
   }
 
   .rail-item.running .item-indicator {
-    background: var(--diff-added-accent);
+    background: var(--accent);
   }
 
   .item-label {
@@ -834,12 +834,8 @@
     width: 8px;
     height: 8px;
     border-radius: 999px;
-    background: var(--diff-added-accent);
-    box-shadow: 0 0 0 0
-      color-mix(in srgb, var(--diff-added-accent) 34%, transparent);
-    animation:
-      session-running-blink 1.1s ease-in-out infinite,
-      session-running-ping 1.8s ease-out infinite;
+    background: var(--accent);
+    animation: session-running-blink 1.1s ease-in-out infinite;
   }
 
   .older-sessions {
@@ -968,7 +964,7 @@
   }
 
   .modal-session-item.running .item-indicator {
-    background: var(--diff-added-accent);
+    background: var(--accent);
   }
 
   .modal-session-copy {
@@ -1108,20 +1104,6 @@
     }
   }
 
-  @keyframes session-running-ping {
-    0% {
-      box-shadow: 0 0 0 0
-        color-mix(in srgb, var(--diff-added-accent) 34%, transparent);
-    }
-    75% {
-      box-shadow: 0 0 0 6px
-        color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
-    }
-    100% {
-      box-shadow: 0 0 0 0
-        color-mix(in srgb, var(--diff-added-accent) 0%, transparent);
-    }
-  }
 
   @media (max-width: 700px) {
     .older-modal-overlay {
