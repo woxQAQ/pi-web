@@ -588,23 +588,23 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
-    padding: 8px 10px;
+    gap: 8px;
+    padding: 6px 10px 4px;
     color: var(--text-subtle);
     flex-shrink: 0;
   }
 
   .rail-title {
-    font-size: 0.68rem;
+    font-size: 0.64rem;
     font-weight: 600;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.06em;
   }
 
   .rail-actions {
     display: flex;
     align-items: center;
-    gap: 4px;
+    gap: 2px;
   }
 
   .rail-list {

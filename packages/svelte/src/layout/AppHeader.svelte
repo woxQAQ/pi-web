@@ -143,9 +143,9 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 16px;
-    height: 48px;
-    padding: 0 16px;
+    gap: 12px;
+    height: 44px;
+    padding: 0 14px;
     border-bottom: 1px solid var(--border);
     background: var(--bg-elevated);
     flex-shrink: 0;
@@ -155,7 +155,7 @@
   .header-leading {
     display: flex;
     align-items: center;
-    gap: 12px;
+    gap: 10px;
     min-width: 0;
   }
 
@@ -163,8 +163,8 @@
     display: none;
     align-items: center;
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     padding: 0;
     background: none;
     border: none;
@@ -173,8 +173,8 @@
   }
 
   .hamburger-icon {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
   }
 
   .header-brand {
@@ -194,15 +194,15 @@
   }
 
   .workspace-name {
-    font-size: 0.68rem;
-    line-height: 1.1;
+    font-size: 0.64rem;
+    line-height: 1.05;
     font-weight: 600;
     letter-spacing: 0.03em;
     color: var(--text-subtle);
   }
 
   .app-title {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
     line-height: 1;
     font-weight: 600;
     letter-spacing: 0.01em;
@@ -212,7 +212,7 @@
   .header-status {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 4px;
     flex-shrink: 0;
   }
 
@@ -223,24 +223,23 @@
   .theme-toggle {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    height: 26px;
-    padding: 0 10px;
+    gap: 5px;
+    height: 22px;
+    padding: 0 7px;
     border-radius: 999px;
-    border: 1px solid var(--border);
+    border: none;
     background: var(--panel);
-    font-size: 0.72rem;
+    font-size: 0.68rem;
     color: var(--text-subtle);
     cursor: pointer;
     transition:
       background 0.15s ease,
-      border-color 0.15s ease,
       color 0.15s ease,
       transform 0.15s ease;
   }
 
   .debug-toggle {
-    padding-right: 12px;
+    padding-right: 9px;
   }
 
   .sidebar-collapse:hover,
@@ -249,7 +248,6 @@
   .appearance-toggle:hover,
   .theme-toggle:hover {
     background: var(--surface-hover);
-    border-color: var(--border-strong);
     color: var(--text-muted);
     transform: translateY(-1px);
   }
@@ -260,12 +258,10 @@
   .appearance-toggle:focus-visible,
   .theme-toggle:focus-visible {
     outline: none;
-    border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--focus-ring);
   }
 
   .debug-toggle.active {
-    border-color: color-mix(in srgb, var(--accent) 36%, var(--border-strong));
     color: var(--text);
     background: var(--surface-active);
   }
@@ -275,8 +271,8 @@
   .appearance-toggle,
   .theme-toggle {
     justify-content: center;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     padding: 0;
   }
 
@@ -285,8 +281,8 @@
   .debug-icon,
   .appearance-icon,
   .theme-icon {
-    width: 16px;
-    height: 16px;
+    width: 14px;
+    height: 14px;
   }
 
   @media (max-width: 900px) {
@@ -300,11 +296,11 @@
 
     .app-header {
       height: auto;
-      padding: calc(env(safe-area-inset-top) + 8px) 12px 10px;
+      padding: calc(env(safe-area-inset-top) + 7px) 11px 9px;
     }
 
     .header-status {
-      gap: 8px;
+      gap: 4px;
     }
 
     .debug-label {
@@ -312,18 +308,18 @@
     }
 
     .debug-toggle {
-      padding-right: 10px;
+      padding-right: 7px;
     }
   }
 
   @media (max-width: 640px) {
     .app-header {
-      padding-inline: 10px;
-      gap: 10px;
+      padding-inline: 9px;
+      gap: 8px;
     }
 
     .header-leading {
-      gap: 10px;
+      gap: 8px;
     }
 
     .workspace-name,
@@ -335,14 +331,14 @@
     .outline-toggle,
     .appearance-toggle,
     .theme-toggle {
-      width: 30px;
-      height: 30px;
+      width: 24px;
+      height: 24px;
     }
 
     .debug-toggle {
-      height: 28px;
-      padding: 0 9px;
-      font-size: 0.68rem;
+      height: 24px;
+      padding: 0 7px;
+      font-size: 0.66rem;
     }
   }
 </style>

@@ -4,7 +4,7 @@
   import SessionRail from "../components/SessionRail.svelte";
   import type { SessionEntry } from "../composables/bridgeStore.svelte";
 
-  const WORKSPACE_FOLDER_ICON_SIZE = 15;
+  const RAIL_ACTION_ICON_SIZE = 13;
   const WORKSPACE_FOLDER_ICON_STYLE = "display: block;";
 
   let {
@@ -67,7 +67,7 @@
         onclick={onRegisterWorkspace}
       >
         <FolderPlus
-          size={WORKSPACE_FOLDER_ICON_SIZE}
+          size={RAIL_ACTION_ICON_SIZE}
           color="var(--text-subtle)"
           style={WORKSPACE_FOLDER_ICON_STYLE}
           aria-hidden="true"
@@ -80,7 +80,7 @@
         title="Refresh sessions"
         onclick={onRefreshSessions}
       >
-          <RefreshCw size={16} aria-hidden="true" />
+          <RefreshCw size={RAIL_ACTION_ICON_SIZE} aria-hidden="true" />
       </button>
     {/snippet}
   </SessionRail>
@@ -103,27 +103,25 @@
   }
 
   .rail-button {
-    width: 28px;
-    height: 28px;
+    width: 22px;
+    height: 22px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     padding: 0;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: none;
+    border-radius: 6px;
     background: transparent;
     color: var(--text-subtle);
     cursor: pointer;
     flex-shrink: 0;
     transition:
       background 0.15s ease,
-      border-color 0.15s ease,
       color 0.15s ease;
   }
 
   .rail-button:hover {
     background: var(--panel-2);
-    border-color: var(--border-strong);
     color: var(--text-muted);
   }
 
