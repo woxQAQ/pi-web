@@ -65,6 +65,11 @@ type DialogExtensionUIRequest = Extract<
   { method: "select" | "confirm" | "input" | "editor" }
 >;
 
+type PendingDisplayTranscriptDelta = {
+  payload: Omit<TranscriptDelta, "delta">;
+  pendingText: string;
+};
+
 export interface SessionEntry {
   id: string;
   name: string;
@@ -226,6 +231,14 @@ let workspaceEntriesRequestContextKey: string | null = null;
 let workspaceEntriesLoadedContextKey: string | null = null;
 let workspaceEntriesLoadedAt = 0;
 let gitRepoStateRequest: Promise<RpcGitRepoState | null> | null = null;
+let displayTranscriptDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+const pendingDisplayTranscriptDeltas = new Map<
+  string,
+  PendingDisplayTranscriptDelta
+>();
+
+const DISPLAY_TRANSCRIPT_DELTA_FRAME_MS = 16;
+const DISPLAY_TRANSCRIPT_DELTA_TARGET_UNITS = 8;
 
 const pendingRequests = new Map<
   string,
@@ -916,19 +929,142 @@ function normalizeTranscriptEntry(
   };
 }
 
+function pendingDisplayTranscriptDeltaKey(
+  payload: Pick<
+    TranscriptDelta,
+    | "sessionPath"
+    | "transcriptKey"
+    | "messageId"
+    | "role"
+    | "blockType"
+    | "contentIndex"
+  >,
+): string {
+  return [
+    payload.sessionPath ?? "",
+    payload.transcriptKey,
+    payload.messageId ?? "",
+    payload.role,
+    payload.blockType,
+    payload.contentIndex,
+  ].join("\u0000");
+}
+
+function deltaMatchesMessage(
+  delta: Pick<TranscriptDelta, "transcriptKey" | "messageId">,
+  message: Pick<TranscriptEntry, "transcriptKey" | "id">,
+): boolean {
+  if (message.transcriptKey && delta.transcriptKey === message.transcriptKey) {
+    return true;
+  }
+  return Boolean(message.id && delta.messageId === message.id);
+}
+
+function clearDisplayTranscriptDeltaTimer() {
+  if (!displayTranscriptDeltaTimer) return;
+  clearTimeout(displayTranscriptDeltaTimer);
+  displayTranscriptDeltaTimer = null;
+}
+
+function takeDisplayTranscriptDeltaChunk(text: string): string {
+  if (!text) return "";
+
+  let unitCount = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    const char = text[index]!;
+    unitCount += /[\u0000-\u00ff]/.test(char) ? 1 : 2;
+    const isBoundary = char === "\n" || /[.!?。！？]/.test(char);
+    if (isBoundary || unitCount >= DISPLAY_TRANSCRIPT_DELTA_TARGET_UNITS) {
+      return text.slice(0, index + 1);
+    }
+  }
+
+  return text;
+}
+
+function scheduleDisplayTranscriptDeltaFlush() {
+  if (
+    displayTranscriptDeltaTimer ||
+    pendingDisplayTranscriptDeltas.size === 0
+  ) {
+    return;
+  }
+  displayTranscriptDeltaTimer = setTimeout(() => {
+    displayTranscriptDeltaTimer = null;
+    flushDisplayTranscriptDeltasFrame();
+  }, DISPLAY_TRANSCRIPT_DELTA_FRAME_MS);
+}
+
+function appendTranscriptDeltas(deltas: readonly TranscriptDelta[]) {
+  if (deltas.length === 0) return;
+  _transcriptDeltas = [..._transcriptDeltas, ...deltas];
+  reconcilePendingTranscriptConfigEvent();
+}
+
+function flushDisplayTranscriptDeltasFrame() {
+  clearDisplayTranscriptDeltaTimer();
+  if (pendingDisplayTranscriptDeltas.size === 0) return;
+
+  const nextDeltas: TranscriptDelta[] = [];
+  for (const [key, pending] of pendingDisplayTranscriptDeltas) {
+    const chunk = takeDisplayTranscriptDeltaChunk(pending.pendingText);
+    if (!chunk) {
+      pendingDisplayTranscriptDeltas.delete(key);
+      continue;
+    }
+
+    nextDeltas.push({ ...pending.payload, delta: chunk });
+    pending.pendingText = pending.pendingText.slice(chunk.length);
+    if (!pending.pendingText) {
+      pendingDisplayTranscriptDeltas.delete(key);
+    }
+  }
+
+  appendTranscriptDeltas(nextDeltas);
+  scheduleDisplayTranscriptDeltaFlush();
+}
+
+function flushAllDisplayTranscriptDeltas() {
+  clearDisplayTranscriptDeltaTimer();
+  if (pendingDisplayTranscriptDeltas.size === 0) return;
+
+  const nextDeltas = [...pendingDisplayTranscriptDeltas.values()]
+    .map(pending =>
+      pending.pendingText
+        ? { ...pending.payload, delta: pending.pendingText }
+        : null,
+    )
+    .filter((delta): delta is TranscriptDelta => delta !== null);
+
+  pendingDisplayTranscriptDeltas.clear();
+  appendTranscriptDeltas(nextDeltas);
+}
+
+function clearDisplayTranscriptDeltasForMessage(
+  message: Pick<TranscriptEntry, "transcriptKey" | "id">,
+) {
+  for (const [key, pending] of pendingDisplayTranscriptDeltas) {
+    if (deltaMatchesMessage(pending.payload, message)) {
+      pendingDisplayTranscriptDeltas.delete(key);
+    }
+  }
+  if (pendingDisplayTranscriptDeltas.size === 0) {
+    clearDisplayTranscriptDeltaTimer();
+  }
+}
+
+function clearDisplayTranscriptDeltas() {
+  pendingDisplayTranscriptDeltas.clear();
+  clearDisplayTranscriptDeltaTimer();
+}
+
 function clearTranscriptDeltasForMessage(
   message: Pick<TranscriptEntry, "transcriptKey" | "id">,
 ) {
-  _transcriptDeltas = _transcriptDeltas.filter(delta => {
-    if (
-      message.transcriptKey &&
-      delta.transcriptKey === message.transcriptKey
-    ) {
-      return false;
-    }
-    if (message.id && delta.messageId === message.id) return false;
-    return true;
-  });
+  _transcriptDeltas = _transcriptDeltas.filter(
+    delta => !deltaMatchesMessage(delta, message),
+  );
+  clearDisplayTranscriptDeltasForMessage(message);
 }
 
 function clearTranscriptStreamsForMessage(
@@ -948,6 +1084,7 @@ function clearTranscriptStreamsForMessage(
 
 function clearTranscriptDeltas() {
   _transcriptDeltas = [];
+  clearDisplayTranscriptDeltas();
 }
 
 function clearTranscriptStreams() {
@@ -1199,11 +1336,34 @@ function applyTranscriptStart(payload: RpcTranscriptStartEvent) {
 function applyTranscriptDelta(payload: RpcTranscriptDeltaEvent) {
   const sessionPath = payload.sessionPath ?? null;
   if (shouldReplaceSessionTranscript(sessionPath)) {
+    clearDisplayTranscriptDeltas();
     _transcriptSessionPath = sessionPath;
   }
 
-  _transcriptDeltas = [..._transcriptDeltas, payload];
-  reconcilePendingTranscriptConfigEvent();
+  if (payload.blockType !== "text") {
+    flushAllDisplayTranscriptDeltas();
+    appendTranscriptDeltas([payload]);
+    return;
+  }
+
+  const deltaKey = pendingDisplayTranscriptDeltaKey(payload);
+  if (
+    pendingDisplayTranscriptDeltas.size > 0 &&
+    !pendingDisplayTranscriptDeltas.has(deltaKey)
+  ) {
+    flushAllDisplayTranscriptDeltas();
+  }
+
+  const existing = pendingDisplayTranscriptDeltas.get(deltaKey);
+  if (existing) {
+    existing.pendingText += payload.delta;
+  } else {
+    pendingDisplayTranscriptDeltas.set(deltaKey, {
+      payload: { ...payload },
+      pendingText: payload.delta,
+    });
+  }
+  scheduleDisplayTranscriptDeltaFlush();
 }
 
 function appendCompactErrorMessage(message: string) {
@@ -2132,6 +2292,7 @@ function connect() {
 function disconnect() {
   disposed = true;
   stopSessionRouteSync();
+  clearDisplayTranscriptDeltas();
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
