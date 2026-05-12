@@ -545,11 +545,29 @@ export interface RpcTranscriptSnapshotEvent extends RpcTranscriptPage {
   type: "transcript_snapshot";
 }
 
+export interface RpcTranscriptStartEvent {
+  type: "transcript_start";
+  sessionPath?: string;
+  message: RpcTranscriptMessage;
+  treeEntries?: RpcTreeEntry[];
+}
+
 export interface RpcTranscriptUpsertEvent {
   type: "transcript_upsert";
   sessionPath?: string;
   message: RpcTranscriptMessage;
   treeEntries?: RpcTreeEntry[];
+}
+
+export interface RpcTranscriptDeltaEvent {
+  type: "transcript_delta";
+  sessionPath?: string;
+  transcriptKey: string;
+  messageId?: string;
+  role: RpcTranscriptRole;
+  contentIndex: number;
+  blockType: "text" | "thinking" | "toolCall";
+  delta: string;
 }
 
 export interface RpcSessionStatsEvent {
@@ -850,7 +868,9 @@ export type BridgeEvent =
 /** Envelope for messages sent from server → browser client. */
 export type RpcBridgeEvent =
   | RpcTranscriptSnapshotEvent
+  | RpcTranscriptStartEvent
   | RpcTranscriptUpsertEvent
+  | RpcTranscriptDeltaEvent
   | RpcSessionStatsEvent
   | RpcQueueUpdateEvent
   | RpcAgentStartEvent

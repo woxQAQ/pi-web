@@ -14,7 +14,7 @@
   import CompatWarning from "../components/CompatWarning.svelte";
   import ComposerBar from "../components/ComposerBar.svelte";
   import SessionStatsBar from "../components/SessionStatsBar.svelte";
-  import type { ConnectionStatus, TranscriptEntry } from "../composables/bridgeStore.svelte";
+  import type { ConnectionStatus, TranscriptDelta, TranscriptEntry, TranscriptStream } from "../composables/bridgeStore.svelte";
   import type { RpcModelInfo } from "../utils/models";
   import type { PendingTranscriptSessionEvent } from "../utils/transcript";
 
@@ -23,6 +23,8 @@
     statusEntries = {} as Record<string, string>,
     activeSessionPath = null as string | null,
     transcript = [] as readonly TranscriptEntry[],
+    transcriptDeltas = [] as readonly TranscriptDelta[],
+    transcriptStreams = [] as readonly TranscriptStream[],
     transcriptHasOlder = false,
     transcriptInitialLoading = false,
     transcriptPageLoading = false,
@@ -91,6 +93,8 @@
     statusEntries?: Record<string, string>;
     activeSessionPath?: string | null;
     transcript?: readonly TranscriptEntry[];
+    transcriptDeltas?: readonly TranscriptDelta[];
+    transcriptStreams?: readonly TranscriptStream[];
     transcriptHasOlder?: boolean;
     transcriptInitialLoading?: boolean;
     transcriptPageLoading?: boolean;
@@ -178,6 +182,8 @@
     bind:this={chatTranscriptRef}
     sessionPath={activeSessionPath}
     messages={transcript}
+    {transcriptDeltas}
+    {transcriptStreams}
     hasOlder={transcriptHasOlder}
     initialLoading={transcriptInitialLoading}
     pageLoading={transcriptPageLoading}

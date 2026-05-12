@@ -10,7 +10,9 @@ import type {
   RpcSessionStats,
   RpcSlashCommand,
   RpcThinkingLevel,
+  RpcTranscriptDeltaEvent,
   RpcTreeEntry,
+  RpcTranscriptStartEvent,
   RpcWorkspaceEntry,
   RpcWorkspaceFile,
   RpcExtensionUIRequest,
@@ -54,6 +56,8 @@ const readTranscriptConfigState = transcriptConfigState as (
 export type ConnectionStatus = "connecting" | "connected" | "disconnected";
 
 export type TranscriptEntry = RpcTranscriptMessage;
+export type TranscriptDelta = RpcTranscriptDeltaEvent;
+export type TranscriptStream = RpcTranscriptStartEvent;
 export type TreeEntry = RpcTreeEntry;
 
 type DialogExtensionUIRequest = Extract<
@@ -245,6 +249,8 @@ let _transcriptNewestCursor = $state<string | null>(null);
 let _transcriptInitialLoading = $state(true);
 let _transcriptPageLoading = $state(false);
 let _transcript = $state<TranscriptEntry[]>([]);
+let _transcriptDeltas = $state.raw<TranscriptDelta[]>([]);
+let _transcriptStreams = $state.raw<TranscriptStream[]>([]);
 let _sessionState = $state<RpcSessionState | null>(null);
 let _pendingTranscriptConfigEvent = $state<
   (PendingTranscriptSessionEvent & { sessionPath: string | null }) | null
@@ -292,6 +298,8 @@ let _prefillText = $state<string | null>(null);
 
 let connectionStatus = $derived(_connectionStatus);
 let transcript = $derived(_transcript);
+let transcriptDeltas = $derived(_transcriptDeltas);
+let transcriptStreams = $derived(_transcriptStreams);
 let transcriptHasOlder = $derived(_transcriptHasOlder);
 let transcriptInitialLoading = $derived(_transcriptInitialLoading);
 let transcriptPageLoading = $derived(_transcriptPageLoading);
@@ -908,6 +916,44 @@ function normalizeTranscriptEntry(
   };
 }
 
+function clearTranscriptDeltasForMessage(
+  message: Pick<TranscriptEntry, "transcriptKey" | "id">,
+) {
+  _transcriptDeltas = _transcriptDeltas.filter(delta => {
+    if (
+      message.transcriptKey &&
+      delta.transcriptKey === message.transcriptKey
+    ) {
+      return false;
+    }
+    if (message.id && delta.messageId === message.id) return false;
+    return true;
+  });
+}
+
+function clearTranscriptStreamsForMessage(
+  message: Pick<TranscriptEntry, "transcriptKey" | "id">,
+) {
+  _transcriptStreams = _transcriptStreams.filter(stream => {
+    if (
+      message.transcriptKey &&
+      stream.message.transcriptKey === message.transcriptKey
+    ) {
+      return false;
+    }
+    if (message.id && stream.message.id === message.id) return false;
+    return true;
+  });
+}
+
+function clearTranscriptDeltas() {
+  _transcriptDeltas = [];
+}
+
+function clearTranscriptStreams() {
+  _transcriptStreams = [];
+}
+
 function replaceTranscript(
   entries: readonly (TranscriptEntry | RpcTranscriptMessage)[],
   sessionPath: string | null = _transcriptSessionPath,
@@ -916,6 +962,8 @@ function replaceTranscript(
   _rawTranscript = entries.map((entry, idx) =>
     normalizeTranscriptEntry(entry, `snapshot:${idx}`),
   ) as TranscriptEntry[];
+  clearTranscriptDeltas();
+  clearTranscriptStreams();
   syncTranscript();
   if (prevSp !== sessionPath || _rawTranscript.length === 0) {
     clearPendingTranscriptConfigEvent();
@@ -952,6 +1000,8 @@ function applyTranscriptPage(
   } else {
     _rawTranscript = normalized;
   }
+  clearTranscriptDeltas();
+  clearTranscriptStreams();
   syncTranscript();
 
   const nsp = page.sessionPath ?? null;
@@ -1102,6 +1152,8 @@ function upsertTranscriptMessage(
     const updated = currentRawTranscriptEntries().slice();
     updated[idx] = { ...updated[idx], ...normalized };
     _rawTranscript = updated as TranscriptEntry[];
+    clearTranscriptDeltasForMessage(normalized);
+    clearTranscriptStreamsForMessage(normalized);
     syncTranscript();
     reconcilePendingTranscriptConfigEvent();
     return;
@@ -1110,7 +1162,47 @@ function upsertTranscriptMessage(
   const nt = currentRawTranscriptEntries().slice();
   nt.push(normalized);
   _rawTranscript = nt as TranscriptEntry[];
+  clearTranscriptDeltasForMessage(normalized);
+  clearTranscriptStreamsForMessage(normalized);
   syncTranscript();
+  reconcilePendingTranscriptConfigEvent();
+}
+
+function applyTranscriptStart(payload: RpcTranscriptStartEvent) {
+  const sessionPath = payload.sessionPath ?? null;
+  if (shouldReplaceSessionTranscript(sessionPath)) {
+    _transcriptSessionPath = sessionPath;
+  }
+
+  const normalized = normalizeTranscriptEntry(
+    payload.message,
+    `live:${_transcriptStreams.length}`,
+  );
+  const nextStream = {
+    ...payload,
+    message: normalized,
+  };
+  const idx = _transcriptStreams.findIndex(stream => {
+    if (stream.message.transcriptKey === normalized.transcriptKey) return true;
+    return Boolean(normalized.id && stream.message.id === normalized.id);
+  });
+  if (idx >= 0) {
+    const nextStreams = _transcriptStreams.slice();
+    nextStreams[idx] = nextStream;
+    _transcriptStreams = nextStreams;
+  } else {
+    _transcriptStreams = [..._transcriptStreams, nextStream];
+  }
+  reconcilePendingTranscriptConfigEvent();
+}
+
+function applyTranscriptDelta(payload: RpcTranscriptDeltaEvent) {
+  const sessionPath = payload.sessionPath ?? null;
+  if (shouldReplaceSessionTranscript(sessionPath)) {
+    _transcriptSessionPath = sessionPath;
+  }
+
+  _transcriptDeltas = [..._transcriptDeltas, payload];
   reconcilePendingTranscriptConfigEvent();
 }
 
@@ -1801,6 +1893,14 @@ function handleEvent(payload: RpcBridgeEvent) {
       if (Array.isArray(data.messages)) applyTranscriptPage(data, "replace");
       break;
     }
+    case "transcript_start": {
+      const data = payload as RpcTranscriptStartEvent;
+      if (data.message) applyTranscriptStart(data);
+      if (Array.isArray(data.treeEntries)) {
+        applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null);
+      }
+      break;
+    }
     case "transcript_upsert": {
       const data = payload as RpcTranscriptUpsertEvent;
       if (data.message)
@@ -1808,6 +1908,11 @@ function handleEvent(payload: RpcBridgeEvent) {
       if (Array.isArray(data.treeEntries)) {
         applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null);
       }
+      break;
+    }
+    case "transcript_delta": {
+      const data = payload as RpcTranscriptDeltaEvent;
+      applyTranscriptDelta(data);
       break;
     }
     case "session_stats": {
@@ -2055,6 +2160,12 @@ export function initBridge() {
     },
     get transcript() {
       return transcript;
+    },
+    get transcriptDeltas() {
+      return transcriptDeltas;
+    },
+    get transcriptStreams() {
+      return transcriptStreams;
     },
     get transcriptHasOlder() {
       return transcriptHasOlder;

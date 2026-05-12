@@ -370,6 +370,12 @@
   let displayedTranscript = $derived(
     activeDebugSession?.transcript ?? bridge.transcript,
   );
+  let displayedTranscriptDeltas = $derived(
+    activeDebugSession ? [] : bridge.transcriptDeltas,
+  );
+  let displayedTranscriptStreams = $derived(
+    activeDebugSession ? [] : bridge.transcriptStreams,
+  );
   let displayedTranscriptHasOlder = $derived(
     activeDebugSession ? false : bridge.transcriptHasOlder,
   );
@@ -1236,6 +1242,8 @@
         statusEntries={bridge.statusEntries}
         activeSessionPath={displayedActiveSessionPath}
         transcript={displayedTranscript}
+        transcriptDeltas={displayedTranscriptDeltas}
+        transcriptStreams={displayedTranscriptStreams}
         transcriptHasOlder={displayedTranscriptHasOlder}
         transcriptInitialLoading={displayedTranscriptInitialLoading}
         transcriptPageLoading={displayedTranscriptPageLoading}

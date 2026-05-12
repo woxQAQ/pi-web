@@ -38,7 +38,6 @@
   let postProcessScheduled = false;
   let forceCodeRender = false;
   let forceMermaidRender = false;
-  const rendererId = Math.random().toString(36).slice(2);
 
   function markdownBody(): HTMLElement | null {
     return container?.querySelector<HTMLElement>(".markdown-body") ?? null;
@@ -450,6 +449,7 @@
     void [content, streaming, deferMermaidErrors];
     schedulePostProcess();
   });
+
 </script>
 
 <div bind:this={container} role="button" tabindex="0" onclick={handleClick} onkeydown={(e) => (e.key === "Enter" || e.key === " ") && handleClickTarget(e.target)}>

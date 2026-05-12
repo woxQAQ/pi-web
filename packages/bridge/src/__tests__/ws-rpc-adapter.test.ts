@@ -1410,48 +1410,199 @@ describe("WsRpcAdapter", () => {
         call => JSON.parse(call[0] as string),
       );
 
-      expect(sendCalls).toHaveLength(3);
+      expect(sendCalls).toHaveLength(2);
       expect(sendCalls[0].type).toBe("event");
       expect(sendCalls[0].payload).toMatchObject({
-        type: "transcript_upsert",
+        type: "transcript_start",
         message: {
           transcriptKey: "live:1",
           role: "assistant",
-          content: "Hi",
+          content: [],
         },
       });
       expect(sendCalls[0].payload.treeEntries).toEqual(expect.any(Array));
       expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "text",
+        delta: "Hi there",
+      });
+      expect(sendCalls[1].payload.treeEntries).toBeUndefined();
+    });
+
+    it("streams assistant message deltas without resending full messages", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hel" }],
+        },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "Hel",
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[0].payload).toMatchObject({
+        type: "transcript_start",
+        message: {
+          transcriptKey: "live:1",
+          id: "assistant-1",
+          role: "assistant",
+          content: [],
+        },
+      });
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "text",
+        delta: "Hel",
+      });
+      expect(sendCalls[1].payload.message).toBeUndefined();
+      expect(sendCalls[1].payload.treeEntries).toBeUndefined();
+    });
+
+    it("prefers assistant delta events over synthesized transcript diffs", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello\n\nHello world" }],
+        },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "Hello world",
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "text",
+        delta: "Hello world",
+      });
+    });
+
+    it("ignores late transcript deltas after message_end", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_end",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello" }],
+        },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello there" }],
+        },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: " there",
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 10));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+      const transcriptCalls = sendCalls.filter(
+        call =>
+          call.type === "event" &&
+          [
+            "transcript_start",
+            "transcript_upsert",
+            "transcript_delta",
+          ].includes(call.payload?.type),
+      );
+
+      expect(transcriptCalls).toHaveLength(2);
+      expect(transcriptCalls[0].payload).toMatchObject({
+        type: "transcript_start",
+        message: {
+          transcriptKey: "live:1",
+          id: "assistant-1",
+          role: "assistant",
+          content: [],
+        },
+      });
+      expect(transcriptCalls[1].payload).toMatchObject({
         type: "transcript_upsert",
         message: {
           transcriptKey: "live:1",
           id: "assistant-1",
           role: "assistant",
-          content: "Hi there",
+          content: [{ type: "text", text: "Hello" }],
         },
       });
-      expect(sendCalls[1].payload.treeEntries).toEqual(
-        expect.arrayContaining([
-          expect.objectContaining({
-            id: "assistant-1",
-            isActive: true,
-          }),
-        ]),
-      );
-      expect(sendCalls[2].payload).toMatchObject({
-        type: "session_stats",
-        stats: {
-          tokens: 1000,
-          contextWindow: 8000,
-          percent: 12.5,
-          messageCount: 1,
-          cost: 0,
-          inputTokens: 0,
-          outputTokens: 0,
-          cacheReadTokens: 0,
-          cacheWriteTokens: 0,
-        },
-      });
+      expect(
+        transcriptCalls.some(call => call.payload?.type === "transcript_delta"),
+      ).toBe(false);
     });
 
     it("shapes agent_start events explicitly", () => {
@@ -4358,20 +4509,22 @@ describe("WsRpcAdapter", () => {
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
       );
-      const transcriptUpserts = sendCalls.filter(
+      const transcriptStarts = sendCalls.filter(
         call =>
-          call.type === "event" && call.payload.type === "transcript_upsert",
+          call.type === "event" && call.payload.type === "transcript_start",
       );
-      const liveUpsert = transcriptUpserts.find(
-        call => call.payload.message.content === "Live before switch",
+      const liveStart = transcriptStarts.find(
+        call => call.payload.sessionPath !== sessionFile,
       );
-      const selectedUpsert = transcriptUpserts.find(
-        call => call.payload.message.content === "Selected after switch",
+      const selectedStart = transcriptStarts.find(
+        call => call.payload.sessionPath === sessionFile,
       );
 
-      expect(liveUpsert?.payload.message.transcriptKey).toBe("live:1");
-      expect(selectedUpsert?.payload.message.transcriptKey).toBe("live:1");
-      expect(selectedUpsert?.payload.sessionPath).toBe(sessionFile);
+      expect(liveStart?.payload.message.transcriptKey).toBe("live:1");
+      expect(liveStart?.payload.message.content).toEqual([]);
+      expect(selectedStart?.payload.message.transcriptKey).toBe("live:1");
+      expect(selectedStart?.payload.message.content).toEqual([]);
+      expect(selectedStart?.payload.sessionPath).toBe(sessionFile);
 
       fs.rmSync(tmpDir, { recursive: true, force: true });
     });

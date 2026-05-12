@@ -17,7 +17,6 @@ import type {
   BridgeSessionActions,
   BridgeSessionEvents,
   BridgeSessionState,
-  BridgeLiveEvent,
 } from "./live-session.js";
 import { DetachedSessionRegistry } from "./session-registry.js";
 import type {
@@ -46,9 +45,12 @@ import type {
   RpcSessionStatsEvent,
   RpcSlashCommand,
   RpcThinkingLevel,
+  RpcTranscriptContentBlock,
   RpcTranscriptMessage,
+  RpcTranscriptDeltaEvent,
   RpcTranscriptPage,
   RpcTranscriptSnapshotEvent,
+  RpcTranscriptStartEvent,
   RpcTranscriptUpsertEvent,
   RpcTreeEntry,
   RpcWorkspaceEntry,
@@ -138,6 +140,8 @@ interface TranscriptSyncState {
   nextEphemeralId: number;
   messageIdToKey: Map<string, string>;
   openKeysByRole: Map<string, string[]>;
+  lastMessagesByKey: Map<string, RpcTranscriptMessage>;
+  closedKeys: Set<string>;
 }
 
 interface SessionSummary {
@@ -2136,6 +2140,140 @@ function extractEventMessage(event: object): Record<string, unknown> | null {
   return null;
 }
 
+function extractAssistantMessageDeltaEvent(event: object): {
+  blockType: RpcTranscriptDeltaEvent["blockType"];
+  contentIndex: number;
+  delta: string;
+} | null {
+  if (!event || typeof event !== "object") return null;
+
+  const typedEvent = event as { assistantMessageEvent?: unknown };
+  const assistantMessageEvent = typedEvent.assistantMessageEvent;
+  if (!assistantMessageEvent || typeof assistantMessageEvent !== "object") {
+    return null;
+  }
+
+  const data = assistantMessageEvent as {
+    type?: unknown;
+    contentIndex?: unknown;
+    delta?: unknown;
+  };
+  if (
+    typeof data.contentIndex !== "number" ||
+    !Number.isInteger(data.contentIndex) ||
+    data.contentIndex < 0 ||
+    typeof data.delta !== "string"
+  ) {
+    return null;
+  }
+
+  switch (data.type) {
+    case "text_delta":
+      return {
+        blockType: "text",
+        contentIndex: data.contentIndex,
+        delta: data.delta,
+      };
+    case "thinking_delta":
+      return {
+        blockType: "thinking",
+        contentIndex: data.contentIndex,
+        delta: data.delta,
+      };
+    case "toolcall_delta":
+      return {
+        blockType: "toolCall",
+        contentIndex: data.contentIndex,
+        delta: data.delta,
+      };
+    default:
+      return null;
+  }
+}
+
+function transcriptContentItems(
+  message: RpcTranscriptMessage,
+): readonly (string | RpcTranscriptContentBlock)[] {
+  if (Array.isArray(message.content)) return message.content;
+  if (typeof message.content === "string") return [message.content];
+  if (typeof message.text === "string") return [message.text];
+  return [];
+}
+
+function stringFromToolArguments(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (value === undefined || value === null) return "";
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return "";
+  }
+}
+
+function streamTextForContentItem(
+  item: string | RpcTranscriptContentBlock | undefined,
+): { blockType: RpcTranscriptDeltaEvent["blockType"]; text: string } | null {
+  if (typeof item === "string") return { blockType: "text", text: item };
+  if (!item || typeof item !== "object") return null;
+
+  switch (item.type) {
+    case "text":
+      return { blockType: "text", text: item.text };
+    case "thinking":
+      return { blockType: "thinking", text: item.thinking };
+    case "toolCall":
+      return {
+        blockType: "toolCall",
+        text: stringFromToolArguments(item.arguments),
+      };
+    default:
+      return null;
+  }
+}
+
+function synthesizeTranscriptDelta(
+  previous: RpcTranscriptMessage | undefined,
+  next: RpcTranscriptMessage,
+): Omit<
+  RpcTranscriptDeltaEvent,
+  "type" | "sessionPath" | "transcriptKey" | "messageId" | "role"
+> | null {
+  const previousItems = previous ? transcriptContentItems(previous) : [];
+  const nextItems = transcriptContentItems(next);
+
+  for (let index = 0; index < nextItems.length; index += 1) {
+    const nextText = streamTextForContentItem(nextItems[index]);
+    if (!nextText) continue;
+
+    const previousText = streamTextForContentItem(previousItems[index]);
+    const previousValue =
+      previousText?.blockType === nextText.blockType ? previousText.text : "";
+    if (!nextText.text.startsWith(previousValue)) continue;
+
+    const delta = nextText.text.slice(previousValue.length);
+    if (!delta) continue;
+
+    return {
+      blockType: nextText.blockType,
+      contentIndex: index,
+      delta,
+    };
+  }
+
+  return null;
+}
+
+function streamStartMessage(
+  message: RpcTranscriptMessage,
+): RpcTranscriptMessage {
+  if (message.role !== "assistant") return message;
+  return {
+    ...message,
+    content: [],
+    text: undefined,
+  };
+}
+
 function findLatestModelInfo(branch: readonly SessionEntry[]): RpcModel | null {
   for (let index = branch.length - 1; index >= 0; index -= 1) {
     const entry = branch[index];
@@ -3109,28 +3247,34 @@ class TranscriptProjector {
     nextEphemeralId: 0,
     messageIdToKey: new Map(),
     openKeysByRole: new Map(),
+    lastMessagesByKey: new Map(),
+    closedKeys: new Set(),
   };
 
   syncPage(page: {
     messages: readonly RpcTranscriptMessage[];
     sessionPath?: string | null;
   }): void {
+    const previousClosedKeys = this.state.closedKeys;
     this.state = {
       sessionPath: page.sessionPath ?? null,
       nextEphemeralId: 0,
       messageIdToKey: new Map(),
       openKeysByRole: new Map(),
+      lastMessagesByKey: new Map(),
+      closedKeys: new Set(),
     };
 
     for (const message of page.messages) {
-      if (!message.id) {
-        continue;
+      const key = message.transcriptKey ?? message.id;
+      if (!key) continue;
+      if (message.id) {
+        this.state.messageIdToKey.set(message.id, key);
       }
-
-      this.state.messageIdToKey.set(
-        message.id,
-        message.transcriptKey ?? message.id,
-      );
+      if (previousClosedKeys.has(key)) {
+        this.state.closedKeys.add(key);
+      }
+      this.state.lastMessagesByKey.set(key, message);
     }
   }
 
@@ -3146,7 +3290,7 @@ class TranscriptProjector {
     eventType: "message_start" | "message_update" | "message_end",
     event: object,
     sessionPath: string | null,
-  ): RpcTranscriptUpsertEvent | null {
+  ): RpcTranscriptStartEvent | RpcTranscriptUpsertEvent | null {
     const message = extractEventMessage(event);
     if (!message) return null;
 
@@ -3159,12 +3303,71 @@ class TranscriptProjector {
 
     const transcriptMessage = this.toTranscriptMessage(message, transcriptKey);
     if (!transcriptMessage) return null;
+    const payloadMessage =
+      eventType === "message_start"
+        ? streamStartMessage(transcriptMessage)
+        : transcriptMessage;
+    this.rememberTranscriptMessage(payloadMessage);
 
     return {
-      type: "transcript_upsert",
+      type:
+        eventType === "message_start"
+          ? "transcript_start"
+          : "transcript_upsert",
       sessionPath: sessionPath ?? undefined,
-      message: transcriptMessage,
+      message: payloadMessage,
     };
+  }
+
+  projectDeltaEvent(
+    event: object,
+    sessionPath: string | null,
+  ): RpcTranscriptDeltaEvent | null {
+    const message = extractEventMessage(event);
+    if (!message) return null;
+
+    if (this.state.sessionPath !== sessionPath) {
+      this.syncPage({ messages: [], sessionPath });
+    }
+
+    const transcriptKey = this.resolveTranscriptKey("message_update", message);
+    if (!transcriptKey) return null;
+    if (this.state.closedKeys.has(transcriptKey)) {
+      return null;
+    }
+
+    const role = typeof message.role === "string" ? message.role : null;
+    if (!role) return null;
+
+    const transcriptMessage = this.toTranscriptMessage(message, transcriptKey);
+    if (!transcriptMessage) return null;
+
+    const deltaEvent =
+      extractAssistantMessageDeltaEvent(event) ??
+      synthesizeTranscriptDelta(
+        this.state.lastMessagesByKey.get(transcriptKey),
+        transcriptMessage,
+      );
+    this.rememberTranscriptMessage(transcriptMessage);
+    if (!deltaEvent) return null;
+
+    return {
+      type: "transcript_delta",
+      sessionPath: sessionPath ?? undefined,
+      transcriptKey,
+      messageId: typeof message.id === "string" ? message.id : undefined,
+      role,
+      ...deltaEvent,
+    };
+  }
+
+  private rememberTranscriptMessage(message: RpcTranscriptMessage): void {
+    const key = message.transcriptKey ?? message.id;
+    if (!key) return;
+    this.state.lastMessagesByKey.set(key, message);
+    if (message.id) {
+      this.state.messageIdToKey.set(message.id, key);
+    }
   }
 
   private nextTranscriptKey(): string {
@@ -3181,6 +3384,7 @@ class TranscriptProjector {
   }
 
   private markRoleKeyOpen(role: string, key: string): void {
+    this.state.closedKeys.delete(key);
     const keys = this.roleOpenKeys(role);
     if (!keys.includes(key)) {
       keys.push(key);
@@ -3188,6 +3392,7 @@ class TranscriptProjector {
   }
 
   private markRoleKeyClosed(role: string, key: string): void {
+    this.state.closedKeys.add(key);
     const keys = this.state.openKeysByRole.get(role);
     if (!keys) return;
     const next = keys.filter(candidate => candidate !== key);
@@ -3768,6 +3973,18 @@ export class WsRpcAdapter {
     event: object,
     sessionPath: string | null,
   ): void {
+    if (eventType === "message_update") {
+      const deltaPayload = this.transcriptProjector.projectDeltaEvent(
+        event,
+        sessionPath,
+      );
+      if (deltaPayload) {
+        this.sendEvent(deltaPayload);
+        return;
+      }
+      return;
+    }
+
     const payload = this.transcriptProjector.projectLifecycleEvent(
       eventType,
       event,

@@ -1,9 +1,17 @@
 <script lang="ts">
-  import type { RpcImageContent } from "@pi-web/bridge/types";
+  import type {
+    RpcImageContent,
+    RpcTranscriptContent,
+    RpcTranscriptContentBlock,
+  } from "@pi-web/bridge/types";
   import Pencil from "lucide-svelte/icons/pencil";
   import Sparkle from "lucide-svelte/icons/sparkle";
   import { onMount } from "svelte";
-  import type { TranscriptEntry } from "../composables/bridgeStore.svelte";
+  import type {
+    TranscriptDelta,
+    TranscriptEntry,
+    TranscriptStream,
+  } from "../composables/bridgeStore.svelte";
   import { userMessageCopyText } from "../utils/messageCopy";
   import {
     buildTranscriptDisplayItems,
@@ -32,6 +40,8 @@
   let {
     sessionPath = null as string | null,
     messages = [] as readonly TranscriptEntry[],
+    transcriptDeltas = [] as readonly TranscriptDelta[],
+    transcriptStreams = [] as readonly TranscriptStream[],
     hasOlder = false,
     initialLoading = false,
     pageLoading = false,
@@ -47,6 +57,8 @@
   }: {
     sessionPath?: string | null;
     messages?: readonly TranscriptEntry[];
+    transcriptDeltas?: readonly TranscriptDelta[];
+    transcriptStreams?: readonly TranscriptStream[];
     hasOlder?: boolean;
     initialLoading?: boolean;
     pageLoading?: boolean;
@@ -70,8 +82,20 @@
   const scroll = createChatTranscriptScrollState();
 
   // ---- derived ----
+  let streamDisplayMessages = $derived.by(() => {
+    const messageKeys = new Set(
+      messages.map((message, index) => messageStableKey(message, index)),
+    );
+
+    return transcriptStreams
+      .filter(stream => !messageKeys.has(messageStableKey(stream.message, -1)))
+      .map(stream => messageWithTranscriptDeltas(stream.message, -1));
+  });
   let displayItems = $derived(
-    buildTranscriptDisplayItems(messages, { pendingSessionEvent: pendingTranscriptConfigEvent }),
+    buildTranscriptDisplayItems(
+      [...messages, ...streamDisplayMessages],
+      { pendingSessionEvent: pendingTranscriptConfigEvent },
+    ),
   );
   let showBusyIndicator = $derived(isStreaming || isCompacting);
   let streamingAssistantMessageIndex = $derived.by(() => {
@@ -88,6 +112,125 @@
   // ---- display helpers ----
   function messageStableKey(msg: TranscriptEntry, index: number): string {
     return msg.transcriptKey ?? msg.id ?? `message:${index}`;
+  }
+
+  function deltasForMessage(msg: TranscriptEntry, index: number): readonly TranscriptDelta[] {
+    const key = index >= 0 ? messageStableKey(msg, index) : msg.transcriptKey ?? msg.id ?? "";
+    return transcriptDeltas.filter(delta => {
+      if (delta.transcriptKey === key) return true;
+      return Boolean(msg.id && delta.messageId === msg.id);
+    });
+  }
+
+  function cloneTranscriptContent(
+    content: RpcTranscriptContent | undefined,
+  ): RpcTranscriptContent | undefined {
+    if (!Array.isArray(content)) return content;
+    return content.map(item =>
+      item && typeof item === "object" ? { ...item } : item,
+    );
+  }
+
+  function defaultDeltaContentBlock(
+    blockType: TranscriptDelta["blockType"],
+  ): RpcTranscriptContentBlock {
+    switch (blockType) {
+      case "thinking":
+        return { type: "thinking", thinking: "" };
+      case "toolCall":
+        return { type: "toolCall", name: "unknown", arguments: "" };
+      case "text":
+        return { type: "text", text: "" };
+    }
+  }
+
+  function appendDeltaToContentBlock(
+    block: string | RpcTranscriptContentBlock | undefined,
+    delta: TranscriptDelta,
+  ): string | RpcTranscriptContentBlock {
+    if (delta.blockType === "text") {
+      if (typeof block === "string") return block + delta.delta;
+      if (block?.type === "text") {
+        return { ...block, text: `${block.text}${delta.delta}` };
+      }
+      return { type: "text", text: delta.delta };
+    }
+
+    if (delta.blockType === "thinking") {
+      if (block && typeof block === "object" && block.type === "thinking") {
+        return { ...block, thinking: `${block.thinking}${delta.delta}` };
+      }
+      return { type: "thinking", thinking: delta.delta };
+    }
+
+    if (block && typeof block === "object" && block.type === "toolCall") {
+      const currentArguments =
+        typeof block.arguments === "string"
+          ? block.arguments
+          : block.arguments
+            ? JSON.stringify(block.arguments)
+            : "";
+      return {
+        ...block,
+        arguments: `${currentArguments}${delta.delta}`,
+      };
+    }
+
+    return {
+      type: "toolCall",
+      name: "unknown",
+      arguments: delta.delta,
+    };
+  }
+
+  function messageWithTranscriptDeltas(
+    msg: TranscriptEntry,
+    index: number,
+  ): TranscriptEntry {
+    const deltas = deltasForMessage(msg, index);
+    if (deltas.length === 0) return msg;
+
+    let content = cloneTranscriptContent(msg.content);
+    for (const delta of deltas) {
+      if (
+        delta.blockType === "text" &&
+        delta.contentIndex === 0 &&
+        typeof content === "string"
+      ) {
+        content += delta.delta;
+        continue;
+      }
+
+      const contentItems = Array.isArray(content)
+        ? content.slice()
+        : typeof content === "string"
+          ? [{ type: "text" as const, text: content }]
+          : [];
+
+      while (contentItems.length <= delta.contentIndex) {
+        contentItems.push(defaultDeltaContentBlock(delta.blockType));
+      }
+
+      contentItems[delta.contentIndex] = appendDeltaToContentBlock(
+        contentItems[delta.contentIndex],
+        delta,
+      );
+      content = contentItems;
+    }
+
+    return {
+      ...msg,
+      id: msg.id ?? deltas.at(-1)?.messageId,
+      role: deltas.at(-1)?.role ?? msg.role,
+      content,
+    };
+  }
+
+  function displayContentBlocks(msg: TranscriptEntry, index: number) {
+    // Stream display messages already have deltas applied before they enter
+    // `displayItems`, so avoid replaying the same deltas a second time.
+    if (index >= messages.length) return contentBlocks(msg);
+    return contentBlocks(messageWithTranscriptDeltas(msg, index));
   }
 
   function toolBlockIdentity(block: ToolContentBlock, blockIndex: number): string {
@@ -158,7 +301,11 @@
   }
 
   function shouldDeferMessageMarkdownErrors(msg: TranscriptEntry, mi: number): boolean {
-    return msg.role === "assistant" && mi === streamingAssistantMessageIndex;
+    return (
+      msg.role === "assistant" &&
+      (mi === streamingAssistantMessageIndex ||
+        deltasForMessage(msg, mi).length > 0)
+    );
   }
 
   function previewText(text: string, maxLines: number = 8): string {
@@ -399,14 +546,32 @@
   $effect(() => { previousSessionPath = sessionPath; });
 
   $effect(() => {
-    void [sessionPath, messages, hasOlder, initialLoading, pageLoading, showBusyIndicator];
+    void [
+      sessionPath,
+      messages,
+      transcriptDeltas,
+      transcriptStreams,
+      hasOlder,
+      initialLoading,
+      pageLoading,
+      showBusyIndicator,
+    ];
     void scroll.syncViewportAfterRender(container, {
       sessionPath, hasOlder, initialLoading, pageLoading, onLoadOlder,
     });
   });
 
   $effect(() => {
-    void [sessionPath, displayItems, hasOlder, initialLoading, pageLoading, showBusyIndicator];
+    void [
+      sessionPath,
+      displayItems,
+      transcriptDeltas,
+      transcriptStreams,
+      hasOlder,
+      initialLoading,
+      pageLoading,
+      showBusyIndicator,
+    ];
     return () => {
       scroll.prepareForRender(container);
     };
@@ -604,7 +769,7 @@
               <div class="message-debug-id">ID {messageIdLabel(item.message)}</div>
             {/if}
 
-            {#each contentBlocks(item.message) as block, bIdx (contentBlockKey(item.message, item.messageIndex, block, bIdx))}
+            {#each displayContentBlocks(item.message, item.messageIndex) as block, bIdx (contentBlockKey(item.message, item.messageIndex, block, bIdx))}
               {#if block.kind === "system"}
                 <article class="system-block" data-system-type={block.systemType}>
                   <div class="system-block-header">
