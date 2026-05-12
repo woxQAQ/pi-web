@@ -160,18 +160,12 @@
     readWorkspaceFile?: (path: string) => Promise<RpcWorkspaceFile>;
   } = $props();
 
-  let chatTranscriptRef: ChatTranscript | null = $state(null);
+  export function preserveTranscriptScroll() {}
 
-  export function preserveTranscriptScroll() {
-    chatTranscriptRef?.preserveScroll();
-  }
+  export function rememberTranscriptScroll() {}
 
-  export function rememberTranscriptScroll() {
-    chatTranscriptRef?.rememberSessionScroll();
-  }
-
-  export function scrollToTranscriptEntry(entryId: string): boolean {
-    return chatTranscriptRef?.scrollToMessageId(entryId) ?? false;
+  export function scrollToTranscriptEntry(_entryId: string): boolean {
+    return false;
   }
 </script>
 
@@ -179,7 +173,6 @@
   <CompatWarning visible={compatWarningVisible} />
 
   <ChatTranscript
-    bind:this={chatTranscriptRef}
     sessionPath={activeSessionPath}
     messages={transcript}
     {transcriptDeltas}

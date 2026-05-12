@@ -6,7 +6,6 @@
   } from "@pi-web/bridge/types";
   import Pencil from "lucide-svelte/icons/pencil";
   import Sparkle from "lucide-svelte/icons/sparkle";
-  import { onMount } from "svelte";
   import type {
     TranscriptDelta,
     TranscriptEntry,
@@ -31,7 +30,6 @@
     createChatTranscriptBlockState,
     createChatTranscriptLightboxState,
   } from "./chatTranscriptBlockState.svelte";
-  import { createChatTranscriptScrollState } from "./chatTranscriptScrollState.svelte";
   import DiffView from "./DiffView.svelte";
   import HighlightedCode from "./HighlightedCode.svelte";
   import ImageLightbox from "./ImageLightbox.svelte";
@@ -79,7 +77,6 @@
   // ---- state modules ----
   const blockState = createChatTranscriptBlockState();
   const lightbox = createChatTranscriptLightboxState();
-  const scroll = createChatTranscriptScrollState();
 
   // ---- derived ----
   let streamDisplayMessages = $derived.by(() => {
@@ -448,25 +445,9 @@
     });
   }
 
-  // ---- scroll glue ----
-  function handleScroll() {
-    scroll.handleScroll(container, {
-      hasOlder, initialLoading, pageLoading, onLoadOlder,
-    });
-  }
-
   function requestOlderTranscript() {
-    scroll.requestOlderTranscript(container, {
-      hasOlder, initialLoading, pageLoading, onLoadOlder,
-    });
-  }
-
-  function rememberSessionScroll(sp: string | null = sessionPath) {
-    scroll.rememberSessionScroll(container, sp);
-  }
-
-  function preserveScroll() {
-    scroll.preserveScroll(container);
+    if (!hasOlder || initialLoading || pageLoading) return;
+    onLoadOlder();
   }
 
   // ---- copy handling ----
@@ -517,80 +498,11 @@
     event.preventDefault();
   }
 
-  // ---- exposed API ----
-  export { preserveScroll, rememberSessionScroll };
-
-  function scrollToMessageId(messageId: string): boolean {
-    return scroll.scrollToMessageId(container, messageId);
-  }
-  export { scrollToMessageId };
-
-  // ---- effects ----
-  $effect(() => {
-    void sessionPath;
-    if (sessionPath && previousSessionPath !== null && previousSessionPath !== sessionPath) {
-      rememberSessionScroll(previousSessionPath);
-    }
-    scroll.pendingSessionRestore = sessionPath
-      ? (() => {
-          const snapshot = scroll.sessionScrollSnapshots.get(sessionPath);
-          return snapshot
-            ? { sessionPath, snapshot, waitingForOlder: false }
-            : null;
-        })()
-      : null;
-    scroll.topLoadArmed = true;
-  });
-
-  let previousSessionPath = $state<string | null>(null);
-  $effect(() => { previousSessionPath = sessionPath; });
-
-  $effect(() => {
-    void [
-      sessionPath,
-      messages,
-      transcriptDeltas,
-      transcriptStreams,
-      hasOlder,
-      initialLoading,
-      pageLoading,
-      showBusyIndicator,
-    ];
-    void scroll.syncViewportAfterRender(container, {
-      sessionPath, hasOlder, initialLoading, pageLoading, onLoadOlder,
-    });
-  });
-
-  $effect(() => {
-    void [
-      sessionPath,
-      displayItems,
-      transcriptDeltas,
-      transcriptStreams,
-      hasOlder,
-      initialLoading,
-      pageLoading,
-      showBusyIndicator,
-    ];
-    return () => {
-      scroll.prepareForRender(container);
-    };
-  });
-
-  $effect(() => {
-    if (!hasOlder || initialLoading || pageLoading) return;
-    if (!container) return;
-    if (container.scrollTop > 120) scroll.topLoadArmed = true;
-  });
-
-  onMount(() => {
-    scroll.shouldStickToBottom = scroll.captureScrollSnapshot(container)?.stickToBottom ?? true;
-  });
 </script>
 
 <svelte:document oncopy={handleCopy} />
 
-<div bind:this={container} class="chat-transcript" onscroll={handleScroll}>
+<div bind:this={container} class="chat-transcript">
   {#if initialLoading}
     <div class="empty-state loading-state">
       <p class="empty-title">Loading conversation</p>
