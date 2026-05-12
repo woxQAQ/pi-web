@@ -28,6 +28,7 @@
     "build:server": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\" && pnpm run build:bridge && pnpm run build:bin",
     "build:svelte": "pnpm -C packages/svelte build",
     "build:web": "pnpm run build:svelte",
+    "check": "pnpm run check:type",
     "check:type": "tsgo --noEmit",
     "check:web": "pnpm -C packages/svelte check",
     "dev:pi": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} pi -e ./packages/bin/src/index.ts",

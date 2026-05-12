@@ -75,14 +75,12 @@ function contentFromTextAndImages(
   images: readonly RpcImageContent[] = [],
 ): RpcTranscriptContent | undefined {
   const trimmed = text.trim();
-  const blocks: RpcTranscriptContentBlock[] = [
-    ...images.map(image => ({
-      type: "image" as const,
-      data: image.data,
-      mimeType: image.mimeType,
-      text: "Debug image",
-    })),
-  ];
+  const blocks: RpcTranscriptContentBlock[] = images.map(image => ({
+    type: "image" as const,
+    data: image.data,
+    mimeType: image.mimeType,
+    text: "Debug image",
+  }));
 
   if (trimmed) {
     if (blocks.length === 0) return trimmed;
@@ -622,10 +620,6 @@ const WRITE_FIXTURE_CONTENT = [
 
 const ERROR_FIXTURE_MESSAGE =
   "Synthetic debug failure: parser exited before the final tool result could be normalized.";
-
-function markdownFixtureText(): string {
-  return MARKDOWN_FIXTURE_LINES.join("\n");
-}
 
 function buildTextStream(
   session: DebugSession,

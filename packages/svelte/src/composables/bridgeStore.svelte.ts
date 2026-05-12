@@ -972,7 +972,7 @@ function takeDisplayTranscriptDeltaChunk(text: string): string {
   let unitCount = 0;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index]!;
-    unitCount += /[\u0000-\u00ff]/.test(char) ? 1 : 2;
+    unitCount += char.charCodeAt(0) < 256 ? 1 : 2;
     const isBoundary = char === "\n" || /[.!?。！？]/.test(char);
     if (isBoundary || unitCount >= DISPLAY_TRANSCRIPT_DELTA_TARGET_UNITS) {
       return text.slice(0, index + 1);

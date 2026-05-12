@@ -155,7 +155,7 @@ describe("WsRpcAdapter", () => {
       context,
       DEFAULT_BRIDGE_CONFIG,
       eventBus,
-      emitEvent,
+      emitEvent as any,
     );
   });
 
@@ -1260,7 +1260,7 @@ describe("WsRpcAdapter", () => {
         context,
         shortTimeoutConfig,
         eventBus,
-        emitEvent,
+        emitEvent as any,
       );
 
       const uiContext = shortAdapter.createExtensionUIContext();
@@ -4596,7 +4596,7 @@ describe("WsRpcAdapter", () => {
       });
 
       const buildStatsSpy = vi
-        .spyOn(adapter as never, "buildSessionStats" as never)
+        .spyOn(adapter as any, "buildSessionStats" as any)
         .mockReturnValueOnce(firstStats as never)
         .mockResolvedValueOnce({
           tokens: 42,

@@ -12,11 +12,9 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import type { SessionManager } from "@earendil-works/pi-coding-agent";
 import type {
-  BridgeLiveEvent,
   BridgeSessionActions,
   BridgeSessionEvents,
   BridgeSessionState,
-  BridgeUserMessageContent,
 } from "@pi-web/bridge/live-session";
 
 // ============================================================================

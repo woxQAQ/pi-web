@@ -151,8 +151,8 @@ describe("Bridge Integration", () => {
     // Capture existing SIGINT listeners
     const listeners = process.listeners("SIGINT");
     originalSigintListeners.length = 0;
-    originalSigintListeners.push(...listeners);
-    listeners.forEach(l => process.off("SIGINT", l));
+    originalSigintListeners.push(...(listeners as any));
+    listeners.forEach(l => process.off("SIGINT", l as any));
   });
 
   afterEach(async () => {
@@ -164,7 +164,7 @@ describe("Bridge Integration", () => {
 
     // Restore original SIGINT listeners
     process.removeAllListeners("SIGINT");
-    originalSigintListeners.forEach(l => process.on("SIGINT", l));
+    originalSigintListeners.forEach(l => process.on("SIGINT", l as any));
   });
 
   describe("Server Lifecycle", () => {

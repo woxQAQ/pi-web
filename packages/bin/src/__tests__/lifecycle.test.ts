@@ -7,7 +7,11 @@ import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { WebSocket } from "ws";
-import { startBridge, type BridgeController } from "../lifecycle.js";
+import {
+  startBridge,
+  type BridgeController,
+  type BridgeDoneCallback,
+} from "../lifecycle.js";
 import {
   createBridgeSessionActions,
   createBridgeSessionEvents,
@@ -108,8 +112,8 @@ describe("Bridge Lifecycle", () => {
 
     const listeners = process.listeners("SIGINT");
     originalSigintListeners.length = 0;
-    originalSigintListeners.push(...listeners);
-    listeners.forEach(listener => process.off("SIGINT", listener));
+    originalSigintListeners.push(...(listeners as any));
+    listeners.forEach(listener => process.off("SIGINT", listener as any));
   });
 
   afterEach(async () => {
@@ -120,7 +124,9 @@ describe("Bridge Lifecycle", () => {
     }
 
     process.removeAllListeners("SIGINT");
-    originalSigintListeners.forEach(listener => process.on("SIGINT", listener));
+    originalSigintListeners.forEach(listener =>
+      process.on("SIGINT", listener as any),
+    );
   });
 
   describe("controller contract", () => {
@@ -128,7 +134,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(controller);
 
@@ -147,7 +153,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(controller);
 
@@ -177,7 +183,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(controller);
 
@@ -193,7 +199,7 @@ describe("Bridge Lifecycle", () => {
       const nextController = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(nextController);
 
@@ -214,7 +220,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(controller);
 
@@ -240,7 +246,7 @@ describe("Bridge Lifecycle", () => {
         const controller = await startBridge(
           { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
           mockContext,
-          doneCallback,
+          doneCallback as BridgeDoneCallback,
         );
         controllers.push(controller);
 
@@ -261,7 +267,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
         { captureSigint: false },
       );
       controllers.push(controller);
@@ -277,7 +283,7 @@ describe("Bridge Lifecycle", () => {
       const controller = await startBridge(
         { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
         mockContext,
-        doneCallback,
+        doneCallback as BridgeDoneCallback,
       );
       controllers.push(controller);
 

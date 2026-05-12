@@ -13,12 +13,7 @@ import * as path from "node:path";
 import { WebSocket, WebSocketServer } from "ws";
 import type { BridgeEventBus } from "./bridge-event-bus.js";
 import { getLanIps, isTailscaleIp } from "./network.js";
-import type {
-  BridgeConfig,
-  BridgeEvent,
-  ServerMessage,
-  WsClient,
-} from "./types.js";
+import type { BridgeConfig, BridgeEvent, WsClient } from "./types.js";
 
 /**
  * Handler for a single WebSocket connection.
