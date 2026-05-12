@@ -135,6 +135,11 @@ interface PendingUIRequest {
   method: string;
 }
 
+interface PendingTranscriptDeltaBatch {
+  payload: RpcTranscriptDeltaEvent;
+  timeoutId: ReturnType<typeof setTimeout>;
+}
+
 interface TranscriptSyncState {
   sessionPath: string | null;
   nextEphemeralId: number;
@@ -3467,6 +3472,9 @@ class TranscriptProjector {
  * Extension UI bridge
  * ========================================================================== */
 
+const TRANSCRIPT_DELTA_BATCH_MS = 200;
+const TRANSCRIPT_DELTA_MAX_CHARS = 32;
+
 class ExtensionUIBridge {
   private pendingRequests = new Map<string, PendingUIRequest>();
 
@@ -3778,6 +3786,7 @@ export class WsRpcAdapter {
   private readonly uiBridge: ExtensionUIBridge;
   private readonly sessionStatsPusher: SessionStatsPusher;
   private readonly detachedSessionRegistry: DetachedSessionRegistry;
+  private pendingTranscriptDeltaBatch: PendingTranscriptDeltaBatch | null = null;
 
   // Detached-session registry subscription.
   private unsubscribeRegistryEvents: (() => void) | undefined;
@@ -3948,10 +3957,78 @@ export class WsRpcAdapter {
   }
 
   private sendEvent(payload: RpcBridgeEvent): void {
+    if (payload.type === "transcript_delta") {
+      this.queueTranscriptDelta(payload);
+      return;
+    }
+
+    this.flushPendingTranscriptDeltaBatch();
+    this.sendEventNow(payload);
+  }
+
+  private sendEventNow(payload: RpcBridgeEvent): void {
     this.sendResponse({
       type: "event",
       payload,
     });
+  }
+
+  private queueTranscriptDelta(payload: RpcTranscriptDeltaEvent): void {
+    const pending = this.pendingTranscriptDeltaBatch;
+    if (pending && this.canBatchTranscriptDelta(pending.payload, payload)) {
+      pending.payload = {
+        ...pending.payload,
+        delta: `${pending.payload.delta}${payload.delta}`,
+      };
+      if (this.shouldFlushTranscriptDeltaBatch(pending.payload)) {
+        this.flushPendingTranscriptDeltaBatch();
+      }
+      return;
+    }
+
+    this.flushPendingTranscriptDeltaBatch();
+    const timeoutId = setTimeout(() => {
+      const current = this.pendingTranscriptDeltaBatch;
+      if (!current || current.timeoutId !== timeoutId) return;
+      this.pendingTranscriptDeltaBatch = null;
+      this.sendEventNow(current.payload);
+    }, TRANSCRIPT_DELTA_BATCH_MS);
+    this.pendingTranscriptDeltaBatch = { payload, timeoutId };
+    if (this.shouldFlushTranscriptDeltaBatch(payload)) {
+      this.flushPendingTranscriptDeltaBatch();
+    }
+  }
+
+  private shouldFlushTranscriptDeltaBatch(
+    payload: RpcTranscriptDeltaEvent,
+  ): boolean {
+    return (
+      payload.delta.length >= TRANSCRIPT_DELTA_MAX_CHARS ||
+      payload.delta.includes("\n") ||
+      /[.!?。！？]\s*$/.test(payload.delta)
+    );
+  }
+
+  private flushPendingTranscriptDeltaBatch(): void {
+    const pending = this.pendingTranscriptDeltaBatch;
+    if (!pending) return;
+    this.pendingTranscriptDeltaBatch = null;
+    clearTimeout(pending.timeoutId);
+    this.sendEventNow(pending.payload);
+  }
+
+  private canBatchTranscriptDelta(
+    left: RpcTranscriptDeltaEvent,
+    right: RpcTranscriptDeltaEvent,
+  ): boolean {
+    return (
+      (left.sessionPath ?? null) === (right.sessionPath ?? null) &&
+      left.transcriptKey === right.transcriptKey &&
+      left.role === right.role &&
+      left.blockType === right.blockType &&
+      left.contentIndex === right.contentIndex &&
+      (left.messageId ?? null) === (right.messageId ?? null)
+    );
   }
 
   /* ------------------------------------------------------------------------
@@ -5842,6 +5919,11 @@ export class WsRpcAdapter {
     this.disposed = true;
 
     console.log(`WsRpcAdapter[${this.client.id}]: Disposing adapter`);
+
+    if (this.pendingTranscriptDeltaBatch) {
+      clearTimeout(this.pendingTranscriptDeltaBatch.timeoutId);
+      this.pendingTranscriptDeltaBatch = null;
+    }
 
     this.uiBridge.dispose();
     this.sessionStatsPusher.dispose();

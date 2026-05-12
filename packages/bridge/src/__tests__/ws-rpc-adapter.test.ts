@@ -1404,7 +1404,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 70));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
@@ -1459,7 +1459,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 70));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
@@ -1488,6 +1488,63 @@ describe("WsRpcAdapter", () => {
       expect(sendCalls[1].payload.treeEntries).toBeUndefined();
     });
 
+    it("coalesces consecutive transcript deltas for the same block", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "He" }],
+        },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "He",
+        },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [{ type: "text", text: "Hello" }],
+        },
+        assistantMessageEvent: {
+          type: "text_delta",
+          contentIndex: 0,
+          delta: "llo",
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 70));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "text",
+        delta: "Hello",
+      });
+    });
+
     it("prefers assistant delta events over synthesized transcript diffs", async () => {
       (ws.send as ReturnType<typeof vi.fn>).mockClear();
 
@@ -1514,7 +1571,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 10));
+      await new Promise(r => setTimeout(r, 70));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
