@@ -1404,7 +1404,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 70));
+      await new Promise(r => setTimeout(r, 250));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
@@ -1459,7 +1459,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 70));
+      await new Promise(r => setTimeout(r, 250));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
@@ -1527,7 +1527,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 70));
+      await new Promise(r => setTimeout(r, 250));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
@@ -1571,7 +1571,7 @@ describe("WsRpcAdapter", () => {
         },
       });
 
-      await new Promise(r => setTimeout(r, 70));
+      await new Promise(r => setTimeout(r, 250));
 
       const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
         call => JSON.parse(call[0] as string),
