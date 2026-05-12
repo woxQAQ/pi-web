@@ -2,6 +2,7 @@ import type {
   ExtensionAPI,
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import { BridgeServer } from "@pi-web/bridge/server";
 import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -224,6 +225,36 @@ describe("Bridge Lifecycle", () => {
       expect(controller.getState().status).toBe("stopped");
       expect(controller.getBridgeUrl()).toBeUndefined();
       expect(doneCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it("waits for an in-flight shutdown when stop is called again", async () => {
+      const originalStop = BridgeServer.prototype.stop;
+      const stopSpy = vi
+        .spyOn(BridgeServer.prototype, "stop")
+        .mockImplementation(async function (this: BridgeServer) {
+          await waitForAsyncWork(50);
+          return originalStop.call(this);
+        });
+
+      try {
+        const controller = await startBridge(
+          { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+          mockContext,
+          doneCallback,
+        );
+        controllers.push(controller);
+
+        const firstStop = controller.stop();
+        const secondStop = controller.stop();
+        await secondStop;
+        await firstStop;
+
+        expect(stopSpy).toHaveBeenCalledTimes(1);
+        expect(controller.getState().status).toBe("stopped");
+        expect(doneCallback).toHaveBeenCalledTimes(1);
+      } finally {
+        stopSpy.mockRestore();
+      }
     });
 
     it("can skip process-level SIGINT capture for embedded /web usage", async () => {

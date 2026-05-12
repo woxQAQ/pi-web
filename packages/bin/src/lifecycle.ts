@@ -117,49 +117,54 @@ export async function startBridge(
   // SIGINT handler
   let sigintHandler: (() => void) | undefined;
 
-  // Track if we're already shutting down
-  let isShuttingDown = false;
+  // Reuse the same shutdown promise so concurrent stop() callers wait for the
+  // in-flight shutdown instead of racing a restart against an open port.
+  let shutdownPromise: Promise<void> | undefined;
 
   /**
    * Graceful shutdown
    */
-  const shutdown = async (): Promise<void> => {
-    if (isShuttingDown) {
-      return;
-    }
-    isShuttingDown = true;
-    state = { status: "stopping" };
-
-    // Emit SIGINT event
-    emitEvent({ type: "sigint_received" });
-
-    // Remove SIGINT handler
-    if (sigintHandler) {
-      process.off("SIGINT", sigintHandler);
+  const shutdown = (): Promise<void> => {
+    if (shutdownPromise) {
+      return shutdownPromise;
     }
 
-    try {
-      // Stop server
-      await server.stop();
+    shutdownPromise = (async () => {
+      state = { status: "stopping" };
 
-      // Dispose event bus
-      eventBus.dispose();
+      // Emit SIGINT event
+      emitEvent({ type: "sigint_received" });
 
-      // Dispose session registry
-      sessionRegistry.dispose();
+      // Remove SIGINT handler
+      if (sigintHandler) {
+        process.off("SIGINT", sigintHandler);
+      }
 
-      state = { status: "stopped" };
+      try {
+        // Stop server
+        await server.stop();
 
-      // Emit shutdown complete
-      emitEvent({ type: "shutdown_complete" });
-    } catch (err) {
-      console.error("Bridge shutdown error:", err);
-      state = { status: "stopped" };
-      throw err;
-    } finally {
-      // Notify that we're done
-      done();
-    }
+        // Dispose event bus
+        eventBus.dispose();
+
+        // Dispose session registry
+        sessionRegistry.dispose();
+
+        state = { status: "stopped" };
+
+        // Emit shutdown complete
+        emitEvent({ type: "shutdown_complete" });
+      } catch (err) {
+        console.error("Bridge shutdown error:", err);
+        state = { status: "stopped" };
+        throw err;
+      } finally {
+        // Notify that we're done
+        done();
+      }
+    })();
+
+    return shutdownPromise;
   };
 
   // Register SIGINT handler
