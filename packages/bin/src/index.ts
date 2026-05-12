@@ -16,10 +16,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import type { BridgeConfig } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
-import {
-  loadBridgeRuntime,
-  type BridgeRuntime,
-} from "./bridge-runtime.js";
+import { loadBridgeRuntime, type BridgeRuntime } from "./bridge-runtime.js";
 import { createBridgeDevReloadController } from "./dev-bridge-reload.js";
 import { isBridgeExitInput } from "./exit-input.js";
 import type { BridgeController } from "./lifecycle.js";

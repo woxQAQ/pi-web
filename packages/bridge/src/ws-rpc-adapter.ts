@@ -3786,7 +3786,8 @@ export class WsRpcAdapter {
   private readonly uiBridge: ExtensionUIBridge;
   private readonly sessionStatsPusher: SessionStatsPusher;
   private readonly detachedSessionRegistry: DetachedSessionRegistry;
-  private pendingTranscriptDeltaBatch: PendingTranscriptDeltaBatch | null = null;
+  private pendingTranscriptDeltaBatch: PendingTranscriptDeltaBatch | null =
+    null;
 
   // Detached-session registry subscription.
   private unsubscribeRegistryEvents: (() => void) | undefined;

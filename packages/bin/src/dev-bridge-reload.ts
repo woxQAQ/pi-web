@@ -1,4 +1,10 @@
-import { existsSync, readdirSync, statSync, watch, type FSWatcher } from "node:fs";
+import {
+  existsSync,
+  readdirSync,
+  statSync,
+  watch,
+  type FSWatcher,
+} from "node:fs";
 import { join, resolve, sep } from "node:path";
 
 const DEV_BIN_ENTRY_SEGMENT = `${sep}packages${sep}bin${sep}src${sep}`;
@@ -58,7 +64,11 @@ export function createBridgeDevReloadController(
   options: BridgeDevReloadControllerOptions,
 ): BridgeDevReloadController | undefined {
   const watchPath = resolveBridgeDevWatchPath(options.extensionEntryFile);
-  if (!watchPath || !existsSync(watchPath) || !statSync(watchPath).isDirectory()) {
+  if (
+    !watchPath ||
+    !existsSync(watchPath) ||
+    !statSync(watchPath).isDirectory()
+  ) {
     return undefined;
   }
 
@@ -106,9 +116,10 @@ export function createBridgeDevReloadController(
 
         lastChange = {
           eventType,
-          filename: typeof filename === "string" && filename.length > 0
-            ? filename
-            : undefined,
+          filename:
+            typeof filename === "string" && filename.length > 0
+              ? filename
+              : undefined,
         };
 
         if (eventType === "rename" && !rescanScheduled) {
@@ -136,7 +147,10 @@ export function createBridgeDevReloadController(
           );
 
           Promise.resolve(options.stop()).catch(error => {
-            logger.error("[pi-web] Failed to stop bridge for hot reload:", error);
+            logger.error(
+              "[pi-web] Failed to stop bridge for hot reload:",
+              error,
+            );
           });
         }, debounceMs);
       });

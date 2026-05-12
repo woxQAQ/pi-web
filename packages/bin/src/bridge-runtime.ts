@@ -1,17 +1,17 @@
 import { dirname, join, resolve } from "node:path";
-import { createJiti } from "jiti/static";
 import {
   DEFAULT_BRIDGE_CONFIG as STATIC_DEFAULT_BRIDGE_CONFIG,
   type BridgeConfig,
 } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
+import { createJiti } from "jiti/static";
+import { resolveBridgeDevWatchPath } from "./dev-bridge-reload.js";
 import {
   startBridge as staticStartBridge,
   type BridgeController,
   type BridgeDoneCallback,
   type StartBridgeOptions,
 } from "./lifecycle.js";
-import { resolveBridgeDevWatchPath } from "./dev-bridge-reload.js";
 
 const jiti = createJiti(import.meta.url, {
   moduleCache: false,

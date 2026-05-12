@@ -1,9 +1,4 @@
-import {
-  mkdirSync,
-  mkdtempSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -32,7 +27,11 @@ function createWorkspace() {
 
   writeFileSync(entryFile, "export default function register() {}\n", "utf8");
   writeFileSync(bridgeFile, "export const bridge = 'v1';\n", "utf8");
-  writeFileSync(distEntryFile, "export default function register() {}\n", "utf8");
+  writeFileSync(
+    distEntryFile,
+    "export default function register() {}\n",
+    "utf8",
+  );
 
   return { bridgeFile, distEntryFile, entryFile, rootDir };
 }
