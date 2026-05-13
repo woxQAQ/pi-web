@@ -174,9 +174,8 @@ describe("standalone bridge backend", () => {
   });
 
   it("starts and stops the standalone server lifecycle", async () => {
-    const backend = createStandaloneBridgeContextFromSession(
-      createMockSession().session,
-    );
+    const mock = createMockSession();
+    const backend = createStandaloneBridgeContextFromSession(mock.session);
     const controller = await startStandaloneBridge(
       { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
       {
@@ -192,5 +191,36 @@ describe("standalone bridge backend", () => {
     await controller.stop();
 
     expect(controller.getState()).toEqual({ status: "stopped" });
+    expect(mock.session.dispose).not.toHaveBeenCalled();
+  });
+
+  it("reuses a provided backend across bridge restarts", async () => {
+    const mock = createMockSession();
+    const backend = createStandaloneBridgeContextFromSession(mock.session);
+
+    const first = await startStandaloneBridge(
+      { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+      {
+        backend,
+        captureSigint: false,
+      },
+    );
+    await first.stop();
+
+    const second = await startStandaloneBridge(
+      { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+      {
+        backend,
+        captureSigint: false,
+      },
+    );
+
+    expect(second.getState().status).toBe("running");
+    expect(mock.session.dispose).not.toHaveBeenCalled();
+
+    await second.stop();
+    await backend.dispose();
+
+    expect(mock.session.dispose).toHaveBeenCalledTimes(1);
   });
 });

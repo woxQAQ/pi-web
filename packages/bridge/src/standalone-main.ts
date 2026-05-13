@@ -1,8 +1,15 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { startStandaloneBridge } from "./standalone-server.js";
-import { DEFAULT_BRIDGE_CONFIG, type BridgeConfig } from "./types.js";
+import { createStandaloneDevReloadController } from "./dev-standalone-reload.js";
+import { DetachedSessionRegistry } from "./session-registry.js";
+import { createStandaloneBridgeContext } from "./standalone-backend.js";
+import type { StandaloneBridgeBackend } from "./standalone-backend.js";
+import {
+  loadStandaloneRuntime,
+  type StandaloneRuntime,
+} from "./standalone-runtime.js";
+import type { BridgeConfig } from "./types.js";
 
 const DEFAULT_STANDALONE_PORT = 8080;
 
@@ -106,6 +113,67 @@ export function parseStandaloneMainOptions(
   };
 }
 
+async function runStandaloneBridge(
+  runtime: StandaloneRuntime,
+  config: BridgeConfig,
+  options: StandaloneMainOptions,
+  entryFile: string,
+  backend: StandaloneBridgeBackend,
+  sessionRegistry: DetachedSessionRegistry,
+): Promise<boolean> {
+  let resolveStopped: (() => void) | undefined;
+  const stopped = new Promise<void>(resolve => {
+    resolveStopped = resolve;
+  });
+
+  const bridgeController = await runtime.startStandaloneBridge(config, {
+    cwd: options.cwd,
+    backend,
+    sessionRegistry,
+    onShutdown: () => resolveStopped?.(),
+  });
+
+  const bridgeUrl = bridgeController.getBridgeUrl();
+  if (!bridgeUrl) {
+    await bridgeController.stop();
+    throw new Error("Bridge started without a reachable URL");
+  }
+
+  const wsUrl = `${bridgeUrl.replace(/^http/, "ws")}/ws`;
+  console.log(`[pi-web] Bridge URL: ${bridgeUrl}`);
+  console.log(`[pi-web] WebSocket: ${wsUrl}`);
+  if (options.staticDir) {
+    console.log(`[pi-web] Static Dir: ${options.staticDir}`);
+  }
+  console.log(`[pi-web] Session CWD: ${options.cwd}`);
+
+  const requestStop = async (): Promise<void> => {
+    await bridgeController.stop().catch(error => {
+      console.error("[pi-web] Failed to stop standalone bridge:", error);
+    });
+  };
+
+  const devReload = createStandaloneDevReloadController({
+    entryFile,
+    stop: requestStop,
+  });
+
+  const onSigterm = (): void => {
+    void requestStop();
+  };
+
+  process.on("SIGTERM", onSigterm);
+
+  try {
+    await stopped;
+  } finally {
+    process.off("SIGTERM", onSigterm);
+    devReload?.dispose();
+  }
+
+  return devReload?.reloadRequested() ?? false;
+}
+
 async function runStandaloneMain(): Promise<number> {
   let options: StandaloneMainOptions;
   try {
@@ -122,49 +190,39 @@ async function runStandaloneMain(): Promise<number> {
     return 0;
   }
 
-  const config: BridgeConfig = {
-    ...DEFAULT_BRIDGE_CONFIG,
-    port: options.port,
-    staticDir: options.staticDir,
-  };
-
-  let resolveStopped: (() => void) | undefined;
-  const stopped = new Promise<void>(resolve => {
-    resolveStopped = resolve;
-  });
-
-  const bridge = await startStandaloneBridge(config, {
-    cwd: options.cwd,
-    onShutdown: () => resolveStopped?.(),
-  });
-
-  const bridgeUrl = bridge.getBridgeUrl();
-  if (!bridgeUrl) {
-    await bridge.stop();
-    throw new Error("Bridge started without a reachable URL");
-  }
-
-  const wsUrl = `${bridgeUrl.replace(/^http/, "ws")}/ws`;
-  console.log(`[pi-web] Bridge URL: ${bridgeUrl}`);
-  console.log(`[pi-web] WebSocket: ${wsUrl}`);
-  if (options.staticDir) {
-    console.log(`[pi-web] Static Dir: ${options.staticDir}`);
-  }
-  console.log(`[pi-web] Session CWD: ${options.cwd}`);
-
-  const onSigterm = (): void => {
-    void bridge.stop().catch(error => {
-      console.error("[pi-web] Failed to stop standalone bridge:", error);
-    });
-  };
-
-  process.on("SIGTERM", onSigterm);
+  const thisFile = fileURLToPath(import.meta.url);
+  const backend = await createStandaloneBridgeContext({ cwd: options.cwd });
+  const sessionRegistry = new DetachedSessionRegistry(
+    backend.context.state.cwd,
+  );
 
   try {
-    await stopped;
-    return 0;
+    while (true) {
+      const runtime = await loadStandaloneRuntime(thisFile);
+      const config: BridgeConfig = {
+        ...runtime.DEFAULT_BRIDGE_CONFIG,
+        port: options.port,
+        staticDir: options.staticDir,
+      };
+
+      const reloadRequested = await runStandaloneBridge(
+        runtime,
+        config,
+        options,
+        thisFile,
+        backend,
+        sessionRegistry,
+      );
+
+      if (!reloadRequested) {
+        return 0;
+      }
+
+      console.log("[pi-web] Standalone bridge runtime reloaded.");
+    }
   } finally {
-    process.off("SIGTERM", onSigterm);
+    sessionRegistry.dispose();
+    await backend.dispose();
   }
 }
 
