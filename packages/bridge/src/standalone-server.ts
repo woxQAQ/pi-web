@@ -1,13 +1,16 @@
 import { BridgeEventBus } from "./bridge-event-bus.js";
 import { BridgeServer, type WsConnectionHandlerFactory } from "./server.js";
 import { DetachedSessionRegistry } from "./session-registry.js";
+import {
+  createStandaloneBridgeContext,
+  type StandaloneBridgeBackend,
+} from "./standalone-backend.js";
 import type {
   BridgeConfig,
   BridgeEvent,
   BridgeState,
   WsClient,
 } from "./types.js";
-import { createStandaloneBridgeContext, type StandaloneBridgeBackend } from "./standalone-backend.js";
 import { WsRpcAdapter } from "./ws-rpc-adapter.js";
 
 export interface StartStandaloneBridgeOptions {
@@ -54,7 +57,10 @@ export async function startStandaloneBridge(
       try {
         handler(event);
       } catch (error) {
-        console.error("Standalone bridge lifecycle event handler error:", error);
+        console.error(
+          "Standalone bridge lifecycle event handler error:",
+          error,
+        );
       }
     }
     eventBus.emit(event);

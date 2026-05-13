@@ -69,9 +69,7 @@ function listSessionCommands(session: AgentSession): Array<{
   );
 }
 
-function toBridgeLiveEvent(
-  event: AgentSessionEvent,
-): BridgeLiveEvent | null {
+function toBridgeLiveEvent(event: AgentSessionEvent): BridgeLiveEvent | null {
   switch (event.type) {
     case "agent_start":
       return { type: "agent_start" };

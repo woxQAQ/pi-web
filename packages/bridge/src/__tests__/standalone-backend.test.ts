@@ -1,4 +1,7 @@
-import type { AgentSession, AgentSessionEvent } from "@earendil-works/pi-coding-agent";
+import type {
+  AgentSession,
+  AgentSessionEvent,
+} from "@earendil-works/pi-coding-agent";
 import { describe, expect, it, vi } from "vitest";
 import { createStandaloneBridgeContextFromSession } from "../standalone-backend.js";
 import { startStandaloneBridge } from "../standalone-server.js";
@@ -39,9 +42,9 @@ function createMockSession() {
   };
 
   const extensionRunner = {
-    getRegisteredCommands: vi.fn().mockReturnValue([
-      { name: "/ext", description: "Extension command" },
-    ]),
+    getRegisteredCommands: vi
+      .fn()
+      .mockReturnValue([{ name: "/ext", description: "Extension command" }]),
   };
 
   const session = {

@@ -45,8 +45,9 @@ pnpm run build:web
 pnpm run dev:bridge:standalone
 ```
 
-That starts a standalone bridge dev server on `http://localhost:8080` by default.
-If `web-dist/` is missing, the bridge still starts and serves a placeholder page.
+That starts a standalone bridge dev server on `http://localhost:8080` by
+default. If `web-dist/` is missing, the bridge still starts and serves a
+placeholder page.
 
 If you need a different port:
 

@@ -52,7 +52,10 @@ function findNearestWebDist(startDir: string): string | undefined {
 }
 
 function resolveDefaultStaticDir(cwd: string): string | undefined {
-  const candidates = [findNearestWebDist(cwd), findNearestWebDist(process.cwd())];
+  const candidates = [
+    findNearestWebDist(cwd),
+    findNearestWebDist(process.cwd()),
+  ];
 
   for (const candidate of candidates) {
     if (candidate) {
