@@ -672,7 +672,6 @@ export function createComposerBarState(
 
   function handleInputInteraction(textareaEl?: HTMLTextAreaElement | null) {
     syncCursorFromTextarea(textareaEl);
-    resizeTextarea(textareaEl);
   }
 
   function handleInputKeydown(

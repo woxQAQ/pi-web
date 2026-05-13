@@ -244,10 +244,8 @@
   }
 
   function toolBlockIdentity(block: ToolContentBlock, blockIndex: number): string {
-    const toolCallId = block.toolCallId?.trim();
-    if (toolCallId) return `tool-call:${toolCallId}`;
-    const args = block.argumentsText.trim();
-    if (args) return `tool-call:${block.toolName}:${args}`;
+    // Keep tool detail state stable even when streamed tool calls later gain ids
+    // or finish filling in arguments during the final transcript upsert.
     return `tool-call:${block.toolName}:${blockIndex}`;
   }
 
@@ -489,6 +487,7 @@
   function scrollTranscriptToBottom() {
     if (!container) return;
     container.scrollTop = container.scrollHeight;
+    updateBottomLock();
   }
 
   function scheduleStickToBottom() {
@@ -501,6 +500,21 @@
 
   function handleTranscriptScroll() {
     updateBottomLock();
+  }
+
+  export function preserveBottomPosition(gracePx: number = 48): boolean {
+    const el = container;
+    if (!el) return false;
+    if (!shouldStickToBottom && distanceFromBottom(el) > BOTTOM_LOCK_THRESHOLD + gracePx) {
+      updateBottomLock();
+      return false;
+    }
+    shouldStickToBottom = true;
+    tick().then(() => {
+      if (container !== el || !shouldStickToBottom) return;
+      scheduleStickToBottom();
+    });
+    return true;
   }
 
   function cssEscape(value: string): string {
@@ -527,6 +541,24 @@
     const el = container;
     if (!el) return;
     updateBottomLock();
+  });
+
+  $effect(() => {
+    const el = container;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    let lastHeight = el.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const keepBottomLocked = shouldStickToBottom;
+      const nextHeight = el.clientHeight;
+      if (nextHeight === lastHeight) return;
+      lastHeight = nextHeight;
+      if (keepBottomLocked) scheduleStickToBottom();
+      else updateBottomLock();
+    });
+
+    observer.observe(el);
+    return () => observer.disconnect();
   });
 
   $effect(() => {

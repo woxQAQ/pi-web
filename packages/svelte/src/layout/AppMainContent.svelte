@@ -15,6 +15,7 @@
   import ComposerBar from "../components/ComposerBar.svelte";
   import SessionStatsBar from "../components/SessionStatsBar.svelte";
   import type { ConnectionStatus, TranscriptDelta, TranscriptEntry, TranscriptStream } from "../composables/bridgeStore.svelte";
+  import { isDebugSessionPath } from "../utils/debugSession";
   import type { RpcModelInfo } from "../utils/models";
   import type { PendingTranscriptSessionEvent } from "../utils/transcript";
 
@@ -162,6 +163,8 @@
     readWorkspaceFile?: (path: string) => Promise<RpcWorkspaceFile>;
   } = $props();
 
+  let isDebugSession = $derived(isDebugSessionPath(activeSessionPath));
+
   export function scrollToTranscriptEntry(entryId: string): boolean {
     return transcriptRef?.scrollToTranscriptEntry(entryId) ?? false;
   }
@@ -234,6 +237,7 @@
     {connectionStatus}
     {isStreaming}
     {isDebugMode}
+    {isDebugSession}
     {commands}
     {workspaceEntries}
     {workspaceEntriesLoading}
@@ -247,6 +251,7 @@
     revision={pendingRevision}
     {pendingMessageCount}
     {editQueuedPayload}
+    onInteraction={() => transcriptRef?.preserveBottomPosition()}
     {onSubmit}
     onAbort={onAbort}
     onCancelRevision={onCancelRevision}

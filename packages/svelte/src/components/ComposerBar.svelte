@@ -26,6 +26,7 @@
     connectionStatus = "disconnected" as ConnectionStatus,
     isStreaming = false,
     isDebugMode = false,
+    isDebugSession = false,
     commands = [] as readonly RpcSlashCommand[],
     workspaceEntries = [] as readonly RpcWorkspaceEntry[],
     workspaceEntriesLoading = false,
@@ -39,6 +40,7 @@
     revision = null as { entryId: string; text: string; preview: string; hasImages: boolean; images: RpcImageContent[] } | null,
     pendingMessageCount = 0,
     editQueuedPayload = null as { text: string; images: RpcImageContent[] } | null,
+    onInteraction = (() => {}) as () => void,
     onSubmit = ((_: { message: string; images: RpcImageContent[]; revisionEntryId?: string; steer?: boolean }) => {}) as (payload: { message: string; images: RpcImageContent[]; revisionEntryId?: string; steer?: boolean }) => void,
     onAbort = (() => {}) as () => void,
     onCancelRevision = (() => {}) as () => void,
@@ -56,7 +58,7 @@
   } = $props();
 
   let composerPlaceholder = $derived(
-    isDebugMode
+    isDebugMode && isDebugSession
       ? "Use /fixture, /tps, /json, or type synthetic markdown"
       : "Ask anything, or drop an image",
   );
@@ -120,6 +122,7 @@
 
   function handleInputInteraction() {
     composer.handleInputInteraction(textareaRef);
+    onInteraction();
   }
 
   function handleInputCompositionStart() {
