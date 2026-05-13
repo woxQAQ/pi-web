@@ -1,6 +1,24 @@
-import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { parseStandaloneMainOptions } from "../standalone-main.js";
+
+function findNearestWebDist(startDir: string): string | undefined {
+  let current = resolve(startDir);
+
+  for (;;) {
+    const candidate = join(current, "web-dist");
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+
+    const parent = dirname(current);
+    if (parent === current) {
+      return undefined;
+    }
+    current = parent;
+  }
+}
 
 describe("standalone main", () => {
   it("parses the optional port override", () => {
@@ -8,7 +26,7 @@ describe("standalone main", () => {
 
     expect(options.cwd).toBe(process.cwd());
     expect(options.port).toBe(8123);
-    expect(options.staticDir).toBe(join(process.cwd(), "web-dist"));
+    expect(options.staticDir).toBe(findNearestWebDist(process.cwd()));
     expect(options.help).toBe(false);
   });
 
