@@ -262,7 +262,7 @@
     {gitRepoState}
     {gitRepoLoading}
     {gitBranchSwitching}
-    gitActionsDisabled={isDebugMode || connectionStatus !== "connected" || isStreaming || isCompacting}
+    gitActionsDisabled={isDebugSession || connectionStatus !== "connected" || isStreaming || isCompacting}
     {refreshGitRepoState}
     {switchGitBranch}
     {createGitBranch}

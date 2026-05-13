@@ -321,7 +321,7 @@
 
       <div class="composer-footer-row">
         <div class="composer-status-cluster">
-          {#if !isDebugMode}
+          {#if !isDebugSession}
             <GitBranchDropdown
               label={gitBranch}
               repoState={gitRepoState}
