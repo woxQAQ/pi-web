@@ -60,7 +60,7 @@ For a built entrypoint, use:
 
 ```bash
 pnpm run build:bridge
-node dist/bridge/standalone-main.js
+node dist/bridge/standalone/main.js
 ```
 
 ---

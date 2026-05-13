@@ -1,15 +1,15 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { createStandaloneDevReloadController } from "./dev-standalone-reload.js";
-import { DetachedSessionRegistry } from "./session-registry.js";
-import { createStandaloneBridgeContext } from "./standalone-backend.js";
-import type { StandaloneBridgeBackend } from "./standalone-backend.js";
+import { createStandaloneDevReloadController } from "./dev-reload.js";
+import { DetachedSessionRegistry } from "../session-registry.js";
+import { createStandaloneBridgeContext } from "./backend.js";
+import type { StandaloneBridgeBackend } from "./backend.js";
 import {
   loadStandaloneRuntime,
   type StandaloneRuntime,
-} from "./standalone-runtime.js";
-import type { BridgeConfig } from "./types.js";
+} from "./runtime.js";
+import type { BridgeConfig } from "../types.js";
 
 const DEFAULT_STANDALONE_PORT = 8080;
 
@@ -24,7 +24,7 @@ function printHelp(): void {
   console.log(`pi-web standalone bridge
 
 Usage:
-  node dist/bridge/standalone-main.js [--port <number>]
+  node dist/bridge/standalone/main.js [--port <number>]
 
 Options:
   --port <number>  Port to bind (default: ${DEFAULT_STANDALONE_PORT})

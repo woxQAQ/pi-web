@@ -3,15 +3,15 @@ import {
   type AgentSession,
   type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
-import { createDetachedAgentSession } from "./detached-session.js";
-import { createHeadlessUIContext } from "./headless-ui-context.js";
+import { createDetachedAgentSession } from "../detached-session.js";
+import { createHeadlessUIContext } from "../headless-ui-context.js";
 import type {
   BridgeLiveEvent,
   BridgeSessionActions,
   BridgeSessionEvents,
   BridgeSessionState,
-} from "./live-session.js";
-import type { WsRpcAdapterContext } from "./ws-rpc-adapter.js";
+} from "../live-session.js";
+import type { WsRpcAdapterContext } from "../ws-rpc-adapter.js";
 
 export interface StandaloneBridgeBackend {
   readonly context: WsRpcAdapterContext;

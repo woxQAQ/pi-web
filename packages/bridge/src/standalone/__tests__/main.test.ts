@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { parseStandaloneMainOptions } from "../standalone-main.js";
+import { parseStandaloneMainOptions } from "../main.js";
 
 function findNearestWebDist(startDir: string): string | undefined {
   let current = resolve(startDir);

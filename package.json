@@ -31,7 +31,7 @@
     "check": "pnpm run check:type",
     "check:type": "tsgo --noEmit",
     "check:web": "pnpm -C packages/svelte check",
-    "dev:bridge:standalone": "node --import jiti/register ./packages/bridge/src/standalone-main.ts",
+    "dev:bridge:standalone": "node --import jiti/register ./packages/bridge/src/standalone/main.ts",
     "dev:pi": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} pi -e ./packages/bin/src/index.ts",
     "dev:pi:inspect": "PI_BRIDGE_PORT=${PI_BRIDGE_PORT:-8080} NODE_OPTIONS='--inspect-brk' pi -e ./packages/bin/src/index.ts",
     "dev:svelte": "pnpm -C packages/svelte dev",
@@ -42,7 +42,7 @@
     "lint:fix": "oxlint --fix",
     "prepack": "pnpm run build",
     "smoke:pi-web": "node scripts/smoke-pi-web.mjs",
-    "start:bridge:standalone": "node ./dist/bridge/standalone-main.js",
+    "start:bridge:standalone": "node ./dist/bridge/standalone/main.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
