@@ -3,6 +3,7 @@ import type {
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import { BridgeServer } from "@pi-web/bridge/server";
+import { DetachedSessionRegistry } from "@pi-web/bridge/session-registry";
 import { DEFAULT_BRIDGE_CONFIG, type BridgeEvent } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -277,6 +278,27 @@ describe("Bridge Lifecycle", () => {
       await controller.stop();
       expect(controller.getState().status).toBe("stopped");
       expect(doneCallback).toHaveBeenCalledTimes(1);
+    });
+
+    it("keeps an injected detached-session registry alive across restarts", async () => {
+      const sessionRegistry = new DetachedSessionRegistry(
+        mockContext.state.cwd,
+      );
+      const disposeSpy = vi.spyOn(sessionRegistry, "dispose");
+      const controller = await startBridge(
+        { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
+        mockContext,
+        doneCallback as BridgeDoneCallback,
+        { captureSigint: false, sessionRegistry },
+      );
+      controllers.push(controller);
+
+      await controller.stop();
+
+      expect(disposeSpy).not.toHaveBeenCalled();
+
+      sessionRegistry.dispose();
+      disposeSpy.mockRestore();
     });
 
     it("shuts down on SIGINT", async () => {

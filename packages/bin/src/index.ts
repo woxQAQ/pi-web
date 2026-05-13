@@ -14,6 +14,7 @@ import {
   type ExtensionAPI,
   type ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import { DetachedSessionRegistry } from "@pi-web/bridge/session-registry";
 import type { BridgeConfig } from "@pi-web/bridge/types";
 import type { WsRpcAdapterContext } from "@pi-web/bridge/ws-rpc-adapter";
 import { loadBridgeRuntime, type BridgeRuntime } from "./bridge-runtime.js";
@@ -105,6 +106,7 @@ async function runHeadlessWebBridge(
   options: WebCommandOptions,
   ctx: ExtensionCommandContext,
   extensionEntryFile: string,
+  sessionRegistry: DetachedSessionRegistry,
 ): Promise<boolean> {
   let resolveStopped: (() => void) | undefined;
   const stopped = new Promise<void>(resolve => {
@@ -117,6 +119,7 @@ async function runHeadlessWebBridge(
     () => resolveStopped?.(),
     {
       captureSigint: false,
+      sessionRegistry,
     },
   );
 
@@ -189,6 +192,7 @@ async function runInteractiveWebBridge(
   adapterContext: WsRpcAdapterContext,
   ctx: ExtensionCommandContext,
   extensionEntryFile: string,
+  sessionRegistry: DetachedSessionRegistry,
 ): Promise<boolean> {
   let bridgeController: BridgeController | undefined;
   let terminalView:
@@ -212,6 +216,7 @@ async function runInteractiveWebBridge(
         // detection. Avoid registering another process-level SIGINT handler here,
         // which can leave Pi in a bad state after exiting /web.
         captureSigint: false,
+        sessionRegistry,
       },
     );
   } catch (err) {
@@ -334,32 +339,40 @@ async function webBridgeHandler(
   const staticDir = existsSync(webDistDir) ? webDistDir : undefined;
   const options = parseWebCommandOptions(args, process.env, ctx.hasUI);
 
-  while (true) {
-    const bridgeRuntime = await loadBridgeRuntime(thisFile);
-    const config = buildBridgeConfig(bridgeRuntime, staticDir);
+  const sessionRegistry = new DetachedSessionRegistry(adapterContext.state.cwd);
 
-    const reloadRequested = options.headless
-      ? await runHeadlessWebBridge(
-          config,
-          bridgeRuntime.startBridge,
-          adapterContext,
-          options,
-          ctx,
-          thisFile,
-        )
-      : await runInteractiveWebBridge(
-          config,
-          bridgeRuntime.startBridge,
-          adapterContext,
-          ctx,
-          thisFile,
-        );
+  try {
+    while (true) {
+      const bridgeRuntime = await loadBridgeRuntime(thisFile);
+      const config = buildBridgeConfig(bridgeRuntime, staticDir);
 
-    if (!reloadRequested) {
-      return;
+      const reloadRequested = options.headless
+        ? await runHeadlessWebBridge(
+            config,
+            bridgeRuntime.startBridge,
+            adapterContext,
+            options,
+            ctx,
+            thisFile,
+            sessionRegistry,
+          )
+        : await runInteractiveWebBridge(
+            config,
+            bridgeRuntime.startBridge,
+            adapterContext,
+            ctx,
+            thisFile,
+            sessionRegistry,
+          );
+
+      if (!reloadRequested) {
+        return;
+      }
+
+      console.log("[pi-web] Bridge runtime reloaded.");
     }
-
-    console.log("[pi-web] Bridge runtime reloaded.");
+  } finally {
+    sessionRegistry.dispose();
   }
 }
 

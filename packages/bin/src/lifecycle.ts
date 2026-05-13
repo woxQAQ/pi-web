@@ -55,6 +55,10 @@ export interface StartBridgeOptions {
    * Disable this when the caller already handles Ctrl+C inside a custom UI.
    */
   captureSigint?: boolean;
+  /**
+   * Reuse a detached-session registry across bridge restarts in dev mode.
+   */
+  sessionRegistry?: DetachedSessionRegistry;
 }
 
 export async function startBridge(
@@ -69,8 +73,11 @@ export async function startBridge(
   // Event handlers for terminal log view
   const eventHandlers: Array<(event: BridgeEvent) => void> = [];
 
-  // Shared session registry for detached sessions
-  const sessionRegistry = new DetachedSessionRegistry(context.state.cwd);
+  // Reuse the detached-session registry when the caller wants sessions to
+  // survive a dev-mode bridge restart.
+  const sessionRegistry =
+    options.sessionRegistry ?? new DetachedSessionRegistry(context.state.cwd);
+  const ownsSessionRegistry = !options.sessionRegistry;
 
   // Emit events to all handlers
   const emitEvent = (event: BridgeEvent): void => {
@@ -147,8 +154,9 @@ export async function startBridge(
         // Dispose event bus
         eventBus.dispose();
 
-        // Dispose session registry
-        sessionRegistry.dispose();
+        if (ownsSessionRegistry) {
+          sessionRegistry.dispose();
+        }
 
         state = { status: "stopped" };
 
