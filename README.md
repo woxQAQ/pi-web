@@ -36,6 +36,31 @@ Start Pi, then run:
 
 Open the printed URL (default: `http://localhost:7036`) in your browser.
 
+## Standalone bridge
+
+You can also run the bridge without attaching to a live Pi TUI process:
+
+```bash
+pnpm run build:web
+pnpm run dev:bridge:standalone
+```
+
+That starts a standalone bridge dev server on `http://localhost:8080` by default.
+If `web-dist/` is missing, the bridge still starts and serves a placeholder page.
+
+If you need a different port:
+
+```bash
+pnpm run dev:bridge:standalone -- --port 9000
+```
+
+For a built entrypoint, use:
+
+```bash
+pnpm run build:bridge
+node dist/bridge/standalone-main.js
+```
+
 ---
 
 ## License
