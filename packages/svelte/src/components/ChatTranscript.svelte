@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick } from "svelte";
   import type {
     RpcImageContent,
     RpcTranscriptContent,
@@ -73,6 +74,11 @@
 
   // ---- DOM refs ----
   let container = $state<HTMLDivElement | null>(null);
+
+  const BOTTOM_LOCK_THRESHOLD = 24;
+  let shouldStickToBottom = true;
+  let stickToBottomFrame = 0;
+  let lastSessionPath: string | null | undefined = undefined;
 
   // ---- state modules ----
   const blockState = createChatTranscriptBlockState();
@@ -450,6 +456,99 @@
     onLoadOlder();
   }
 
+  function distanceFromBottom(el: HTMLElement): number {
+    return el.scrollHeight - el.clientHeight - el.scrollTop;
+  }
+
+  function isNearBottom(el: HTMLElement): boolean {
+    return distanceFromBottom(el) <= BOTTOM_LOCK_THRESHOLD;
+  }
+
+  function updateBottomLock() {
+    if (!container) return;
+    shouldStickToBottom = isNearBottom(container);
+  }
+
+  function scrollTranscriptToBottom() {
+    if (!container) return;
+    container.scrollTop = container.scrollHeight;
+  }
+
+  function scheduleStickToBottom() {
+    if (stickToBottomFrame) cancelAnimationFrame(stickToBottomFrame);
+    stickToBottomFrame = requestAnimationFrame(() => {
+      stickToBottomFrame = 0;
+      scrollTranscriptToBottom();
+    });
+  }
+
+  function handleTranscriptScroll() {
+    updateBottomLock();
+  }
+
+  function cssEscape(value: string): string {
+    if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+      return CSS.escape(value);
+    }
+    return value.replace(/["\\]/g, "\\$&");
+  }
+
+  export function scrollToTranscriptEntry(entryId: string): boolean {
+    const el = container;
+    if (!el) return false;
+
+    const selector = `[data-tree-entry-id="${cssEscape(entryId)}"], [data-tree-entry-ids~="${cssEscape(entryId)}"]`;
+    const target = el.querySelector<HTMLElement>(selector);
+    if (!target) return false;
+
+    target.scrollIntoView({ block: "center" });
+    updateBottomLock();
+    return true;
+  }
+
+  $effect(() => {
+    const el = container;
+    if (!el) return;
+    updateBottomLock();
+  });
+
+  $effect(() => {
+    const el = container;
+    const path = sessionPath;
+    if (!el || lastSessionPath === path) return;
+
+    lastSessionPath = path;
+    shouldStickToBottom = true;
+    tick().then(() => {
+      if (container !== el || sessionPath !== path) return;
+      scheduleStickToBottom();
+      updateBottomLock();
+    });
+  });
+
+  $effect(() => {
+    const el = container;
+    void messages;
+    void transcriptDeltas;
+    void transcriptStreams;
+    void pendingTranscriptConfigEvent;
+    void showBusyIndicator;
+    if (!el || !shouldStickToBottom) return;
+
+    tick().then(() => {
+      if (container !== el || !shouldStickToBottom) return;
+      scheduleStickToBottom();
+    });
+  });
+
+  $effect(() => {
+    return () => {
+      if (!stickToBottomFrame) return;
+      cancelAnimationFrame(stickToBottomFrame);
+      stickToBottomFrame = 0;
+    };
+  });
+
   // ---- copy handling ----
   const userCopySelector = "[data-user-message-index]";
 
@@ -502,7 +601,7 @@
 
 <svelte:document oncopy={handleCopy} />
 
-<div bind:this={container} class="chat-transcript">
+<div bind:this={container} class="chat-transcript" onscroll={handleTranscriptScroll}>
   {#if initialLoading}
     <div class="empty-state loading-state">
       <p class="empty-title">Loading conversation</p>
@@ -844,11 +943,15 @@
   {/each}
 
   {#if showBusyIndicator}
-    <div class="streaming-indicator">
-      <span class="busy-label">{busyIndicatorLabel}</span>
-      <span class="dot"></span>
-      <span class="dot"></span>
-      <span class="dot"></span>
+    <div class="message-row assistant streaming-indicator-row">
+      <div class="message-content assistant">
+        <div class="streaming-indicator">
+          <span class="busy-label">{busyIndicatorLabel}</span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+          <span class="dot"></span>
+        </div>
+      </div>
     </div>
   {/if}
 
@@ -1406,11 +1509,14 @@
     color: var(--text-subtle);
   }
 
+  .streaming-indicator-row {
+    overflow-anchor: none;
+  }
+
   .streaming-indicator {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    padding: 0 0 0 10px;
     color: var(--text-subtle);
     font-size: 0.72rem;
     line-height: 1.3;

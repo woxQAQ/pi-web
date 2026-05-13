@@ -689,7 +689,6 @@
 
   async function handleSessionSelect(sessionPath: string) {
     pendingRevision = null;
-    mainContentRef?.rememberTranscriptScroll();
 
     if (isDebugSessionPath(sessionPath)) {
       activeDebugSessionPath = sessionPath;
@@ -747,7 +746,6 @@
 
   async function handleNewSession(workspacePath: string) {
     pendingRevision = null;
-    mainContentRef?.rememberTranscriptScroll();
 
     if (debugSessionsEnabled && workspacePath === DEBUG_WORKSPACE_PATH) {
       const session = createLocalDebugSession();
@@ -1055,7 +1053,6 @@
 
   $effect(() => {
     if (bridge.connectionStatus === "disconnected") {
-      mainContentRef?.preserveTranscriptScroll();
       pendingRevision = null;
       outlineSidebarOpen = false;
     }

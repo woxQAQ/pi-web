@@ -18,6 +18,8 @@
   import type { RpcModelInfo } from "../utils/models";
   import type { PendingTranscriptSessionEvent } from "../utils/transcript";
 
+  let transcriptRef: ChatTranscript | null = $state(null);
+
   let {
     compatWarningVisible = false,
     statusEntries = {} as Record<string, string>,
@@ -160,12 +162,8 @@
     readWorkspaceFile?: (path: string) => Promise<RpcWorkspaceFile>;
   } = $props();
 
-  export function preserveTranscriptScroll() {}
-
-  export function rememberTranscriptScroll() {}
-
-  export function scrollToTranscriptEntry(_entryId: string): boolean {
-    return false;
+  export function scrollToTranscriptEntry(entryId: string): boolean {
+    return transcriptRef?.scrollToTranscriptEntry(entryId) ?? false;
   }
 </script>
 
@@ -173,6 +171,7 @@
   <CompatWarning visible={compatWarningVisible} />
 
   <ChatTranscript
+    bind:this={transcriptRef}
     sessionPath={activeSessionPath}
     messages={transcript}
     {transcriptDeltas}
