@@ -68,6 +68,9 @@ type DialogExtensionUIRequest = Extract<
 type PendingDisplayTranscriptDelta = {
   payload: Omit<TranscriptDelta, "delta">;
   pendingText: string;
+  pendingUnits: number;
+  queuedAt: number;
+  started: boolean;
 };
 
 export interface SessionEntry {
@@ -232,13 +235,30 @@ let workspaceEntriesLoadedContextKey: string | null = null;
 let workspaceEntriesLoadedAt = 0;
 let gitRepoStateRequest: Promise<RpcGitRepoState | null> | null = null;
 let displayTranscriptDeltaTimer: ReturnType<typeof setTimeout> | null = null;
+let displayTranscriptDeltaTimerDueAt = 0;
+let displayTranscriptDeltaLastFlushAt = 0;
+let displayTranscriptDeltaIngressRateEma = 0;
+let displayTranscriptDeltaIngressJitterEma = 0;
+let displayTranscriptDeltaLastIngressAt = 0;
+let displayTranscriptDeltaLastIngressGapMs = 0;
 const pendingDisplayTranscriptDeltas = new Map<
   string,
   PendingDisplayTranscriptDelta
 >();
 
 const DISPLAY_TRANSCRIPT_DELTA_FRAME_MS = 16;
-const DISPLAY_TRANSCRIPT_DELTA_TARGET_UNITS = 8;
+const DISPLAY_TRANSCRIPT_DELTA_MIN_START_BUFFER_MS = 24;
+const DISPLAY_TRANSCRIPT_DELTA_MAX_START_BUFFER_MS = 96;
+const DISPLAY_TRANSCRIPT_DELTA_MIN_START_BUFFER_UNITS = 12;
+const DISPLAY_TRANSCRIPT_DELTA_MAX_START_BUFFER_UNITS = 48;
+const DISPLAY_TRANSCRIPT_DELTA_START_BUFFER_JITTER_FACTOR = 1.5;
+const DISPLAY_TRANSCRIPT_DELTA_INGRESS_RATE_ALPHA = 0.22;
+const DISPLAY_TRANSCRIPT_DELTA_INGRESS_JITTER_ALPHA = 0.2;
+const DISPLAY_TRANSCRIPT_DELTA_BASE_UNITS_PER_SECOND = 160;
+const DISPLAY_TRANSCRIPT_DELTA_MAX_UNITS_PER_SECOND = 720;
+const DISPLAY_TRANSCRIPT_DELTA_TARGET_LATENCY_MS = 320;
+const DISPLAY_TRANSCRIPT_DELTA_FOLLOW_FACTOR = 0.9;
+const DISPLAY_TRANSCRIPT_DELTA_DRAIN_FACTOR = 1.15;
 
 const pendingRequests = new Map<
   string,
@@ -964,17 +984,88 @@ function clearDisplayTranscriptDeltaTimer() {
   if (!displayTranscriptDeltaTimer) return;
   clearTimeout(displayTranscriptDeltaTimer);
   displayTranscriptDeltaTimer = null;
+  displayTranscriptDeltaTimerDueAt = 0;
 }
 
-function takeDisplayTranscriptDeltaChunk(text: string): string {
-  if (!text) return "";
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function resetDisplayTranscriptDeltaIngressState() {
+  displayTranscriptDeltaIngressRateEma = 0;
+  displayTranscriptDeltaIngressJitterEma = 0;
+  displayTranscriptDeltaLastIngressAt = 0;
+  displayTranscriptDeltaLastIngressGapMs = 0;
+}
+
+function displayTranscriptDeltaUnits(text: string): number {
+  let units = 0;
+  for (let index = 0; index < text.length; index += 1) {
+    units += text[index]!.charCodeAt(0) < 256 ? 1 : 2;
+  }
+  return units;
+}
+
+function recordDisplayTranscriptDeltaIngress(units: number, now: number) {
+  if (units <= 0) return;
+  if (!displayTranscriptDeltaLastIngressAt) {
+    displayTranscriptDeltaLastIngressAt = now;
+    displayTranscriptDeltaIngressRateEma = Math.max(
+      displayTranscriptDeltaIngressRateEma,
+      DISPLAY_TRANSCRIPT_DELTA_BASE_UNITS_PER_SECOND,
+    );
+    displayTranscriptDeltaIngressJitterEma = Math.max(
+      displayTranscriptDeltaIngressJitterEma,
+      DISPLAY_TRANSCRIPT_DELTA_FRAME_MS,
+    );
+    return;
+  }
+
+  const gapMs = Math.max(1, now - displayTranscriptDeltaLastIngressAt);
+  const instantaneousRate = (units * 1000) / gapMs;
+  displayTranscriptDeltaIngressRateEma = displayTranscriptDeltaIngressRateEma
+    ? displayTranscriptDeltaIngressRateEma +
+      (instantaneousRate - displayTranscriptDeltaIngressRateEma) *
+        DISPLAY_TRANSCRIPT_DELTA_INGRESS_RATE_ALPHA
+    : instantaneousRate;
+
+  const jitterSample = displayTranscriptDeltaLastIngressGapMs
+    ? Math.abs(gapMs - displayTranscriptDeltaLastIngressGapMs)
+    : gapMs;
+  displayTranscriptDeltaIngressJitterEma =
+    displayTranscriptDeltaIngressJitterEma
+      ? displayTranscriptDeltaIngressJitterEma +
+        (jitterSample - displayTranscriptDeltaIngressJitterEma) *
+          DISPLAY_TRANSCRIPT_DELTA_INGRESS_JITTER_ALPHA
+      : jitterSample;
+
+  displayTranscriptDeltaLastIngressAt = now;
+  displayTranscriptDeltaLastIngressGapMs = gapMs;
+}
+
+function takeDisplayTranscriptDeltaChunk(
+  text: string,
+  targetUnits: number,
+): string {
+  if (!text || targetUnits <= 0) return "";
 
   let unitCount = 0;
+  let boundaryIndex = 0;
+  let boundaryUnits = 0;
   for (let index = 0; index < text.length; index += 1) {
     const char = text[index]!;
     unitCount += char.charCodeAt(0) < 256 ? 1 : 2;
-    const isBoundary = char === "\n" || /[.!?。！？]/.test(char);
-    if (isBoundary || unitCount >= DISPLAY_TRANSCRIPT_DELTA_TARGET_UNITS) {
+    if (char === "\n" || /[.!?。！？]/.test(char)) {
+      boundaryIndex = index + 1;
+      boundaryUnits = unitCount;
+    }
+    if (unitCount >= targetUnits) {
+      if (
+        boundaryIndex > 0 &&
+        boundaryUnits >= Math.max(2, Math.floor(targetUnits * 0.6))
+      ) {
+        return text.slice(0, boundaryIndex);
+      }
       return text.slice(0, index + 1);
     }
   }
@@ -982,17 +1073,93 @@ function takeDisplayTranscriptDeltaChunk(text: string): string {
   return text;
 }
 
-function scheduleDisplayTranscriptDeltaFlush() {
+function totalPendingDisplayTranscriptDeltaUnits(): number {
+  let totalUnits = 0;
+  for (const pending of pendingDisplayTranscriptDeltas.values()) {
+    totalUnits += pending.pendingUnits;
+  }
+  return totalUnits;
+}
+
+function oldestPendingDisplayTranscriptDeltaAgeMs(now: number): number {
+  let oldestQueuedAt = Number.POSITIVE_INFINITY;
+  for (const pending of pendingDisplayTranscriptDeltas.values()) {
+    oldestQueuedAt = Math.min(oldestQueuedAt, pending.queuedAt);
+  }
+  if (!Number.isFinite(oldestQueuedAt)) return 0;
+  return Math.max(0, now - oldestQueuedAt);
+}
+
+function displayTranscriptDeltaStartBufferMs(): number {
+  const adaptiveMs =
+    displayTranscriptDeltaIngressJitterEma > 0
+      ? displayTranscriptDeltaIngressJitterEma *
+        DISPLAY_TRANSCRIPT_DELTA_START_BUFFER_JITTER_FACTOR
+      : DISPLAY_TRANSCRIPT_DELTA_MIN_START_BUFFER_MS;
+  return clampNumber(
+    Math.round(adaptiveMs),
+    DISPLAY_TRANSCRIPT_DELTA_MIN_START_BUFFER_MS,
+    DISPLAY_TRANSCRIPT_DELTA_MAX_START_BUFFER_MS,
+  );
+}
+
+function displayTranscriptDeltaStartBufferUnits(startBufferMs: number): number {
+  const expectedUnits = Math.round(
+    (displayTranscriptDeltaRate(totalPendingDisplayTranscriptDeltaUnits()) *
+      startBufferMs) /
+      1000,
+  );
+  return clampNumber(
+    expectedUnits,
+    DISPLAY_TRANSCRIPT_DELTA_MIN_START_BUFFER_UNITS,
+    DISPLAY_TRANSCRIPT_DELTA_MAX_START_BUFFER_UNITS,
+  );
+}
+
+function displayTranscriptDeltaRate(units: number): number {
+  const backlogRate = Math.ceil(
+    (units * 1000) / DISPLAY_TRANSCRIPT_DELTA_TARGET_LATENCY_MS,
+  );
+  const ingressRate = Math.ceil(
+    displayTranscriptDeltaIngressRateEma *
+      DISPLAY_TRANSCRIPT_DELTA_FOLLOW_FACTOR,
+  );
+  const floorRate = _isStreaming
+    ? DISPLAY_TRANSCRIPT_DELTA_BASE_UNITS_PER_SECOND
+    : Math.ceil(
+        DISPLAY_TRANSCRIPT_DELTA_BASE_UNITS_PER_SECOND *
+          DISPLAY_TRANSCRIPT_DELTA_DRAIN_FACTOR,
+      );
+  const desiredRate = Math.max(floorRate, backlogRate, ingressRate);
+  const boostedRate = _isStreaming
+    ? desiredRate
+    : Math.ceil(desiredRate * DISPLAY_TRANSCRIPT_DELTA_DRAIN_FACTOR);
+  return clampNumber(
+    boostedRate,
+    DISPLAY_TRANSCRIPT_DELTA_BASE_UNITS_PER_SECOND,
+    DISPLAY_TRANSCRIPT_DELTA_MAX_UNITS_PER_SECOND,
+  );
+}
+
+function scheduleDisplayTranscriptDeltaFlush(
+  delayMs: number = DISPLAY_TRANSCRIPT_DELTA_FRAME_MS,
+) {
+  if (pendingDisplayTranscriptDeltas.size === 0) return;
+  const normalizedDelay = Math.max(0, Math.round(delayMs));
+  const nextDueAt = Date.now() + normalizedDelay;
   if (
-    displayTranscriptDeltaTimer ||
-    pendingDisplayTranscriptDeltas.size === 0
+    displayTranscriptDeltaTimer &&
+    displayTranscriptDeltaTimerDueAt <= nextDueAt
   ) {
     return;
   }
+  clearDisplayTranscriptDeltaTimer();
+  displayTranscriptDeltaTimerDueAt = nextDueAt;
   displayTranscriptDeltaTimer = setTimeout(() => {
     displayTranscriptDeltaTimer = null;
+    displayTranscriptDeltaTimerDueAt = 0;
     flushDisplayTranscriptDeltasFrame();
-  }, DISPLAY_TRANSCRIPT_DELTA_FRAME_MS);
+  }, normalizedDelay);
 }
 
 function appendTranscriptDeltas(deltas: readonly TranscriptDelta[]) {
@@ -1003,30 +1170,84 @@ function appendTranscriptDeltas(deltas: readonly TranscriptDelta[]) {
 
 function flushDisplayTranscriptDeltasFrame() {
   clearDisplayTranscriptDeltaTimer();
-  if (pendingDisplayTranscriptDeltas.size === 0) return;
+  if (pendingDisplayTranscriptDeltas.size === 0) {
+    displayTranscriptDeltaLastFlushAt = 0;
+    return;
+  }
 
+  const now = Date.now();
+  const totalUnits = totalPendingDisplayTranscriptDeltaUnits();
+  const allPendingUnstarted = [
+    ...pendingDisplayTranscriptDeltas.values(),
+  ].every(pending => !pending.started);
+
+  // Hold the first paint briefly when ingress is jittery so the display can emit steadily.
+  if (_isStreaming && allPendingUnstarted) {
+    const ageMs = oldestPendingDisplayTranscriptDeltaAgeMs(now);
+    const startBufferMs = displayTranscriptDeltaStartBufferMs();
+    const startBufferUnits =
+      displayTranscriptDeltaStartBufferUnits(startBufferMs);
+    if (totalUnits < startBufferUnits && ageMs < startBufferMs) {
+      scheduleDisplayTranscriptDeltaFlush(startBufferMs - ageMs);
+      return;
+    }
+  }
+
+  const elapsedMs = displayTranscriptDeltaLastFlushAt
+    ? Math.max(
+        DISPLAY_TRANSCRIPT_DELTA_FRAME_MS,
+        now - displayTranscriptDeltaLastFlushAt,
+      )
+    : DISPLAY_TRANSCRIPT_DELTA_FRAME_MS;
+  displayTranscriptDeltaLastFlushAt = now;
+
+  let remainingUnits = Math.max(
+    1,
+    Math.round((displayTranscriptDeltaRate(totalUnits) * elapsedMs) / 1000),
+  );
   const nextDeltas: TranscriptDelta[] = [];
+
   for (const [key, pending] of pendingDisplayTranscriptDeltas) {
-    const chunk = takeDisplayTranscriptDeltaChunk(pending.pendingText);
+    if (remainingUnits <= 0) break;
+
+    const chunk = takeDisplayTranscriptDeltaChunk(
+      pending.pendingText,
+      remainingUnits,
+    );
     if (!chunk) {
       pendingDisplayTranscriptDeltas.delete(key);
       continue;
     }
 
+    const chunkUnits = displayTranscriptDeltaUnits(chunk);
     nextDeltas.push({ ...pending.payload, delta: chunk });
     pending.pendingText = pending.pendingText.slice(chunk.length);
+    pending.pendingUnits = Math.max(0, pending.pendingUnits - chunkUnits);
+    pending.started = true;
+    remainingUnits -= chunkUnits;
     if (!pending.pendingText) {
       pendingDisplayTranscriptDeltas.delete(key);
     }
   }
 
-  appendTranscriptDeltas(nextDeltas);
+  if (nextDeltas.length > 0) {
+    appendTranscriptDeltas(nextDeltas);
+  }
+
+  if (pendingDisplayTranscriptDeltas.size === 0) {
+    displayTranscriptDeltaLastFlushAt = 0;
+    if (!_isStreaming) resetDisplayTranscriptDeltaIngressState();
+    return;
+  }
   scheduleDisplayTranscriptDeltaFlush();
 }
 
 function flushAllDisplayTranscriptDeltas() {
   clearDisplayTranscriptDeltaTimer();
-  if (pendingDisplayTranscriptDeltas.size === 0) return;
+  if (pendingDisplayTranscriptDeltas.size === 0) {
+    displayTranscriptDeltaLastFlushAt = 0;
+    return;
+  }
 
   const nextDeltas = [...pendingDisplayTranscriptDeltas.values()]
     .map(pending =>
@@ -1037,6 +1258,7 @@ function flushAllDisplayTranscriptDeltas() {
     .filter((delta): delta is TranscriptDelta => delta !== null);
 
   pendingDisplayTranscriptDeltas.clear();
+  displayTranscriptDeltaLastFlushAt = 0;
   appendTranscriptDeltas(nextDeltas);
 }
 
@@ -1049,13 +1271,16 @@ function clearDisplayTranscriptDeltasForMessage(
     }
   }
   if (pendingDisplayTranscriptDeltas.size === 0) {
+    displayTranscriptDeltaLastFlushAt = 0;
     clearDisplayTranscriptDeltaTimer();
   }
 }
 
 function clearDisplayTranscriptDeltas() {
   pendingDisplayTranscriptDeltas.clear();
+  displayTranscriptDeltaLastFlushAt = 0;
   clearDisplayTranscriptDeltaTimer();
+  resetDisplayTranscriptDeltaIngressState();
 }
 
 function clearTranscriptDeltasForMessage(
@@ -1354,13 +1579,21 @@ function applyTranscriptDelta(payload: RpcTranscriptDeltaEvent) {
     flushAllDisplayTranscriptDeltas();
   }
 
+  const now = Date.now();
+  const deltaUnits = displayTranscriptDeltaUnits(payload.delta);
+  recordDisplayTranscriptDeltaIngress(deltaUnits, now);
+
   const existing = pendingDisplayTranscriptDeltas.get(deltaKey);
   if (existing) {
     existing.pendingText += payload.delta;
+    existing.pendingUnits += deltaUnits;
   } else {
     pendingDisplayTranscriptDeltas.set(deltaKey, {
       payload: { ...payload },
       pendingText: payload.delta,
+      pendingUnits: deltaUnits,
+      queuedAt: now,
+      started: false,
     });
   }
   scheduleDisplayTranscriptDeltaFlush();

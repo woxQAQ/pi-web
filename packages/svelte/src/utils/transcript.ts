@@ -29,6 +29,7 @@ export type ToolResultBlock = TextContentBlock | ImageContentBlock;
 export interface ToolContentBlock {
   kind: "tool";
   toolName: string;
+  toolCallId?: string;
   toolArgs: RpcToolArguments | undefined;
   argumentsText: string;
   resultText?: string;
@@ -225,6 +226,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
         blocks.push({
           kind: "tool",
           toolName: block.name ?? "unknown",
+          toolCallId: block.id,
           toolArgs: parseToolArguments(block.arguments),
           argumentsText: toolArgumentsText(block.arguments),
           resultText,

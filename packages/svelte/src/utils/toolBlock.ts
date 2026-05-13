@@ -50,7 +50,7 @@ function formatToolTitle(
   switch (toolName) {
     case "read": {
       const path = stringValue(args, "path");
-      if (!path) return "Read file";
+      if (!path) return humanizeToolName(toolName);
       const offset = numberValue(args, "offset");
       const limit = numberValue(args, "limit");
       if (offset === undefined && limit === undefined) return path;
@@ -62,7 +62,7 @@ function formatToolTitle(
     }
     case "bash": {
       const command = stringValue(args, "command");
-      if (!command) return "Run command";
+      if (!command) return humanizeToolName(toolName);
       const firstLine = command.replace(/\r/g, "").split("\n")[0]!;
       const totalLines = command.replace(/\r/g, "").split("\n").length;
       const suffix =
@@ -73,11 +73,11 @@ function formatToolTitle(
     }
     case "edit": {
       const path = stringValue(args, "path");
-      return path || "Edit file";
+      return path || humanizeToolName(toolName);
     }
     case "write": {
       const path = stringValue(args, "path");
-      return path || "Write file";
+      return path || humanizeToolName(toolName);
     }
     default:
       return humanizeToolName(toolName);

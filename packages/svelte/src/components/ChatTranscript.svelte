@@ -100,16 +100,19 @@
       { pendingSessionEvent: pendingTranscriptConfigEvent },
     ),
   );
-  let showBusyIndicator = $derived(isStreaming || isCompacting);
+  let hasVisibleStreaming = $derived(
+    isStreaming || transcriptStreams.length > 0 || transcriptDeltas.length > 0,
+  );
+  let showBusyIndicator = $derived(hasVisibleStreaming || isCompacting);
   let streamingAssistantMessageIndex = $derived.by(() => {
-    if (!isStreaming) return -1;
+    if (!hasVisibleStreaming) return -1;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i]?.role === "assistant") return i;
     }
     return -1;
   });
   let busyIndicatorLabel = $derived(
-    isCompacting && !isStreaming ? "Compacting context" : "Responding",
+    isCompacting && !hasVisibleStreaming ? "Compacting context" : "Responding",
   );
 
   // ---- display helpers ----
@@ -125,6 +128,14 @@
     });
   }
 
+  function streamMatchesMessage(msg: TranscriptEntry, index: number): boolean {
+    const key = index >= 0 ? messageStableKey(msg, index) : msg.transcriptKey ?? msg.id ?? "";
+    return transcriptStreams.some(stream => {
+      if (stream.message.transcriptKey === key) return true;
+      return Boolean(msg.id && stream.message.id === msg.id);
+    });
+  }
+
   function cloneTranscriptContent(
     content: RpcTranscriptContent | undefined,
   ): RpcTranscriptContent | undefined {
@@ -134,17 +145,10 @@
     );
   }
 
-  function defaultDeltaContentBlock(
-    blockType: TranscriptDelta["blockType"],
-  ): RpcTranscriptContentBlock {
-    switch (blockType) {
-      case "thinking":
-        return { type: "thinking", thinking: "" };
-      case "toolCall":
-        return { type: "toolCall", name: "tool", arguments: "" };
-      case "text":
-        return { type: "text", text: "" };
-    }
+  function defaultDeltaContentBlock(): RpcTranscriptContentBlock {
+    // Fill index gaps with an invisible text placeholder so out-of-order
+    // streamed blocks do not render phantom tool calls or thinking rows.
+    return { type: "text", text: "" };
   }
 
   function appendDeltaToContentBlock(
@@ -214,7 +218,7 @@
           : [];
 
       while (contentItems.length <= delta.contentIndex) {
-        contentItems.push(defaultDeltaContentBlock(delta.blockType));
+        contentItems.push(defaultDeltaContentBlock());
       }
 
       contentItems[delta.contentIndex] = appendDeltaToContentBlock(
@@ -240,9 +244,8 @@
   }
 
   function toolBlockIdentity(block: ToolContentBlock, blockIndex: number): string {
-    if (block.resultSourceMessageId?.trim()) {
-      return `tool-result:${block.resultSourceMessageId}`;
-    }
+    const toolCallId = block.toolCallId?.trim();
+    if (toolCallId) return `tool-call:${toolCallId}`;
     const args = block.argumentsText.trim();
     if (args) return `tool-call:${block.toolName}:${args}`;
     return `tool-call:${block.toolName}:${blockIndex}`;
@@ -310,6 +313,7 @@
     return (
       msg.role === "assistant" &&
       (mi === streamingAssistantMessageIndex ||
+        streamMatchesMessage(msg, mi) ||
         deltasForMessage(msg, mi).length > 0)
     );
   }
@@ -343,6 +347,16 @@
 
   function toolBlockDiffStats(block: ToolContentBlock) {
     return blockState.toolBlockModel(block).diffStats;
+  }
+
+  function toolBlockTrailingKind(block: ToolContentBlock): "diff" | "meta" | "empty" {
+    if (toolBlockDiffStats(block)) return "diff";
+    if (toolBlockDescriptor(block).meta) return "meta";
+    return "empty";
+  }
+
+  function toolBlockTrailingHidden(kind: "diff" | "meta" | "empty", target: "diff" | "meta") {
+    return kind === "empty" || kind !== target;
   }
 
   function toolStatusMeta(status: ToolContentBlock["toolStatus"] | "success" | "error"): string | undefined {
@@ -821,8 +835,11 @@
                   {/if}
                 </div>
               {:else if block.kind === "tool"}
+                {@const descriptor = toolBlockDescriptor(block)}
+                {@const diffStats = toolBlockDiffStats(block)}
+                {@const trailingKind = toolBlockTrailingKind(block)}
                 <div class="tool-inline-block" data-tree-entry-id={block.resultSourceMessageId}>
-                  <div class="tool-inline" data-status={toolBlockDescriptor(block).status}>
+                  <div class="tool-inline" data-status={descriptor.status}>
                     <button
                       type="button"
                       class="tool-inline-toggle"
@@ -830,20 +847,27 @@
                       aria-expanded={blockState.isToolBlockExpanded(toolBlockStateKey(item.message, item.messageIndex, block, bIdx))}
                     >
                       <span class="tool-inline-summary">
-                        <span class="tool-inline-name">{toolBlockDescriptor(block).name}</span>
-                        {#if toolBlockDescriptor(block).params}
-                          <span class="tool-inline-params">{toolBlockDescriptor(block).params}</span>
+                        <span class="tool-inline-name">{descriptor.name}</span>
+                        {#if descriptor.params}
+                          <span class="tool-inline-params">{descriptor.params}</span>
                         {/if}
                       </span>
-                      {#if toolBlockDiffStats(block)}
-                        <span class="tool-inline-diff"
-                          aria-label={`${toolBlockDiffStats(block)?.added ?? 0} additions, ${toolBlockDiffStats(block)?.removed ?? 0} deletions`}>
-                          <span class="tool-inline-diff-added">+{toolBlockDiffStats(block)?.added}</span>
-                          <span class="tool-inline-diff-removed">-{toolBlockDiffStats(block)?.removed}</span>
+                      <span class="tool-inline-trailing" hidden={trailingKind === "empty"}>
+                        <span
+                          class="tool-inline-meta"
+                          hidden={toolBlockTrailingHidden(trailingKind, "meta")}
+                          aria-hidden={trailingKind !== "meta"}
+                        >{descriptor.meta ?? ""}</span>
+                        <span
+                          class="tool-inline-diff"
+                          hidden={toolBlockTrailingHidden(trailingKind, "diff")}
+                          aria-hidden={trailingKind !== "diff"}
+                          aria-label={`${diffStats?.added ?? 0} additions, ${diffStats?.removed ?? 0} deletions`}
+                        >
+                          <span class="tool-inline-diff-added">+{diffStats?.added ?? 0}</span>
+                          <span class="tool-inline-diff-removed">-{diffStats?.removed ?? 0}</span>
                         </span>
-                      {:else if toolBlockDescriptor(block).meta}
-                        <span class="tool-inline-meta">{toolBlockDescriptor(block).meta}</span>
-                      {/if}
+                      </span>
                     </button>
 
                     {#if blockState.isToolBlockExpanded(toolBlockStateKey(item.message, item.messageIndex, block, bIdx))}
@@ -1433,10 +1457,14 @@
     color: var(--text-subtle);
   }
 
+  .tool-inline-trailing {
+    flex: none;
+    min-width: 0;
+    max-width: 180px;
+  }
+
   .tool-inline-meta,
   .tool-inline-diff {
-    flex: none;
-    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1444,7 +1472,10 @@
     line-height: 1.3;
   }
 
-  .tool-inline-meta { color: var(--text-subtle); }
+  .tool-inline-meta {
+    color: var(--text-subtle);
+    display: inline-block;
+  }
 
   .tool-inline-diff {
     display: inline-flex;
@@ -1452,6 +1483,12 @@
     gap: 8px;
     font-family: var(--pi-font-mono);
     font-weight: 600;
+  }
+
+  .tool-inline-trailing[hidden],
+  .tool-inline-meta[hidden],
+  .tool-inline-diff[hidden] {
+    display: none !important;
   }
 
   .tool-inline-diff-added { color: var(--diff-added-accent); }
