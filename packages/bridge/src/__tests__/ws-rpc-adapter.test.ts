@@ -1488,6 +1488,107 @@ describe("WsRpcAdapter", () => {
       expect(sendCalls[1].payload.treeEntries).toBeUndefined();
     });
 
+    it("includes tool metadata in streamed tool call deltas", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "tool-1",
+              name: "read",
+              arguments: '{"path":"a.txt"}',
+            },
+          ],
+        },
+        assistantMessageEvent: {
+          type: "toolcall_delta",
+          contentIndex: 0,
+          delta: '{"path":"a.txt"}',
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 250));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "toolCall",
+        delta: '{"path":"a.txt"}',
+        toolCallId: "tool-1",
+        toolName: "read",
+      });
+    });
+
+    it("includes tool metadata in synthesized tool call deltas", async () => {
+      (ws.send as ReturnType<typeof vi.fn>).mockClear();
+
+      const handler = (context.events.subscribe as ReturnType<typeof vi.fn>)
+        .mock.calls[0]?.[0] as
+        | ((event: Record<string, unknown>) => void)
+        | undefined;
+
+      handler?.({
+        type: "message_start",
+        message: { id: "assistant-1", role: "assistant", content: [] },
+      });
+      handler?.({
+        type: "message_update",
+        message: {
+          id: "assistant-1",
+          role: "assistant",
+          content: [
+            {
+              type: "toolCall",
+              id: "tool-1",
+              name: "read",
+              arguments: '{"path":"a.txt"}',
+            },
+          ],
+        },
+      });
+
+      await new Promise(r => setTimeout(r, 250));
+
+      const sendCalls = (ws.send as ReturnType<typeof vi.fn>).mock.calls.map(
+        call => JSON.parse(call[0] as string),
+      );
+
+      expect(sendCalls).toHaveLength(2);
+      expect(sendCalls[1].payload).toMatchObject({
+        type: "transcript_delta",
+        transcriptKey: "live:1",
+        messageId: "assistant-1",
+        role: "assistant",
+        contentIndex: 0,
+        blockType: "toolCall",
+        delta: '{"path":"a.txt"}',
+        toolCallId: "tool-1",
+        toolName: "read",
+      });
+    });
+
     it("coalesces consecutive transcript deltas for the same block", async () => {
       (ws.send as ReturnType<typeof vi.fn>).mockClear();
 

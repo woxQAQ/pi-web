@@ -568,6 +568,8 @@ export interface RpcTranscriptDeltaEvent {
   contentIndex: number;
   blockType: "text" | "thinking" | "toolCall";
   delta: string;
+  toolCallId?: string;
+  toolName?: string;
 }
 
 export interface RpcSessionStatsEvent {

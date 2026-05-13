@@ -2145,10 +2145,28 @@ function extractEventMessage(event: object): Record<string, unknown> | null {
   return null;
 }
 
-function extractAssistantMessageDeltaEvent(event: object): {
+function toolCallDeltaMetadata(
+  item: string | RpcTranscriptContentBlock | undefined,
+): Pick<RpcTranscriptDeltaEvent, "toolCallId" | "toolName"> {
+  if (!item || typeof item !== "object" || item.type !== "toolCall") {
+    return {};
+  }
+
+  return {
+    toolCallId: typeof item.id === "string" ? item.id : undefined,
+    toolName: typeof item.name === "string" ? item.name : undefined,
+  };
+}
+
+function extractAssistantMessageDeltaEvent(
+  event: object,
+  message: RpcTranscriptMessage,
+): {
   blockType: RpcTranscriptDeltaEvent["blockType"];
   contentIndex: number;
   delta: string;
+  toolCallId?: string;
+  toolName?: string;
 } | null {
   if (!event || typeof event !== "object") return null;
 
@@ -2190,6 +2208,9 @@ function extractAssistantMessageDeltaEvent(event: object): {
         blockType: "toolCall",
         contentIndex: data.contentIndex,
         delta: data.delta,
+        ...toolCallDeltaMetadata(
+          transcriptContentItems(message)[data.contentIndex],
+        ),
       };
     default:
       return null;
@@ -2262,6 +2283,7 @@ function synthesizeTranscriptDelta(
       blockType: nextText.blockType,
       contentIndex: index,
       delta,
+      ...toolCallDeltaMetadata(nextItems[index]),
     };
   }
 
@@ -3348,7 +3370,7 @@ class TranscriptProjector {
     if (!transcriptMessage) return null;
 
     const deltaEvent =
-      extractAssistantMessageDeltaEvent(event) ??
+      extractAssistantMessageDeltaEvent(event, transcriptMessage) ??
       synthesizeTranscriptDelta(
         this.state.lastMessagesByKey.get(transcriptKey),
         transcriptMessage,
@@ -3980,6 +4002,8 @@ export class WsRpcAdapter {
       pending.payload = {
         ...pending.payload,
         delta: `${pending.payload.delta}${payload.delta}`,
+        toolCallId: pending.payload.toolCallId ?? payload.toolCallId,
+        toolName: pending.payload.toolName ?? payload.toolName,
       };
       if (this.shouldFlushTranscriptDeltaBatch(pending.payload)) {
         this.flushPendingTranscriptDeltaBatch();

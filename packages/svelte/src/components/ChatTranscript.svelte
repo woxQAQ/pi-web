@@ -141,7 +141,7 @@
       case "thinking":
         return { type: "thinking", thinking: "" };
       case "toolCall":
-        return { type: "toolCall", name: "unknown", arguments: "" };
+        return { type: "toolCall", name: "tool", arguments: "" };
       case "text":
         return { type: "text", text: "" };
     }
@@ -175,13 +175,16 @@
             : "";
       return {
         ...block,
+        id: delta.toolCallId ?? block.id,
+        name: delta.toolName ?? block.name,
         arguments: `${currentArguments}${delta.delta}`,
       };
     }
 
     return {
       type: "toolCall",
-      name: "unknown",
+      id: delta.toolCallId,
+      name: delta.toolName ?? "tool",
       arguments: delta.delta,
     };
   }
