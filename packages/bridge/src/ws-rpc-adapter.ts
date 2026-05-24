@@ -5293,11 +5293,49 @@ export class WsRpcAdapter {
 
       case "get_commands": {
         const commands = this.context.actions.getCommands();
-        const rpcCommands: RpcSlashCommand[] = commands.map(cmd => ({
-          name: cmd.name,
-          description: cmd.description,
-          source: cmd.source,
-        }));
+
+        // When a workspace/session switch has occurred, the detached session
+        // may not be activated yet (it's lazy — only activated on prompt).
+        // Activate it now so we can use its resourceLoader (pi API) to get
+        // skills scoped to the current workspace's cwd.
+        let detachedSession: AgentSession | null = null;
+        if (this.sessionRuntime.hasDetachedSelection()) {
+          try {
+            detachedSession =
+              await this.sessionRuntime.ensureDetachedSession({
+                skipInitialSnapshot: true,
+              });
+          } catch {
+            // Fall through — use live session's skill list
+          }
+        }
+
+        // Merge: extension + prompt from live session, skills from detached session.
+        // If no detached session, keep live session's original skill list.
+        const rpcCommands: RpcSlashCommand[] = [
+          ...commands
+            .filter(cmd => cmd.source !== "skill")
+            .map(cmd => ({
+              name: cmd.name,
+              description: cmd.description,
+              source: cmd.source,
+            })),
+          ...(detachedSession
+            ? detachedSession.resourceLoader
+                .getSkills()
+                .skills.map(skill => ({
+                  name: `skill:${skill.name}`,
+                  description: skill.description,
+                  source: "skill" as const,
+                }))
+            : commands
+                .filter(cmd => cmd.source === "skill")
+                .map(cmd => ({
+                  name: cmd.name,
+                  description: cmd.description,
+                  source: cmd.source,
+                }))),
+        ];
         return {
           id: correlationId,
           type: "response",

@@ -1422,7 +1422,68 @@ function applyTreeEntriesUpdate(
   _activeTreeSessionPath = sessionPath;
 }
 
-function applySessionSnapshotResponse(
+export interface SnapshotResponseDeps {
+  getDisplayedSessionPath: () => string | null;
+  getWorkspaceEntriesContextKey: () => string | null;
+  applySessionTranscriptPage: (page: RpcTranscriptPage) => void;
+  setLiveSessionPath: (path: string | null) => void;
+  applyTreeEntriesUpdate: (entries: TreeEntry[], sessionPath: string | null, opts?: { force?: boolean }) => void;
+  setActiveTreeSessionPath: (path: string | null) => void;
+  ensureWorkspaceSummary: (path: string) => void;
+  getSessionState: () => RpcSessionState | null;
+  setSessionState: (state: RpcSessionState) => void;
+  resetGitRepoState: () => void;
+  setStreaming: (streaming: boolean) => void;
+  invalidateWorkspaceEntries: () => void;
+  sendCommand: (cmd: RpcCommand) => Promise<RpcResponse>;
+}
+
+/** Pure logic for applying a session snapshot response. */
+export function applySessionSnapshotResponse(
+  data: Parameters<typeof _applySessionSnapshotResponse>[0],
+  options: Parameters<typeof _applySessionSnapshotResponse>[1],
+  deps: SnapshotResponseDeps,
+): boolean {
+  if (!data?.transcript) return false;
+
+  const prevSp = deps.getDisplayedSessionPath();
+  const prevWp = deps.getWorkspaceEntriesContextKey();
+
+  deps.applySessionTranscriptPage(data.transcript);
+  if (data.sessionPath) deps.setLiveSessionPath(data.sessionPath);
+  if (Array.isArray(data.treeEntries)) {
+    deps.applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null, {
+      force: true,
+    });
+  } else if (data.sessionPath) {
+    deps.setActiveTreeSessionPath(data.sessionPath);
+  }
+  if (data.workspacePath) {
+    deps.ensureWorkspaceSummary(data.workspacePath);
+  }
+  if (data.sessionId) {
+    const current = deps.getSessionState();
+    deps.setSessionState({
+      ...current,
+      sessionId: data.sessionId,
+      sessionName: data.sessionName,
+      sessionFile: data.sessionPath ?? current?.sessionFile,
+      workspacePath: data.workspacePath ?? current?.workspacePath,
+    } as RpcSessionState);
+  }
+  if (prevSp !== deps.getDisplayedSessionPath()) {
+    deps.resetGitRepoState();
+    deps.setStreaming(false);
+  }
+  if (prevWp !== deps.getWorkspaceEntriesContextKey()) {
+    deps.invalidateWorkspaceEntries();
+    deps.sendCommand({ type: "get_commands" }).catch(() => {});
+  }
+  if (options?.refreshState) deps.sendCommand({ type: "get_state" }).catch(() => {});
+  return true;
+}
+
+function _applySessionSnapshotResponse(
   data:
     | {
         transcript: RpcTranscriptPage;
@@ -1435,39 +1496,21 @@ function applySessionSnapshotResponse(
     | undefined,
   options?: { refreshState?: boolean },
 ): boolean {
-  if (!data?.transcript) return false;
-
-  const prevSp = getDisplayedSessionPath();
-  const prevWp = getWorkspaceEntriesContextKey();
-
-  applySessionTranscriptPage(data.transcript);
-  if (data.sessionPath) _liveSessionPath = data.sessionPath;
-  if (Array.isArray(data.treeEntries)) {
-    applyTreeEntriesUpdate(data.treeEntries, data.sessionPath ?? null, {
-      force: true,
-    });
-  } else if (data.sessionPath) {
-    _activeTreeSessionPath = data.sessionPath;
-  }
-  if (data.workspacePath) {
-    ensureWorkspaceSummary(data.workspacePath);
-  }
-  if (data.sessionId) {
-    _sessionState = {
-      ..._sessionState,
-      sessionId: data.sessionId,
-      sessionName: data.sessionName,
-      sessionFile: data.sessionPath ?? _sessionState?.sessionFile,
-      workspacePath: data.workspacePath ?? _sessionState?.workspacePath,
-    } as RpcSessionState;
-  }
-  if (prevSp !== getDisplayedSessionPath()) {
-    resetGitRepoState();
-    _isStreaming = false;
-  }
-  if (prevWp !== getWorkspaceEntriesContextKey()) invalidateWorkspaceEntries();
-  if (options?.refreshState) sendCommand({ type: "get_state" }).catch(() => {});
-  return true;
+  return applySessionSnapshotResponse(data, options, {
+    getDisplayedSessionPath,
+    getWorkspaceEntriesContextKey,
+    applySessionTranscriptPage,
+    setLiveSessionPath: (v) => { _liveSessionPath = v; },
+    applyTreeEntriesUpdate,
+    setActiveTreeSessionPath: (v) => { _activeTreeSessionPath = v; },
+    ensureWorkspaceSummary,
+    getSessionState: () => _sessionState,
+    setSessionState: (v) => { _sessionState = v; },
+    resetGitRepoState,
+    setStreaming: (v) => { _isStreaming = v; },
+    invalidateWorkspaceEntries,
+    sendCommand,
+  });
 }
 
 async function loadOlderTranscriptPage() {
@@ -2036,6 +2079,76 @@ export function respondToUIRequest(payload: RpcExtensionUIResponse) {
 }
 
 // ---------------------------------------------------------------------------
+// State helpers (extracted for testability)
+// ---------------------------------------------------------------------------
+
+export interface GetStateResponseDeps {
+  getDisplayedSessionPath: () => string | null;
+  getWorkspaceEntriesContextKey: () => string | null;
+  getActiveTreeSessionPath: () => string | null;
+  getSessionState: () => RpcSessionState | null;
+  ensureWorkspaceSummary: (path: string) => void;
+  updateCurrentModel: (model: unknown) => void;
+  normalizeThinkingLevel: (level: unknown) => RpcThinkingLevel | null;
+  setSessionRunning: (path: string | null, running: boolean) => void;
+  setCompactionState: (compacting: boolean) => void;
+  resetGitRepoState: () => void;
+  invalidateWorkspaceEntries: () => void;
+  sendCommand: (cmd: RpcCommand) => Promise<RpcResponse>;
+  setStreaming: (streaming: boolean) => void;
+  setLiveSessionPath: (path: string | null) => void;
+  setSessionState: (state: RpcSessionState) => void;
+  setActiveTreeSessionPath: (path: string | null) => void;
+  setThinkingLevel: (level: RpcThinkingLevel | null) => void;
+}
+
+/** Pure logic for processing a get_state response. Returns nothing — all effects go through deps. */
+export function applyGetStateResponse(
+  data: RpcSessionState,
+  deps: GetStateResponseDeps,
+) {
+  const prevSp = deps.getDisplayedSessionPath();
+  const prevWp = deps.getWorkspaceEntriesContextKey();
+  const activeTreePath = deps.getActiveTreeSessionPath();
+  const currentSessionState = deps.getSessionState();
+
+  deps.setLiveSessionPath(data.sessionFile ?? null);
+  const isBrowsingDifferent = Boolean(
+    activeTreePath &&
+    data.sessionFile &&
+    activeTreePath !== data.sessionFile,
+  );
+  deps.setSessionState(
+    isBrowsingDifferent
+      ? {
+          ...data,
+          sessionId: currentSessionState?.sessionId ?? data.sessionId,
+          sessionName: currentSessionState?.sessionName ?? data.sessionName,
+          sessionFile: activeTreePath ?? data.sessionFile,
+          workspacePath:
+            currentSessionState?.workspacePath ?? data.workspacePath,
+        }
+      : data,
+  );
+  if (data.workspacePath) {
+    deps.ensureWorkspaceSummary(data.workspacePath);
+  }
+  deps.updateCurrentModel(data.model);
+  deps.setThinkingLevel(deps.normalizeThinkingLevel(data.thinkingLevel));
+  deps.setSessionRunning(data.sessionFile ?? null, data.isStreaming);
+  deps.setStreaming(data.isStreaming);
+  deps.setCompactionState(data.isCompacting);
+  if (!activeTreePath && data.sessionFile) {
+    deps.setActiveTreeSessionPath(data.sessionFile);
+  }
+  if (prevSp !== deps.getDisplayedSessionPath()) deps.resetGitRepoState();
+  if (prevWp !== deps.getWorkspaceEntriesContextKey()) {
+    deps.invalidateWorkspaceEntries();
+    deps.sendCommand({ type: "get_commands" }).catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Message handling
 // ---------------------------------------------------------------------------
 
@@ -2083,38 +2196,25 @@ function handleResponse(payload: RpcResponse) {
       case "get_state": {
         const data = payload.data as RpcSessionState | undefined;
         if (data) {
-          const prevSp = getDisplayedSessionPath();
-          const prevWp = getWorkspaceEntriesContextKey();
-          _liveSessionPath = data.sessionFile ?? null;
-          const isBrowsingDifferent = Boolean(
-            _activeTreeSessionPath &&
-            data.sessionFile &&
-            _activeTreeSessionPath !== data.sessionFile,
-          );
-          _sessionState = isBrowsingDifferent
-            ? {
-                ...data,
-                sessionId: _sessionState?.sessionId ?? data.sessionId,
-                sessionName: _sessionState?.sessionName ?? data.sessionName,
-                sessionFile: _activeTreeSessionPath ?? data.sessionFile,
-                workspacePath:
-                  _sessionState?.workspacePath ?? data.workspacePath,
-              }
-            : data;
-          if (data.workspacePath) {
-            ensureWorkspaceSummary(data.workspacePath);
-          }
-          updateCurrentModel(data.model);
-          _currentThinkingLevel = normalizeThinkingLevel(data.thinkingLevel);
-          setSessionRunning(data.sessionFile ?? null, data.isStreaming);
-          _isStreaming = data.isStreaming;
-          setCompactionState(data.isCompacting);
-          if (!_activeTreeSessionPath && data.sessionFile) {
-            _activeTreeSessionPath = data.sessionFile;
-          }
-          if (prevSp !== getDisplayedSessionPath()) resetGitRepoState();
-          if (prevWp !== getWorkspaceEntriesContextKey())
-            invalidateWorkspaceEntries();
+          applyGetStateResponse(data, {
+            getDisplayedSessionPath,
+            getWorkspaceEntriesContextKey,
+            getActiveTreeSessionPath: () => _activeTreeSessionPath,
+            getSessionState: () => _sessionState,
+            ensureWorkspaceSummary,
+            updateCurrentModel,
+            normalizeThinkingLevel,
+            setSessionRunning,
+            setCompactionState,
+            resetGitRepoState,
+            invalidateWorkspaceEntries,
+            sendCommand,
+            setStreaming: (v) => { _isStreaming = v; },
+            setLiveSessionPath: (v) => { _liveSessionPath = v; },
+            setSessionState: (v) => { _sessionState = v; },
+            setActiveTreeSessionPath: (v) => { _activeTreeSessionPath = v; },
+            setThinkingLevel: (v) => { _currentThinkingLevel = v; },
+          });
         }
         break;
       }
@@ -2170,8 +2270,8 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "switch_session": {
-        applySessionSnapshotResponse(
-          payload.data as Parameters<typeof applySessionSnapshotResponse>[0],
+        _applySessionSnapshotResponse(
+          payload.data as Parameters<typeof _applySessionSnapshotResponse>[0],
           { refreshState: true },
         );
         break;
@@ -2186,9 +2286,9 @@ function handleResponse(payload: RpcResponse) {
       }
       case "new_session": {
         const data = payload.data as
-          | Parameters<typeof applySessionSnapshotResponse>[0]
+          | Parameters<typeof _applySessionSnapshotResponse>[0]
           | undefined;
-        if (!applySessionSnapshotResponse(data)) {
+        if (!_applySessionSnapshotResponse(data)) {
           replaceTranscript([], null);
           _transcriptHasOlder = false;
           _transcriptOldestCursor = null;
@@ -2261,8 +2361,8 @@ function handleResponse(payload: RpcResponse) {
         break;
       }
       case "select_tree_entry": {
-        applySessionSnapshotResponse(
-          payload.data as Parameters<typeof applySessionSnapshotResponse>[0],
+        _applySessionSnapshotResponse(
+          payload.data as Parameters<typeof _applySessionSnapshotResponse>[0],
           { refreshState: true },
         );
         break;

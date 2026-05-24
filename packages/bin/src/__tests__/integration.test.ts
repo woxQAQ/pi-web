@@ -91,6 +91,16 @@ describe("Bridge Integration", () => {
         .fn()
         .mockReturnValue([
           { name: "/test", description: "Test command", source: "extension" },
+          {
+            name: "skill:user-skill",
+            description: "A user-scope skill",
+            source: "skill",
+          },
+          {
+            name: "skill:project-skill",
+            description: "A project-scope skill",
+            source: "skill",
+          },
         ]),
       on: vi.fn(),
     } as unknown as ExtensionAPI;
@@ -390,8 +400,13 @@ describe("Bridge Integration", () => {
         };
 
         expect(response.success).toBe(true);
-        expect(response.data.commands).toHaveLength(1);
+        expect(response.data.commands).toHaveLength(3);
         expect(response.data.commands[0].name).toBe("/test");
+        expect(response.data.commands[0].source).toBe("extension");
+        expect(response.data.commands[1].name).toBe("skill:user-skill");
+        expect(response.data.commands[1].source).toBe("skill");
+        expect(response.data.commands[2].name).toBe("skill:project-skill");
+        expect(response.data.commands[2].source).toBe("skill");
 
         ws.close();
       },
@@ -725,7 +740,7 @@ describe("Bridge Integration", () => {
           success: boolean;
           data: { commands: Array<{ name: string }> };
         };
-        expect(commandsResult.data.commands).toHaveLength(1);
+        expect(commandsResult.data.commands).toHaveLength(3);
 
         ws.close();
       },

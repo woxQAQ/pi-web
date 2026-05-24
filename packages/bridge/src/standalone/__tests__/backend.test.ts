@@ -49,7 +49,24 @@ function createMockSession() {
 
   const resourceLoader = {
     getSkills: vi.fn().mockReturnValue({
-      skills: [{ name: "test-skill", description: "A test skill" }],
+      skills: [
+        {
+          name: "user-skill",
+          description: "A user-scope skill",
+          filePath: "/home/.pi/skills/user-skill/SKILL.md",
+          baseDir: "/home/.pi/skills/user-skill",
+          sourceInfo: { source: "local", scope: "user" },
+          disableModelInvocation: false,
+        },
+        {
+          name: "project-skill",
+          description: "A project-scope skill",
+          filePath: "/test/project/.pi/skills/project-skill/SKILL.md",
+          baseDir: "/test/project/.pi/skills/project-skill",
+          sourceInfo: { source: "local", scope: "project" },
+          disableModelInvocation: false,
+        },
+      ],
       diagnostics: [],
     }),
     getPrompts: vi.fn().mockReturnValue({ prompts: [], diagnostics: [] }),
@@ -145,8 +162,13 @@ describe("standalone bridge backend", () => {
         source: "prompt",
       },
       {
-        name: "skill:test-skill",
-        description: "A test skill",
+        name: "skill:project-skill",
+        description: "A project-scope skill",
+        source: "skill",
+      },
+      {
+        name: "skill:user-skill",
+        description: "A user-scope skill",
         source: "skill",
       },
     ]);
