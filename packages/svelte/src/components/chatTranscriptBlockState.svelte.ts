@@ -8,7 +8,6 @@ import type { ImageContentBlock, ToolContentBlock } from "../utils/transcript";
 export function createChatTranscriptBlockState() {
   let expandedToolBlocks = $state(new Set<string>());
   let expandedThinking = $state(new Set<string>());
-  let expandedSkillBlocks = $state(new Set<string>());
 
   const toolBlockModelCache = new WeakMap<
     ToolContentBlock,
@@ -41,17 +40,6 @@ export function createChatTranscriptBlockState() {
     return expandedThinking.has(blockKey);
   }
 
-  function toggleSkill(blockKey: string) {
-    const next = new Set(expandedSkillBlocks);
-    if (next.has(blockKey)) next.delete(blockKey);
-    else next.add(blockKey);
-    expandedSkillBlocks = next;
-  }
-
-  function isSkillExpanded(blockKey: string): boolean {
-    return expandedSkillBlocks.has(blockKey);
-  }
-
   function toolBlockModel(block: ToolContentBlock) {
     const cached = toolBlockModelCache.get(block);
     if (cached) return cached;
@@ -75,15 +63,10 @@ export function createChatTranscriptBlockState() {
     get expandedThinking() {
       return expandedThinking;
     },
-    get expandedSkillBlocks() {
-      return expandedSkillBlocks;
-    },
     toggleToolBlock,
     toggleThinking,
-    toggleSkill,
     isToolBlockExpanded,
     isThinkingExpanded,
-    isSkillExpanded,
     toolBlockModel,
     toolBlockDetail,
   };
