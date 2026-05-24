@@ -972,6 +972,26 @@
                     <img class="message-image" src={block.src} alt={block.alt} loading="lazy" />
                   </button>
                 </figure>
+              {:else if block.kind === "skill"}
+                <div class="skill-invocation-block">
+                  <button
+                    type="button"
+                    class="skill-invocation-toggle"
+                    onclick={() => blockState.toggleSkill(contentBlockKey(item.message, item.messageIndex, block, bIdx))}
+                    aria-expanded={blockState.isSkillExpanded(contentBlockKey(item.message, item.messageIndex, block, bIdx))}
+                  >
+                    <span class="skill-invocation-label">[skill]</span>
+                    <span class="skill-invocation-name">{block.skillName}</span>
+                  </button>
+                  {#if blockState.isSkillExpanded(contentBlockKey(item.message, item.messageIndex, block, bIdx))}
+                    <div class="skill-invocation-content">
+                      <MarkdownRenderer
+                        content={block.skillContent}
+                        onOpenFileReference={onOpenFileReference}
+                      />
+                    </div>
+                  {/if}
+                </div>
               {:else if block.kind === "text" && block.text}
                 <MarkdownRenderer
                   content={block.text}
@@ -1187,6 +1207,56 @@
     color: var(--text-subtle);
   }
 
+  .skill-invocation-block {
+    max-width: min(720px, 100%);
+    margin: 0 auto;
+    border: 1px solid color-mix(in srgb, var(--border) 88%, transparent);
+    border-radius: 12px;
+    background: color-mix(in srgb, var(--panel) 86%, transparent);
+    overflow: hidden;
+  }
+
+  .skill-invocation-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 14px;
+    border: none;
+    background: none;
+    color: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .skill-invocation-toggle:hover {
+    background: color-mix(in srgb, var(--panel) 94%, transparent);
+  }
+
+  .skill-invocation-label {
+    flex: none;
+    font-size: 0.66rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-subtle);
+  }
+
+  .skill-invocation-name {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text);
+  }
+
+  .skill-invocation-content {
+    padding: 0 14px 14px;
+    font-size: 0.76rem;
+    line-height: 1.6;
+    color: var(--text-muted);
+    max-height: 400px;
+    overflow-y: auto;
+  }
+
   .message-row {
     width: 100%;
     max-width: 920px;
@@ -1303,25 +1373,36 @@
   :global(.markdown-body) + .tool-inline-block,
   :global(.markdown-body) + .message-image-block,
   :global(.markdown-body) + .system-block,
+  :global(.markdown-body) + .skill-invocation-block,
   .thinking-block + :global(.markdown-body),
   .thinking-block + .thinking-block,
   .thinking-block + .tool-inline-block,
   .thinking-block + .message-image-block,
   .thinking-block + .system-block,
+  .thinking-block + .skill-invocation-block,
   .tool-inline-block + :global(.markdown-body),
   .tool-inline-block + .thinking-block,
   .tool-inline-block + .message-image-block,
   .tool-inline-block + .system-block,
+  .tool-inline-block + .skill-invocation-block,
   .message-image-block + :global(.markdown-body),
   .message-image-block + .thinking-block,
   .message-image-block + .tool-inline-block,
   .message-image-block + .message-image-block,
   .message-image-block + .system-block,
+  .message-image-block + .skill-invocation-block,
   .system-block + :global(.markdown-body),
   .system-block + .thinking-block,
   .system-block + .tool-inline-block,
   .system-block + .message-image-block,
-  .system-block + .system-block {
+  .system-block + .system-block,
+  .system-block + .skill-invocation-block,
+  .skill-invocation-block + :global(.markdown-body),
+  .skill-invocation-block + .thinking-block,
+  .skill-invocation-block + .tool-inline-block,
+  .skill-invocation-block + .message-image-block,
+  .skill-invocation-block + .system-block,
+  .skill-invocation-block + .skill-invocation-block {
     margin-top: 4px;
   }
 

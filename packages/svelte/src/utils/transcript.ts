@@ -67,12 +67,21 @@ export interface SystemContentBlock {
   meta?: string;
 }
 
+export interface SkillContentBlock {
+  kind: "skill";
+  skillName: string;
+  skillLocation: string;
+  skillContent: string;
+  userMessage?: string;
+}
+
 export type ContentBlock =
   | TextContentBlock
   | ToolContentBlock
   | ThinkingContentBlock
   | ImageContentBlock
-  | SystemContentBlock;
+  | SystemContentBlock
+  | SkillContentBlock;
 
 type ConfigSystemBlock = Extract<
   RpcTranscriptSystemBlock,
@@ -170,17 +179,36 @@ export function messageContent(
   return content.map(contentItemText).filter(Boolean).join("\n");
 }
 
+/**
+ * Parse a skill block from message text.
+ * Returns null if the text doesn't contain a skill block.
+ * Matches: <skill name="..." location="...">\n...\n</skill>\n\nuser message
+ */
+export function parseSkillBlock(text: string): SkillContentBlock | null {
+  const match = text.match(
+    /^<skill name="([^"]+)" location="([^"]+)">\n([\s\S]*?)\n<\/skill>(?:\n\n([\s\S]+))?$/,
+  );
+  if (!match) return null;
+  return {
+    kind: "skill",
+    skillName: match[1]!,
+    skillLocation: match[2]!,
+    skillContent: match[3]!,
+    userMessage: match[4]?.trim() || undefined,
+  };
+}
+
 export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
   const content = msg.content;
   const blocks: ContentBlock[] = [];
 
   if (typeof content === "string") {
-    blocks.push({ kind: "text", text: content });
+    pushTextOrSkill(blocks, content);
     return blocks;
   }
 
   if (typeof msg.text === "string") {
-    blocks.push({ kind: "text", text: msg.text });
+    pushTextOrSkill(blocks, msg.text);
     return blocks;
   }
 
@@ -202,7 +230,7 @@ export function contentBlocks(msg: TranscriptEntryLike): ContentBlock[] {
 
     switch (block.type) {
       case "text":
-        blocks.push({ kind: "text", text: block.text });
+        pushTextOrSkill(blocks, block.text);
         continue;
       case "thinking": {
         const thinkingText = block.thinking.trim();
@@ -760,6 +788,19 @@ function isSystemBlock(
 
 function isHiddenSystemBlock(block: RpcTranscriptSystemBlock): boolean {
   return block.type === "session_info";
+}
+
+/** Push a text block, splitting into skill + user message if it matches. */
+function pushTextOrSkill(blocks: ContentBlock[], text: string) {
+  const skill = parseSkillBlock(text);
+  if (skill) {
+    blocks.push(skill);
+    if (skill.userMessage) {
+      blocks.push({ kind: "text", text: skill.userMessage });
+    }
+  } else {
+    blocks.push({ kind: "text", text });
+  }
 }
 
 function contentItemText(block: TranscriptContentItem): string {
