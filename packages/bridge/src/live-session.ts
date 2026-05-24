@@ -114,5 +114,9 @@ export interface BridgeSessionActions {
   setSessionName(name: string): void;
 
   /** List registered slash commands. */
-  getCommands(): Array<{ name: string; description?: string }>;
+  getCommands(): Array<{
+    name: string;
+    description?: string;
+    source: "extension" | "prompt" | "skill";
+  }>;
 }

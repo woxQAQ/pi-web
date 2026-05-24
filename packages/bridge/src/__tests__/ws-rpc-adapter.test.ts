@@ -120,7 +120,9 @@ const createMockContext = (): WsRpcAdapterContext => {
     setSessionName: vi.fn(),
     getCommands: vi
       .fn()
-      .mockReturnValue([{ name: "test", description: "Test command" }]),
+      .mockReturnValue([
+        { name: "test", description: "Test command", source: "extension" as const },
+      ]),
   };
 
   return { events, state, actions };
@@ -1061,6 +1063,7 @@ describe("WsRpcAdapter", () => {
       expect(response.payload.success).toBe(true);
       expect(response.payload.data.commands).toHaveLength(1);
       expect(response.payload.data.commands[0]).toHaveProperty("name", "test");
+      expect(response.payload.data.commands[0]).toHaveProperty("source", "extension");
     });
 
     it("should handle set_model command with valid model", async () => {

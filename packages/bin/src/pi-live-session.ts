@@ -158,6 +158,7 @@ export function createBridgeSessionActions(
       return commands.map(c => ({
         name: c.name,
         description: c.description,
+        source: c.source,
       }));
     },
   };

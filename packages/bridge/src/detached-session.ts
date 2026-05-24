@@ -6,6 +6,7 @@ import {
   createReadToolDefinition,
   createWriteToolDefinition,
   type CreateAgentSessionResult,
+  type ResourceLoader,
   type SessionManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
@@ -26,14 +27,14 @@ export function buildDetachedShellCommandPrefix(
 export async function createDetachedAgentSession(
   cwd: string,
   sessionManager: SessionManager,
-): Promise<CreateAgentSessionResult> {
+): Promise<CreateAgentSessionResult & { resourceLoader: ResourceLoader }> {
   const services = await createAgentSessionServices({ cwd });
   const shellCommandPrefix = buildDetachedShellCommandPrefix(
     cwd,
     services.settingsManager.getShellCommandPrefix(),
   );
 
-  return createAgentSessionFromServices({
+  const result = await createAgentSessionFromServices({
     services,
     sessionManager,
     customTools: [
@@ -47,4 +48,6 @@ export async function createDetachedAgentSession(
       createWriteToolDefinition(cwd),
     ] as unknown as ToolDefinition[],
   });
+
+  return { ...result, resourceLoader: services.resourceLoader };
 }

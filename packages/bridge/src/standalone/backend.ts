@@ -2,6 +2,7 @@ import {
   SessionManager,
   type AgentSession,
   type AgentSessionEvent,
+  type ResourceLoader,
 } from "@earendil-works/pi-coding-agent";
 import { createDetachedAgentSession } from "../detached-session.js";
 import { createHeadlessUIContext } from "../headless-ui-context.js";
@@ -35,17 +36,25 @@ function normalizeCommandName(name: string): string {
   return name.startsWith("/") ? name : `/${name}`;
 }
 
-function listSessionCommands(session: AgentSession): Array<{
+function listSessionCommands(
+  session: AgentSession,
+  resourceLoader: ResourceLoader,
+): Array<{
   name: string;
   description?: string;
+  source: "extension" | "prompt" | "skill";
 }> {
-  const commands = new Map<string, { name: string; description?: string }>();
+  const commands = new Map<
+    string,
+    { name: string; description?: string; source: "extension" | "prompt" | "skill" }
+  >();
 
   for (const command of session.extensionRunner.getRegisteredCommands()) {
     const name = normalizeCommandName(command.name);
     commands.set(name, {
       name,
       description: command.description,
+      source: "extension",
     });
   }
 
@@ -60,6 +69,18 @@ function listSessionCommands(session: AgentSession): Array<{
       commands.set(name, {
         name,
         description: template.description,
+        source: "prompt",
+      });
+    }
+  }
+
+  for (const skill of resourceLoader.getSkills().skills) {
+    const name = `skill:${skill.name}`;
+    if (!commands.has(name)) {
+      commands.set(name, {
+        name,
+        description: skill.description,
+        source: "skill",
       });
     }
   }
@@ -88,6 +109,7 @@ function toBridgeLiveEvent(event: AgentSessionEvent): BridgeLiveEvent | null {
 
 export function createStandaloneBridgeContextFromSession(
   session: AgentSession,
+  resourceLoader: ResourceLoader,
 ): StandaloneBridgeBackend {
   let pendingMessageCount = 0;
   const liveEventHandlers = new Set<(event: BridgeLiveEvent) => void>();
@@ -197,7 +219,7 @@ export function createStandaloneBridgeContextFromSession(
     },
 
     getCommands() {
-      return listSessionCommands(session);
+      return listSessionCommands(session, resourceLoader);
     },
   };
 
@@ -234,5 +256,8 @@ export async function createStandaloneBridgeContext(
     shutdownHandler: () => {},
   });
 
-  return createStandaloneBridgeContextFromSession(result.session);
+  return createStandaloneBridgeContextFromSession(
+    result.session,
+    result.resourceLoader,
+  );
 }

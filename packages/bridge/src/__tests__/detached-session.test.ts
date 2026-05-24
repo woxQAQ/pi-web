@@ -154,6 +154,9 @@ describe("detached-session", () => {
         getShellCommandPrefix: vi.fn().mockReturnValue("echo base"),
         getImageAutoResize: vi.fn().mockReturnValue(false),
       },
+      resourceLoader: {
+        getSkills: vi.fn().mockReturnValue({ skills: [], diagnostics: [] }),
+      },
     };
     const readToolDefinition = { name: "read" };
     const bashToolDefinition = { name: "bash" };
@@ -210,6 +213,7 @@ describe("detached-session", () => {
         writeToolDefinition,
       ],
     });
-    expect(result).toBe(sessionResult);
+    expect(result).toMatchObject(sessionResult);
+    expect(result).toHaveProperty("resourceLoader");
   });
 });

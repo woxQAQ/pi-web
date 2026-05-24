@@ -5296,7 +5296,7 @@ export class WsRpcAdapter {
         const rpcCommands: RpcSlashCommand[] = commands.map(cmd => ({
           name: cmd.name,
           description: cmd.description,
-          source: "extension" as const,
+          source: cmd.source,
         }));
         return {
           id: correlationId,

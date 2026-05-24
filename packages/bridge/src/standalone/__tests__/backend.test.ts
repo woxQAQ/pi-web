@@ -47,6 +47,21 @@ function createMockSession() {
       .mockReturnValue([{ name: "/ext", description: "Extension command" }]),
   };
 
+  const resourceLoader = {
+    getSkills: vi.fn().mockReturnValue({
+      skills: [{ name: "test-skill", description: "A test skill" }],
+      diagnostics: [],
+    }),
+    getPrompts: vi.fn().mockReturnValue({ prompts: [], diagnostics: [] }),
+    getExtensions: vi.fn().mockReturnValue({ extensions: [], errors: [], runtime: {} }),
+    getThemes: vi.fn().mockReturnValue({ themes: [], diagnostics: [] }),
+    getAgentsFiles: vi.fn().mockReturnValue({ agentsFiles: [] }),
+    getSystemPrompt: vi.fn(),
+    getAppendSystemPrompt: vi.fn().mockReturnValue([]),
+    extendResources: vi.fn(),
+    reload: vi.fn().mockResolvedValue(undefined),
+  };
+
   const session = {
     sessionManager,
     modelRegistry,
@@ -87,6 +102,7 @@ function createMockSession() {
 
   return {
     session: session as unknown as AgentSession,
+    resourceLoader,
     emit(event: AgentSessionEvent) {
       eventHandler?.(event);
     },
@@ -97,7 +113,10 @@ function createMockSession() {
 describe("standalone bridge backend", () => {
   it("adapts an AgentSession into bridge state, actions, and events", async () => {
     const mock = createMockSession();
-    const backend = createStandaloneBridgeContextFromSession(mock.session);
+    const backend = createStandaloneBridgeContextFromSession(
+      mock.session,
+      mock.resourceLoader as any,
+    );
     const received: string[] = [];
 
     backend.context.events.subscribe(event => {
@@ -115,8 +134,21 @@ describe("standalone bridge backend", () => {
       percent: 15,
     });
     expect(backend.context.actions.getCommands()).toEqual([
-      { name: "/ext", description: "Extension command" },
-      { name: "/template", description: "Prompt template" },
+      {
+        name: "/ext",
+        description: "Extension command",
+        source: "extension",
+      },
+      {
+        name: "/template",
+        description: "Prompt template",
+        source: "prompt",
+      },
+      {
+        name: "skill:test-skill",
+        description: "A test skill",
+        source: "skill",
+      },
     ]);
 
     mock.emit({ type: "agent_start" });
@@ -175,7 +207,10 @@ describe("standalone bridge backend", () => {
 
   it("starts and stops the standalone server lifecycle", async () => {
     const mock = createMockSession();
-    const backend = createStandaloneBridgeContextFromSession(mock.session);
+    const backend = createStandaloneBridgeContextFromSession(
+      mock.session,
+      mock.resourceLoader as any,
+    );
     const controller = await startStandaloneBridge(
       { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
       {
@@ -196,7 +231,10 @@ describe("standalone bridge backend", () => {
 
   it("reuses a provided backend across bridge restarts", async () => {
     const mock = createMockSession();
-    const backend = createStandaloneBridgeContextFromSession(mock.session);
+    const backend = createStandaloneBridgeContextFromSession(
+      mock.session,
+      mock.resourceLoader as any,
+    );
 
     const first = await startStandaloneBridge(
       { ...DEFAULT_BRIDGE_CONFIG, port: 0 },
