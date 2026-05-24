@@ -152,14 +152,9 @@ describe("standalone bridge backend", () => {
     });
     expect(backend.context.actions.getCommands()).toEqual([
       {
-        name: "/ext",
+        name: "ext",
         description: "Extension command",
         source: "extension",
-      },
-      {
-        name: "/template",
-        description: "Prompt template",
-        source: "prompt",
       },
       {
         name: "skill:project-skill",
@@ -170,6 +165,11 @@ describe("standalone bridge backend", () => {
         name: "skill:user-skill",
         description: "A user-scope skill",
         source: "skill",
+      },
+      {
+        name: "template",
+        description: "Prompt template",
+        source: "prompt",
       },
     ]);
 

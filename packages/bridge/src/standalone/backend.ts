@@ -33,7 +33,8 @@ type SessionCommandLike = {
 };
 
 function normalizeCommandName(name: string): string {
-  return name.startsWith("/") ? name : `/${name}`;
+  const trimmed = name.trim();
+  return trimmed.startsWith("/") ? trimmed.slice(1) : trimmed;
 }
 
 function listSessionCommands(
